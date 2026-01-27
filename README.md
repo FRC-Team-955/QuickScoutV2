@@ -1,4 +1,4 @@
-# Welcome to your Lovable project
+# Welcome to 955's Scouting App
 
 ## How can I edit this code?
 
