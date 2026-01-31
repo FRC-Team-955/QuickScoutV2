@@ -199,7 +199,7 @@ const Analytics = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {loading ? (
-              <p>Loading matches...</p>
+              <p>Loading scouted matches...</p>
             ) : (
               sortedAndFiltered.map((entry) => (
                 <Card key={entry.id} className="overflow-hidden border-l-4 border-l-primary">
