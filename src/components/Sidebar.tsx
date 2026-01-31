@@ -21,7 +21,6 @@ const navItems = [
   { id: "matches", label: "Matches", icon: Trophy },
   { id: "scouting", label: "Scouting", icon: ClipboardList },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
-  { id: "ai summary", label: "Ai(dan) Summary", icon: Bot },
 ];
 
 const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
