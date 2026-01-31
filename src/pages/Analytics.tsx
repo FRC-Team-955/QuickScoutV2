@@ -56,6 +56,7 @@ const Analytics = () => {
     if (tab === "dashboard") navigate("/");
     if (tab === "scouting") navigate("/scouting");
     if (tab === "analytics") navigate("/analytics");
+    if (tab === "matches") navigate("/matches");
   };
 
   const handleLogout = () => {

@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Scouting from "./pages/Scouting";
 import NotFound from "./pages/NotFound";
 import Analytics from "./pages/Analytics";
+import Matches from "./pages/Matches";
 
 const queryClient = new QueryClient();
 
@@ -59,6 +60,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Analytics />
+                </ProtectedRoute>
+              }
+                          />
+            <Route
+              path="/matches"
+              element={
+                <ProtectedRoute>
+                  <Matches />
                 </ProtectedRoute>
               }
             />
