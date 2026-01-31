@@ -76,6 +76,8 @@ const Scouting = () => {
       navigate("/");
     } else if (tab === "scouting") {
       navigate("/scouting");
+    } else if (tab === "analytics") {
+      navigate("/analytics");
     }
   };
 
