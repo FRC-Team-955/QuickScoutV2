@@ -64,7 +64,6 @@ const Analytics = () => {
   };
 
   // ---- Fetch from Firebase ----
-  // ---- Fetch from Firebase ----
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
