@@ -38,8 +38,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getDatabase, ref, set, serverTimestamp, remove } from "firebase/database";
-import { db } from "@/lib/firebase";
+import {
+  getDatabase,
+  ref,
+  set,
+  serverTimestamp,
+  remove,
+} from "firebase/database";
+import { get } from "firebase/database";
 
 const PHASE_DURATIONS = {
   AUTONOMOUS: 20,
@@ -416,6 +422,45 @@ const Scouting = () => {
         return -1;
     }
   };
+  useEffect(() => {
+    if (phase !== "complete" || !activeMatch?.id || !user?.id) return;
+
+    const checkIfLastScouter = async () => {
+      try {
+        const db = getDatabase();
+
+        const matchRef = ref(db, `matches/${activeMatch.id}`);
+        const matchSnap = await get(matchRef);
+        if (!matchSnap.exists()) return;
+
+        const match = matchSnap.val();
+        if (match.status !== "active") {
+          return;
+        }
+
+        const participantsRef = ref(
+          db,
+          `matches/${activeMatch.id}/participants`,
+        );
+        const snapshot = await get(participantsRef);
+        if (!snapshot.exists()) return;
+
+        const participants = snapshot.val();
+
+        const activeParticipants = Object.values(participants).filter(
+          (p: any) => !p.submittedAt,
+        );
+
+        if (activeParticipants.length === 0) {
+          console.log("This was the last scouter → ending match");
+          await endMatch(activeMatch.id);
+        }
+      } catch (err) {
+        console.error("Failed to check if last scouter", err);
+      }
+    };
+    checkIfLastScouter();
+  }, [phase, activeMatch?.id, user?.id, endMatch]);
 
   const addFuel = () => {
     if (isAutonomousPhase) {
@@ -498,6 +543,7 @@ const Scouting = () => {
           notes: endGameNotes,
         },
       });
+      await remove(ref(db, `users/${user.id}/currentAssignment`));
     } catch (err) {
       console.error("Failed to submit scouting data:", err);
       alert("Failed to save scouting data. Please notify a lead.");
@@ -743,8 +789,7 @@ const Scouting = () => {
                           Scouting in progress
                         </div>
                       )
-                    ) :
-                    activeMatch ? (
+                    ) : activeMatch ? (
                       activeMatch.startedBy === user?.id ? (
                         <Button
                           onClick={handleEndMatch}

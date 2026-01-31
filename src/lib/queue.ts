@@ -23,7 +23,11 @@ export type QueueEntry = {
   joinedAt?: any;
 };
 
-export const setUserPresence = async (user: { id: string; name: string; email?: string }) => {
+export const setUserPresence = async (user: {
+  id: string;
+  name: string;
+  email?: string;
+}) => {
   try {
     const userRef = ref(db, `users/${user.id}`);
     await set(userRef, {
@@ -71,7 +75,11 @@ export const joinQueue = async (user: { id: string; name: string }) => {
     const q = query(ref(db, "queue"), orderByChild("userId"), equalTo(user.id));
     const snap = await get(q);
     if (snap.exists()) return;
-    const byName = query(ref(db, "queue"), orderByChild("name"), equalTo(user.name));
+    const byName = query(
+      ref(db, "queue"),
+      orderByChild("name"),
+      equalTo(user.name),
+    );
     const snapByName = await get(byName);
     snapByName.forEach((child) => {
       if (child.val()?.userId && child.val().userId !== user.id) {
@@ -120,7 +128,7 @@ export const subscribeToQueue = (cb: (entries: QueueEntry[]) => void) => {
       entries.push({ id: child.key || undefined, ...(child.val() as any) });
     });
     // ensure order by joinedAt (RTDB query already orders but ensure numeric sort)
-    entries.sort((a, b) => (Number(a.joinedAt || 0) - Number(b.joinedAt || 0)));
+    entries.sort((a, b) => Number(a.joinedAt || 0) - Number(b.joinedAt || 0));
     cb(entries);
   });
   return unsub;
@@ -168,7 +176,7 @@ export const getOrCreateLocalId = async (name: string) => {
 export const isNameInUse = async (
   name: string,
   excludeUserId?: string,
-  graceMs = 2 * 60 * 1000
+  graceMs = 2 * 60 * 1000,
 ): Promise<{ userId: string; lastActive: number | null } | null> => {
   // Find any /users entry with this name that appears "active".
   // Active = lastActive within graceMs OR no lastActive timestamp present.
@@ -180,7 +188,8 @@ export const isNameInUse = async (
     const key = child.key;
     if (!key || (excludeUserId && key === excludeUserId)) return;
     const val = child.val() as any;
-    const la = typeof val?.lastActive === "number" ? Number(val.lastActive) : null;
+    const la =
+      typeof val?.lastActive === "number" ? Number(val.lastActive) : null;
     if (la === null) {
       // no timestamp — treat as active
       found = { userId: key, lastActive: null };
@@ -251,13 +260,21 @@ export const allocateAId = async (name: string) => {
  * Migrate a user's DB records from oldId -> newId (users node + queue entries).
  * If newId already has data, entries for oldId will be moved and removed.
  */
-export const migrateUserId = async (oldId: string, newId: string, name?: string) => {
+export const migrateUserId = async (
+  oldId: string,
+  newId: string,
+  name?: string,
+) => {
   if (!oldId || !newId || oldId === newId) return;
   try {
     const oldUserSnap = await get(ref(db, `users/${oldId}`));
     if (oldUserSnap.exists()) {
       const oldData = oldUserSnap.val();
-      await set(ref(db, `users/${newId}`), { ...oldData, id: newId, name: name || oldData.name });
+      await set(ref(db, `users/${newId}`), {
+        ...oldData,
+        id: newId,
+        name: name || oldData.name,
+      });
       await remove(ref(db, `users/${oldId}`));
     }
 
@@ -275,7 +292,11 @@ export const migrateUserId = async (oldId: string, newId: string, name?: string)
 
     // remove any duplicate-name entries that belong to other ids
     if (name) {
-      const byName = query(ref(db, "queue"), orderByChild("name"), equalTo(name));
+      const byName = query(
+        ref(db, "queue"),
+        orderByChild("name"),
+        equalTo(name),
+      );
       const byNameSnap = await get(byName);
       byNameSnap.forEach((child) => {
         const val = child.val();
@@ -298,11 +319,14 @@ export const getAllQueue = async (): Promise<QueueEntry[]> => {
   snap.forEach((child) => {
     out.push({ id: child.key, ...(child.val() as any) });
   });
-  out.sort((a, b) => (Number(a.joinedAt || 0) - Number(b.joinedAt || 0)));
+  out.sort((a, b) => Number(a.joinedAt || 0) - Number(b.joinedAt || 0));
   return out;
 };
 
-export const startMatch = async (lead: { id: string; name: string }, teamAssignments?: Array<string | number | null>) => {
+export const startMatch = async (
+  lead: { id: string; name: string },
+  teamAssignments?: Array<string | number | null>,
+) => {
   try {
     // enforce single active match: fail fast if another active match exists
     const active = await getActiveMatch();
@@ -314,7 +338,10 @@ export const startMatch = async (lead: { id: string; name: string }, teamAssignm
 
     // build participants — attach assignedTeam for the first up-to-6 entries when provided
     const participants = all.map((t, idx) => {
-      const assigned = Array.isArray(teamAssignments) && idx < (teamAssignments || []).length ? teamAssignments![idx] : null;
+      const assigned =
+        Array.isArray(teamAssignments) && idx < (teamAssignments || []).length
+          ? teamAssignments![idx]
+          : null;
       return {
         userId: t.userId,
         name: t.name,
@@ -334,7 +361,11 @@ export const startMatch = async (lead: { id: string; name: string }, teamAssignm
 
     // persist per-user currentAssignment for those assigned (first 6)
     const ops: Promise<any>[] = [];
-    const maxAssign = Math.min(6, all.length, Array.isArray(teamAssignments) ? teamAssignments.length : 0);
+    const maxAssign = Math.min(
+      6,
+      all.length,
+      Array.isArray(teamAssignments) ? teamAssignments.length : 0,
+    );
     for (let i = 0; i < maxAssign; i++) {
       const user = all[i];
       const team = teamAssignments![i];
@@ -344,7 +375,7 @@ export const startMatch = async (lead: { id: string; name: string }, teamAssignm
             matchId: matchRef.key,
             teamNumber: String(team),
             assignedAt: serverTimestamp(),
-          })
+          }),
         );
       }
     }
@@ -405,7 +436,10 @@ export const subscribeToActiveMatch = (cb: (m: any | null) => void) => {
 /**
  * End an active match: mark status/endedAt and clear users' currentAssignment for that match.
  */
-export const endMatch = async (matchId: string, endedBy?: { id: string; name?: string }) => {
+export const endMatch = async (
+  matchId: string,
+  endedBy?: { id: string; name?: string },
+) => {
   if (!matchId) throw new Error("matchId required");
   try {
     const matchSnap = await get(ref(db, `matches/${matchId}`));
@@ -416,24 +450,26 @@ export const endMatch = async (matchId: string, endedBy?: { id: string; name?: s
     // mark match ended
     await set(ref(db, `matches/${matchId}/status`), "ended");
     await set(ref(db, `matches/${matchId}/endedAt`), serverTimestamp());
-    if (endedBy?.id) await set(ref(db, `matches/${matchId}/endedBy`), endedBy.id);
+    if (endedBy?.id)
+      await set(ref(db, `matches/${matchId}/endedBy`), endedBy.id);
 
     // clear per-user currentAssignment where it matches this match
-    const participants: Array<any> = match.participants || [];
+    const participantsObj = match.participants || {};
     const ops: Promise<any>[] = [];
-    participants.forEach((p) => {
-      if (!p?.userId) return;
+    Object.entries(participantsObj).forEach(([userId, p]: [string, any]) => {
       ops.push(
-        get(ref(db, `users/${p.userId}/currentAssignment`)).then((snap) => {
+        get(ref(db, `users/${userId}/currentAssignment`)).then((snap) => {
           if (!snap.exists()) return;
           const val = snap.val();
           if (String(val.matchId) === String(matchId)) {
-            return remove(ref(db, `users/${p.userId}/currentAssignment`)).catch(console.warn);
+            return remove(ref(db, `users/${userId}/currentAssignment`)).catch(
+              console.warn,
+            );
           }
-          return;
-        })
+        }),
       );
     });
+
     await Promise.all(ops);
   } catch (err) {
     console.error("endMatch error", err);
@@ -492,13 +528,65 @@ export type CurrentAssignment = {
  * Subscribe to /users/{userId}/currentAssignment and invoke callback with the value (or null).
  * Returns an unsubscribe function.
  */
-export const subscribeToUserAssignment = (userId: string, cb: (a: CurrentAssignment | null) => void) => {
+export const subscribeToUserAssignment = (
+  userId: string,
+  cb: (a: CurrentAssignment | null) => void,
+) => {
   const r = ref(db, `users/${userId}/currentAssignment`);
   const unsub = onValue(r, (snap) => {
     if (!snap.exists()) return cb(null);
     const val = snap.val();
-    const assignedAt = typeof val.assignedAt === "number" ? Number(val.assignedAt) : null;
-    cb({ matchId: String(val.matchId), teamNumber: String(val.teamNumber), assignedAt });
+    const assignedAt =
+      typeof val.assignedAt === "number" ? Number(val.assignedAt) : null;
+    cb({
+      matchId: String(val.matchId),
+      teamNumber: String(val.teamNumber),
+      assignedAt,
+    });
   });
   return () => unsub();
 };
+
+
+export const cleanupStaleUsers = async (
+  maxAgeMs = 10 * 60 * 1000 // 10 minutes
+) => {
+  try {
+    const usersSnap = await get(ref(db, "users"));
+    if (!usersSnap.exists()) return;
+
+    const now = Date.now();
+    const ops: Promise<any>[] = [];
+
+    usersSnap.forEach((child) => {
+      const userId = child.key!;
+      const val = child.val();
+      const lastActive =
+        typeof val?.lastActive === "number" ? val.lastActive : null;
+
+      if (!lastActive || now - lastActive > maxAgeMs) {
+        // remove user
+        ops.push(remove(ref(db, `users/${userId}`)));
+
+        // remove queue entries
+        ops.push(
+          get(
+            query(ref(db, "queue"), orderByChild("userId"), equalTo(userId))
+          ).then((snap) => {
+            const removes: Promise<void>[] = [];
+            snap.forEach((c) => {
+              removes.push(remove(ref(db, `queue/${c.key}`)));
+            });
+            return Promise.all(removes);
+          })
+        );
+      }
+    });
+
+    await Promise.all(ops);
+  } catch (err) {
+    console.error("cleanupStaleUsers error", err);
+  }
+};
+
+
