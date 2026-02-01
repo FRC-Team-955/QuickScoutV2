@@ -1,14 +1,19 @@
-import { 
-  LayoutDashboard, 
-  Users, 
-  Trophy, 
-  BarChart3, 
-  Settings, 
+import {
+  LayoutDashboard,
+  Users,
+  Trophy,
+  BarChart3,
+  Settings,
   ClipboardList,
   Bot,
-  Zap
+  Zap,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
+import { get, ref } from "firebase/database";
+import { db } from "@/lib/firebase";
+import { checkTBAHealth } from "@/lib/tba";
 
 interface SidebarProps {
   activeTab: string;
@@ -23,7 +28,60 @@ const navItems = [
   { id: "analytics", label: "Analytics", icon: BarChart3 },
 ];
 
+type SystemStatus = "ok" | "degraded" | "down";
+
 const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
+  const [firebaseStatus, setFirebaseStatus] = useState<SystemStatus>("down");
+  const [tbaStatus, setTbaStatus] = useState<SystemStatus>("down");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const runChecks = async () => {
+      setLoading(true);
+
+      // ---- Firebase check ----
+      try {
+        await get(ref(db, "__healthcheck"));
+        setFirebaseStatus("ok");
+      } catch {
+        setFirebaseStatus("down");
+      }
+
+      // ---- TBA check ----
+      try {
+        await checkTBAHealth();
+        setTbaStatus("ok");
+      } catch {
+        setTbaStatus("down");
+      }
+
+      setLoading(false);
+    };
+
+    runChecks();
+  }, []);
+
+  const overallStatus: SystemStatus =
+    firebaseStatus === "ok" && tbaStatus === "ok"
+      ? "ok"
+      : firebaseStatus === "down" && tbaStatus === "down"
+      ? "down"
+      : "degraded";
+
+  const statusColor =
+    overallStatus === "ok"
+      ? "bg-success"
+      : overallStatus === "degraded"
+      ? "bg-yellow-500"
+      : "bg-destructive";
+
+  const statusText =
+    overallStatus === "ok"
+      ? "All systems operational"
+      : overallStatus === "degraded"
+      ? "Partial system outage"
+      : "Systems offline";
+
   return (
     <aside className="hidden md:fixed md:left-0 md:top-0 md:h-screen md:w-64 md:bg-sidebar md:border-r md:border-sidebar-border md:flex md:flex-col">
       {/* Logo */}
@@ -33,7 +91,9 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
             <Bot className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h1 className="font-mono font-bold text-foreground text-lg">FRC Scout</h1>
+            <h1 className="font-mono font-bold text-foreground text-lg">
+              FRC Scout
+            </h1>
             <p className="text-xs text-muted-foreground">Dashboard v1.0</p>
           </div>
         </div>
@@ -50,7 +110,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
             onClick={() => onTabChange(item.id)}
             className={cn(
               "nav-item w-full text-left",
-              activeTab === item.id && "active"
+              activeTab === item.id && "active",
             )}
           >
             <item.icon className="w-5 h-5" />
@@ -59,17 +119,37 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
         ))}
       </nav>
 
-      {/* Status */}
+      {/* System Status */}
       <div className="p-4 border-t border-sidebar-border">
         <div className="stat-card !p-4">
           <div className="flex items-center gap-2 mb-2">
-            <Zap className="w-4 h-4 text-primary" />
-            <span className="text-xs font-medium text-foreground">System Status</span>
+            {overallStatus === "ok" ? (
+              <Zap className="w-4 h-4 text-primary" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-yellow-500" />
+            )}
+            <span className="text-xs font-medium text-foreground">
+              System Status
+            </span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-            <span className="text-xs text-muted-foreground">All systems operational</span>
-          </div>
+
+          {loading ? (
+            <span className="text-xs text-muted-foreground">Checking…</span>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 mb-1">
+                <div className={`w-2 h-2 rounded-full ${statusColor}`} />
+                <span className="text-xs text-muted-foreground">
+                  {statusText}
+                </span>
+              </div>
+
+              <div className="text-[11px] text-muted-foreground space-y-0.5">
+                <div>Firebase: {firebaseStatus}</div>
+                <div>TBA API: {tbaStatus}</div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

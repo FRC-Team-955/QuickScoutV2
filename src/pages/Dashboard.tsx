@@ -6,10 +6,10 @@ import {
   TrendingUp,
   Clock,
 } from "lucide-react";
-import StatCard from "./StatCard";
-import TeamCard from "./TeamCard";
-import MatchesTable from "./MatchesTable";
-import AllianceComparison from "./AllianceComparison";
+import StatCard from "../components/StatCard";
+import TeamCard from "../components/TeamCard";
+import MatchesTable from "../components/MatchesTable";
+import AllianceComparison from "../components/AllianceComparison";
 import { useNavigate } from "react-router-dom";
 
 const mockTeams = [
