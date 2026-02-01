@@ -16,3 +16,17 @@ export const getEventMatches = async (eventKey: string) => {
 
   return res.json();
 }
+
+export const checkTBAHealth = async () => {
+  const res = await fetch("https://www.thebluealliance.com/api/v3/status", {
+    headers: {
+      "X-TBA-Auth-Key":
+        atob(
+          "MlhFTW10MWpDeTVpUFZFS2k5RXZCVDFYMmlKeEZGUUFZWVlsZ0I1N05hbGJQa0FCMTVsYmZiOVBUTjdvd3NaYQ==",
+        ),
+    },
+  });
+  if (!res.ok) throw new Error("TBA down");
+  return res.json();
+};
+
