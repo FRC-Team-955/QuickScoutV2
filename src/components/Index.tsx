@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
-import Dashboard from "@/components/Dashboard";
+import Dashboard from "@/pages/Dashboard";
 import { Bell, Search, User, LogOut, Menu } from "lucide-react";
 import { Drawer, DrawerTrigger, DrawerContent } from "@/components/ui/drawer";
 import MobileSidebarContent from "@/components/MobileSidebarContent";
