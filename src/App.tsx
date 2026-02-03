@@ -29,7 +29,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter basename="/frc-scout-hub">
+        <BrowserRouter basename="/quickscoutv2">
           <Routes>
             <Route
               path="/login"
