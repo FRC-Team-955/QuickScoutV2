@@ -29,7 +29,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter basename="/quickscoutv2">
+        <BrowserRouter basename="/QuickScoutV2">
           <Routes>
             <Route
               path="/login"
