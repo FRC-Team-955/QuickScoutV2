@@ -209,6 +209,9 @@ const Scouting = () => {
 
   const matchEndedHandledRef = useRef(false);
 
+  const timerCardRef = useRef<HTMLDivElement | null>(null);
+  const [showStickyTimer, setShowStickyTimer] = useState(false);
+
   const getPhaseDuration = (currentPhase: ScoutingPhase): number => {
     switch (currentPhase) {
       case "autonomous":
@@ -602,6 +605,24 @@ const Scouting = () => {
   const isComplete = phase === "complete";
   const isActivePhase = phase !== "idle" && phase !== "complete";
 
+  useEffect(() => {
+    if (!timerCardRef.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setShowStickyTimer(!entry.isIntersecting);
+      },
+      {
+        root: null,
+        threshold: 0.1,
+      },
+    );
+
+    observer.observe(timerCardRef.current);
+
+    return () => observer.disconnect();
+  }, [isActivePhase]);
+
   return (
     <div className="min-h-screen bg-background">
       <Sidebar activeTab={activeTab} onTabChange={handleTabChange} />
@@ -613,6 +634,49 @@ const Scouting = () => {
       >
         {/* Top Bar */}
         <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border px-6 py-4">
+          {/* Sticky Timer Bar */}
+          {isActivePhase && (
+            <div className="sticky top-[72px] z-20 bg-background/95 backdrop-blur border-b border-border">
+              <div className="px-6 py-3 flex items-center justify-between">
+                {/* Left: Phase + Team */}
+                <div>
+                  <div className="font-mono font-bold text-sm">
+                    {getPhaseName(phase)}
+                  </div>
+                  {teamNumber && (
+                    <div className="text-xs text-muted-foreground">
+                      Team {teamNumber}
+                    </div>
+                  )}
+                </div>
+
+                {/* Center: Timer */}
+                <div
+                  className={`text-3xl font-mono font-bold ${
+                    isTimerRunning ? "text-primary" : "text-muted-foreground"
+                  }`}
+                >
+                  {formatTime(timeRemaining)}
+                </div>
+
+                {/* Right: Controls */}
+                <div className="flex items-center gap-2">
+                  {isTimerRunning ? (
+                    <Button size="sm" variant="outline" onClick={handleCancelClick}>
+                      <Pause className="w-4 h-4 mr-1" />
+                      Cancel
+                    </Button>
+                  ) : !isComplete ? (
+                    <Button size="sm" variant="outline" onClick={resumeTimer}>
+                      <Play className="w-4 h-4 mr-1" />
+                      Resume
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="md:hidden">
@@ -886,8 +950,8 @@ const Scouting = () => {
               </Card>
             )}
 
-            {isActivePhase && (
-              <Card>
+            {isActivePhase && showStickyTimer && (
+              <Card ref={timerCardRef}>
                 <CardHeader>
                   <div className="flex-1">
                     <CardTitle>
