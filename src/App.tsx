@@ -20,7 +20,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuth();
-  return !isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+  return !isAuthenticated ? <>{children}</> : <Navigate to="/" replace />;
 };
 
 const App = () => (
@@ -32,7 +32,7 @@ const App = () => (
         <BrowserRouter basename="/QuickScoutV2">
           <Routes>
             <Route
-              path="/login"
+              path="/"
               element={
                 <PublicRoute>
                   <Login />
