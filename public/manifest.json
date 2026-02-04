@@ -1,0 +1,21 @@
+{
+  "name": "QuickScout",
+  "short_name": "QuickScout",
+  "start_url": "/QuickScoutV2/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/QuickScoutV2/public/955.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/QuickScoutV2/public/955.png",
+      "sizes": "512x512",
+      "type": "image/png"   
+    }
+  ]
+}
