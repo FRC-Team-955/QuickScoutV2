@@ -23,8 +23,7 @@ interface SidebarProps {
 
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "teams", label: "Teams", icon: Users },
-  { id: "matches", label: "Matches", icon: Trophy },
+  { id: "matches", label: "Match Schedule", icon: Trophy },
   { id: "scouting", label: "Scouting", icon: ClipboardList },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "leaderboard", label: "Leaderboard", icon: Trophy },
