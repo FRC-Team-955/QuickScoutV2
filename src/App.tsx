@@ -11,6 +11,7 @@ import Scouting from "./pages/Scouting";
 import NotFound from "./pages/NotFound";
 import Analytics from "./pages/Analytics";
 import Matches from "./pages/Matches";
+import Leaderboard from "./pages/Leaderboard";
 
 const queryClient = new QueryClient();
 
@@ -78,7 +79,7 @@ const App = () => (
                   <Analytics />
                 </ProtectedRoute>
               }
-                          />
+            />
             <Route
               path="/matches"
               element={
@@ -87,6 +88,14 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/leaderboard"
+              element={
+                <ProtectedRoute>
+                  <Leaderboard />
+                </ProtectedRoute>
+              }
+             />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

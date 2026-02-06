@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { get, ref } from "firebase/database";
 import { db } from "@/lib/firebase";
 import { checkTBAHealth } from "@/lib/tba";
+import { i } from "node_modules/vite/dist/node/types.d-aGj9QkWt";
 
 interface SidebarProps {
   activeTab: string;
@@ -26,6 +27,7 @@ const navItems = [
   { id: "matches", label: "Matches", icon: Trophy },
   { id: "scouting", label: "Scouting", icon: ClipboardList },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
+  { id: "leaderboard", label: "Leaderboard", icon: Trophy },
 ];
 
 type SystemStatus = "ok" | "degraded" | "down";
