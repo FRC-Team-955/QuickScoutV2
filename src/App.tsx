@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import Snowfall from "react-snowfall";
 import Index from "./components/Index";
 import Login from "./pages/Login";
 import Scouting from "./pages/Scouting";
@@ -42,6 +43,7 @@ const RedirectHandler = () => {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
+      <Snowfall />
       <Toaster />
       <Sonner />
       <AuthProvider>
