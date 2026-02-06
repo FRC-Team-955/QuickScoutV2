@@ -1,67 +1,36 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
 import { Drawer, DrawerTrigger, DrawerContent } from "@/components/ui/drawer";
 import MobileSidebarContent from "@/components/MobileSidebarContent";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  Clock,
-  Plus,
-  Minus,
-  Play,
-  Pause,
   Bell,
   Search,
   User,
   LogOut,
-  X,
   Menu,
 } from "lucide-react";
-import { useQueue } from "@/hooks/use-queue";
-import { subscribeToUserAssignment } from "@/lib/queue";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  getDatabase,
-  ref,
-  set,
-  serverTimestamp,
-  remove,
-} from "firebase/database";
-import { get } from "firebase/database";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ref, get } from "firebase/database";
+import { db } from "@/lib/firebase";
 
-type Filters = {
-  sortBy:
-    | "highest_score_auto"
-    | "highest_score_teleop"
-    | "highest_total_score"
-    | "highest_climb"
-    | "most_consistent_climb_teleop"
-    | "most_consistent_climb_auto"
-    | "best_defense";
+type LeaderboardRow = {
+  key: string;
+  scoutName: string;
+  matches: number;
+  lastSubmitted: number;
 };
 
 const Leaderboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("leaderboard");
+  const [loading, setLoading] = useState(false);
+  const [rows, setRows] = useState<LeaderboardRow[]>([]);
+  const [query, setQuery] = useState("");
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
@@ -83,8 +52,92 @@ const Leaderboard = () => {
     navigate("/login");
   };
 
-  const isLeadName = (name?: string) => !!name && /\blead\b/i.test(name);
-  const isLead = isLeadName(user?.name);
+  useEffect(() => {
+    const fetchLeaderboard = async () => {
+      setLoading(true);
+      try {
+        const matchesRef = ref(db, "matches");
+        const snap = await get(matchesRef);
+
+        if (!snap.exists()) {
+          setRows([]);
+          return;
+        }
+
+        const tally = new Map<
+          string,
+          { scoutName: string; matches: number; lastSubmitted: number }
+        >();
+
+        const matchesData = snap.val();
+        Object.values(matchesData as Record<string, any>).forEach((matchValue) => {
+          const participantsRoot = matchValue?.participants || matchValue;
+          if (!participantsRoot || typeof participantsRoot !== "object") return;
+
+          Object.entries(participantsRoot).forEach(([_participantId, data]) => {
+            if (!data || typeof data !== "object") return;
+
+            const hasSubmission =
+              data.teamNumber != null ||
+              data.submittedAt != null ||
+              data.autonomous ||
+              data.teleop ||
+              data.endGame;
+            if (!hasSubmission) return;
+
+            const scoutName = String(data.scoutName || data.name || "Unknown");
+            const key = data.userId || scoutName;
+            if (!key) return;
+
+            const submittedAt =
+              typeof data.submittedAt === "number"
+                ? data.submittedAt
+                : Number(data.submittedAt) || 0;
+
+            const current = tally.get(key) || {
+              scoutName,
+              matches: 0,
+              lastSubmitted: 0,
+            };
+            current.matches += 1;
+            current.lastSubmitted = Math.max(current.lastSubmitted, submittedAt);
+            if (current.scoutName === "Unknown" && scoutName !== "Unknown") {
+              current.scoutName = scoutName;
+            }
+            tally.set(key, current);
+          });
+        });
+
+        const nextRows: LeaderboardRow[] = Array.from(tally.entries()).map(
+          ([key, value]) => ({
+            key,
+            scoutName: value.scoutName,
+            matches: value.matches,
+            lastSubmitted: value.lastSubmitted,
+          }),
+        );
+
+        nextRows.sort(
+          (a, b) =>
+            b.matches - a.matches || b.lastSubmitted - a.lastSubmitted,
+        );
+        setRows(nextRows);
+      } catch (error) {
+        console.error("Error fetching leaderboard data:", error);
+        setRows([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLeaderboard();
+  }, []);
+
+  const filteredRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => row.scoutName.toLowerCase().includes(q));
+  }, [rows, query]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -119,6 +172,8 @@ const Leaderboard = () => {
                 <input
                   type="text"
                   placeholder="Search teams, matches, data..."
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
                   className="w-full pl-10 pr-4 py-2 bg-secondary/50 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
                 />
               </div>
@@ -152,6 +207,85 @@ const Leaderboard = () => {
             </div>
           </div>
         </header>
+
+        <div className="p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-mono font-bold text-foreground">
+                Leaderboard
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Matches scouted per person
+              </p>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {loading ? "Loading…" : `${filteredRows.length} scouts`}
+            </div>
+          </div>
+
+          <Card>
+            <CardHeader className="border-b border-border">
+              <CardTitle className="text-lg font-mono">
+                Scout Activity
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-6 text-sm text-muted-foreground">
+                  Loading leaderboard…
+                </div>
+              ) : filteredRows.length === 0 ? (
+                <div className="p-6 text-sm text-muted-foreground">
+                  No submitted scouting data found yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[80px]">Rank</TableHead>
+                        <TableHead>Scout</TableHead>
+                        <TableHead className="text-right">
+                          Matches Scouted
+                        </TableHead>
+                        <TableHead className="text-right">
+                          Last Submission
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredRows.map((row, index) => (
+                        <TableRow
+                          key={row.key}
+                          className={
+                            row.scoutName === user?.name
+                              ? "bg-primary/5"
+                              : undefined
+                          }
+                        >
+                          <TableCell className="font-mono">
+                            {index + 1}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {row.scoutName}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {row.matches}
+                          </TableCell>
+                          <TableCell className="text-right text-xs text-muted-foreground">
+                            {row.lastSubmitted
+                              ? new Date(row.lastSubmitted).toLocaleString()
+                              : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </main>
     </div>
   );
