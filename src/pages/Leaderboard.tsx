@@ -86,7 +86,7 @@ const Leaderboard = () => {
             if (!hasSubmission) return;
 
             const scoutName = String(data.scoutName || data.name || "Unknown");
-            const key = data.userId || scoutName;
+            const key = scoutName.trim().toLowerCase();
             if (!key) return;
 
             const submittedAt =
