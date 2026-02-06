@@ -24,6 +24,8 @@ const Index = () => {
       setActiveTab("analytics");
     } else if (location.pathname === "/matches") {
       setActiveTab("matches");
+    } else if (location.pathname === "/leaderboard") {
+      setActiveTab("leaderboard");
     }
   }, [location.pathname]);
 
@@ -42,6 +44,8 @@ const Index = () => {
       navigate("/analytics");
     } else if (tab === "matches") {
       navigate("/matches");
+    } else if (tab === "leaderboard") {
+      navigate("/leaderboard");
     }
   };
 

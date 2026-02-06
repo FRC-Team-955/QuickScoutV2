@@ -28,6 +28,7 @@ const navItems = [
   { id: "scouting", label: "Scouting", icon: ClipboardList },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: Settings },
+  { id: "leaderboard", label: "Leaderboard", icon: Trophy },
 ];
 
 type SystemStatus = "ok" | "degraded" | "down";
