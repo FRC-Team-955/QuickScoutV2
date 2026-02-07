@@ -176,9 +176,6 @@ const Analytics = () => {
                     <CardTitle className="flex justify-between items-start">
                       <div className="flex flex-col">
                         <span className="text-xl">Team {entry.teamNumber}</span>
-                        <span className="text-xs font-normal text-muted-foreground uppercase tracking-widest">
-                          Member {entry.station}
-                        </span>
                       </div>
                       <div className="bg-secondary px-2 py-1 rounded text-[10px] font-mono">
                         {entry.matchKey.slice(-6)}

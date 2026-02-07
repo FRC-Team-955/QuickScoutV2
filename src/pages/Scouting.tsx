@@ -43,16 +43,12 @@ const PHASE_DURATIONS = {
   END_GAME: 30,
 };
 
-type ScoutingPhase =
-  | "idle"
-  | "autonomous"
-  | "transition"
-  | "alliance_shift_1"
-  | "alliance_shift_2"
-  | "alliance_shift_3"
-  | "alliance_shift_4"
-  | "end_game"
-  | "complete";
+const TELEOP_REFERENCE_DURATION =
+  PHASE_DURATIONS.TRANSITION +
+  PHASE_DURATIONS.ALLIANCE_SHIFT * 4 +
+  PHASE_DURATIONS.END_GAME;
+
+type ScoutingPhase = "idle" | "autonomous" | "teleop" | "complete";
 
 const Scouting = () => {
   const { user } = useAuth();
@@ -76,7 +72,6 @@ const Scouting = () => {
   };
 
   // queue + role helpers
-  const isLeadName = (name?: string) => !!name && /\blead\b/i.test(name);
   const {
     queue,
     topSix,
@@ -89,7 +84,7 @@ const Scouting = () => {
     isInTopSix,
     loading: queueLoading,
   } = useQueue(user ? { id: user.id, name: user.name } : null);
-  const isLead = isLeadName(user?.name);
+  const isLead = !!user?.isLead;
 
   const handleQueueToggle = async () => {
     try {
@@ -181,10 +176,6 @@ const Scouting = () => {
   const [climbLevel, setClimbLevel] = useState("");
   const [defenseScore, setDefenseScore] = useState("");
 
-  // Track when autonomous ends to show climb button for 5 seconds
-  const [showClimbButton, setShowClimbButton] = useState(false);
-  const climbButtonTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
   // Cancel confirmation state
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const cancelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -208,13 +199,16 @@ const Scouting = () => {
     if (audioTimeoutRef.current) {
       //clearTimeout(audioTimeoutRef.current);
     }
-    audioTimeoutRef.current = setTimeout(() => {
-      const audio = new Audio(successAudio);
-      audio.play().catch((err) => {
-        console.warn("Unable to play success audio", err);
-      });
-      audioTimeoutRef.current = null;
-    }, Math.random() * 15000 + 1000);
+    audioTimeoutRef.current = setTimeout(
+      () => {
+        const audio = new Audio(successAudio);
+        audio.play().catch((err) => {
+          console.warn("Unable to play success audio", err);
+        });
+        audioTimeoutRef.current = null;
+      },
+      Math.random() * 15000 + 1000,
+    );
     if (confettiTimeoutRef.current) {
       clearTimeout(confettiTimeoutRef.current);
     }
@@ -224,118 +218,16 @@ const Scouting = () => {
     }, 5000);
   }, []);
 
-  const getPhaseDuration = (currentPhase: ScoutingPhase): number => {
-    switch (currentPhase) {
-      case "autonomous":
-        return PHASE_DURATIONS.AUTONOMOUS;
-      case "transition":
-        return PHASE_DURATIONS.TRANSITION;
-      case "alliance_shift_1":
-      case "alliance_shift_2":
-      case "alliance_shift_3":
-      case "alliance_shift_4":
-        return PHASE_DURATIONS.ALLIANCE_SHIFT;
-      case "end_game":
-        return PHASE_DURATIONS.END_GAME;
-      default:
-        return 0;
-    }
-  };
-
   const getPhaseName = (currentPhase: ScoutingPhase): string => {
     switch (currentPhase) {
       case "autonomous":
         return "Autonomous Period";
-      case "transition":
-        return "Transition Shift";
-      case "alliance_shift_1":
-        return "Alliance Shift 1";
-      case "alliance_shift_2":
-        return "Alliance Shift 2";
-      case "alliance_shift_3":
-        return "Alliance Shift 3";
-      case "alliance_shift_4":
-        return "Alliance Shift 4";
-      case "end_game":
-        return "End Game";
+      case "teleop":
+        return "Teleop Period";
       default:
         return "";
     }
   };
-
-  const advancePhase = useCallback(() => {
-    setPhase((current) => {
-      let nextPhase: ScoutingPhase;
-      let nextDuration: number = 0;
-
-      switch (current) {
-        case "autonomous":
-          nextPhase = "transition";
-          nextDuration = PHASE_DURATIONS.TRANSITION;
-          break;
-        case "transition":
-          nextPhase = "alliance_shift_1";
-          nextDuration = PHASE_DURATIONS.ALLIANCE_SHIFT;
-          break;
-        case "alliance_shift_1":
-          nextPhase = "alliance_shift_2";
-          nextDuration = PHASE_DURATIONS.ALLIANCE_SHIFT;
-          break;
-        case "alliance_shift_2":
-          nextPhase = "alliance_shift_3";
-          nextDuration = PHASE_DURATIONS.ALLIANCE_SHIFT;
-          break;
-        case "alliance_shift_3":
-          nextPhase = "alliance_shift_4";
-          nextDuration = PHASE_DURATIONS.ALLIANCE_SHIFT;
-          break;
-        case "alliance_shift_4":
-          nextPhase = "end_game";
-          nextDuration = PHASE_DURATIONS.END_GAME;
-          break;
-        case "end_game":
-          nextPhase = "complete";
-          break;
-        default:
-          return current;
-      }
-
-      // Auto-start the next phase timer
-      if (nextPhase !== "complete") {
-        setTimeout(() => {
-          setTimeRemaining(nextDuration);
-          setIsTimerRunning(true);
-        }, 100);
-      }
-
-      return nextPhase;
-    });
-  }, []);
-
-  // Show climb button for 5 seconds when phase changes to transition
-  useEffect(() => {
-    if (phase === "transition") {
-      // Clear any existing timeout first
-      if (climbButtonTimeoutRef.current) {
-        clearTimeout(climbButtonTimeoutRef.current);
-        climbButtonTimeoutRef.current = null;
-      }
-      // Show the button immediately
-      setShowClimbButton(true);
-      // Hide it after 5 seconds
-      climbButtonTimeoutRef.current = setTimeout(() => {
-        setShowClimbButton(false);
-        climbButtonTimeoutRef.current = null;
-      }, 5000);
-    } else {
-      // Hide button when phase changes away from transition
-      setShowClimbButton(false);
-      if (climbButtonTimeoutRef.current) {
-        clearTimeout(climbButtonTimeoutRef.current);
-        climbButtonTimeoutRef.current = null;
-      }
-    }
-  }, [phase]);
 
   useEffect(() => {
     if (isTimerRunning && timeRemaining > 0) {
@@ -343,7 +235,6 @@ const Scouting = () => {
         setTimeRemaining((prev) => {
           if (prev <= 1) {
             setIsTimerRunning(false);
-            advancePhase();
             return 0;
           }
           return prev - 1;
@@ -362,7 +253,7 @@ const Scouting = () => {
         intervalRef.current = null;
       }
     };
-  }, [isTimerRunning, timeRemaining, advancePhase]);
+  }, [isTimerRunning, timeRemaining]);
 
   const startScouting = (teamNum?: string, opts?: { manual?: boolean }) => {
     const manual = opts?.manual === true;
@@ -435,19 +326,18 @@ const Scouting = () => {
     setIsTimerRunning(true);
   };
 
-  const getCurrentAllianceShiftIndex = (): number => {
-    switch (phase) {
-      case "alliance_shift_1":
-        return 0;
-      case "alliance_shift_2":
-        return 1;
-      case "alliance_shift_3":
-        return 2;
-      case "alliance_shift_4":
-        return 3;
-      default:
-        return -1;
-    }
+  const switchToTeleop = () => {
+    if (phase !== "autonomous") return;
+    setPhase("teleop");
+    setTimeRemaining(TELEOP_REFERENCE_DURATION);
+    setIsTimerRunning(true);
+  };
+
+  const endGame = () => {
+    if (phase !== "teleop") return;
+    setPhase("complete");
+    setIsTimerRunning(false);
+    setTimeRemaining(0);
   };
   useEffect(() => {
     if (isManualSessionRef.current) return;
@@ -490,19 +380,11 @@ const Scouting = () => {
     checkIfLastScouter();
   }, [phase, activeMatch?.id, user?.id, endMatch]);
 
-  const addFuel = () => {
+  const addFuelBy = (amount: number) => {
     if (isAutonomousPhase) {
-      setAutonomousFuel((prev) => prev + 1);
+      setAutonomousFuel((prev) => prev + amount);
     } else if (isTeleopPhase) {
-      setTeleopFuel((prev) => prev + 1);
-    }
-  };
-
-  const removeFuel = () => {
-    if (isAutonomousPhase) {
-      setAutonomousFuel((prev) => Math.max(0, prev - 1));
-    } else if (isTeleopPhase) {
-      setTeleopFuel((prev) => Math.max(0, prev - 1));
+      setTeleopFuel((prev) => prev + amount);
     }
   };
 
@@ -534,56 +416,57 @@ const Scouting = () => {
         triggerConfetti();
       }
     } else {
-    if (!isManualSessionRef.current) {
-      try {
-        const matchId = currentMatchIdRef.current;
-        const assignedTeam = assignedTeamRef.current;
+      if (!isManualSessionRef.current) {
+        try {
+          const matchId = currentMatchIdRef.current;
+          const assignedTeam = assignedTeamRef.current;
 
-        if (!matchId || !user?.id || !assignedTeam) {
-          console.warn("resetScouting: missing matchId, user, or assignedTeam");
-          return;
+          if (!matchId || !user?.id || !assignedTeam) {
+            console.warn(
+              "resetScouting: missing matchId, user, or assignedTeam",
+            );
+            return;
+          }
+
+          const db = getDatabase();
+
+          const participantRef = ref(
+            db,
+            `matches/${matchId}/participants/${user.id}`,
+          );
+
+          await set(participantRef, {
+            userId: user.id,
+            scoutName: user.name || "Unknown",
+            teamNumber: assignedTeam,
+            matchId,
+
+            submittedAt: serverTimestamp(),
+
+            autonomous: {
+              fuel: autonomousFuel,
+              notes: autonomousNotes,
+              canClimb,
+            },
+
+            teleop: {
+              fuel: teleopFuel,
+              notes: teleopNotes,
+            },
+
+            endGame: {
+              didClimb,
+              climbLevel: didClimb ? climbLevel : null,
+              defenseScore,
+              notes: endGameNotes,
+            },
+          });
+          await remove(ref(db, `users/${user.id}/currentAssignment`));
+        } catch (err) {
+          console.error("Failed to submit scouting data:", err);
+          alert("Failed to save scouting data. Please notify a lead.");
         }
-
-        const db = getDatabase();
-
-        const participantRef = ref(
-          db,
-          `matches/${matchId}/participants/${user.id}`,
-        );
-
-        await set(participantRef, {
-          userId: user.id,
-          scoutName: user.name || "Unknown",
-          teamNumber: assignedTeam,
-          matchId,
-
-          submittedAt: serverTimestamp(),
-
-          autonomous: {
-            fuel: autonomousFuel,
-            notes: autonomousNotes,
-            canClimb,
-          },
-
-          teleop: {
-            fuel: teleopFuel,
-            notes: teleopNotes,
-          },
-
-          endGame: {
-            didClimb,
-            climbLevel: didClimb ? climbLevel : null,
-            defenseScore,
-            notes: endGameNotes,
-          },
-        });
-        await remove(ref(db, `users/${user.id}/currentAssignment`));
-      } catch (err) {
-        console.error("Failed to submit scouting data:", err);
-        alert("Failed to save scouting data. Please notify a lead.");
       }
-    }
-      alert("Failed to save scouting data. Please notify a lead.");
     }
 
     setPhase("idle");
@@ -598,14 +481,8 @@ const Scouting = () => {
     setDefenseScore("");
     setEndGameNotes("");
     setDidClimb(false);
-    setShowClimbButton(false);
     setCancelConfirm(false);
     isManualSessionRef.current = false;
-
-    if (climbButtonTimeoutRef.current) {
-      clearTimeout(climbButtonTimeoutRef.current);
-      climbButtonTimeoutRef.current = null;
-    }
     if (cancelTimeoutRef.current) {
       clearTimeout(cancelTimeoutRef.current);
       cancelTimeoutRef.current = null;
@@ -619,20 +496,7 @@ const Scouting = () => {
   };
 
   const isAutonomousPhase = phase === "autonomous";
-  const isTeleopPhase =
-    phase === "transition" ||
-    phase === "alliance_shift_1" ||
-    phase === "alliance_shift_2" ||
-    phase === "alliance_shift_3" ||
-    phase === "alliance_shift_4" ||
-    phase === "end_game";
-  const isTransitionPhase = phase === "transition";
-  const isAllianceShiftPhase =
-    phase === "alliance_shift_1" ||
-    phase === "alliance_shift_2" ||
-    phase === "alliance_shift_3" ||
-    phase === "alliance_shift_4";
-  const isEndGamePhase = phase === "end_game";
+  const isTeleopPhase = phase === "teleop";
   const isComplete = phase === "complete";
   const isActivePhase = phase !== "idle" && phase !== "complete";
 
@@ -691,7 +555,7 @@ const Scouting = () => {
           topContent={
             isActivePhase ? (
               <div className="sticky top-[72px] z-20 bg-background/95 backdrop-blur border-b border-border">
-                <div className="px-6 py-3 flex items-center justify-between">
+                <div className="px-6 py-3 grid grid-cols-[1fr_auto_1fr] items-center">
                   {/* Left: Phase + Team */}
                   <div>
                     <div className="font-mono font-bold text-sm">
@@ -714,19 +578,41 @@ const Scouting = () => {
                   </div>
 
                   {/* Right: Controls */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center justify-self-end">
+                    {isAutonomousPhase && (
+                      <Button
+                        size="sm"
+                        onClick={switchToTeleop}
+                        className="min-w-[100px] justify-center"
+                      >
+                        Next Phase
+                      </Button>
+                    )}
+                    {isTeleopPhase && (
+                      <Button
+                        size="sm"
+                        onClick={endGame}
+                        className="min-w-[100px] justify-center"
+                      >
+                        End Game
+                      </Button>
+                    )}
                     {isTimerRunning ? (
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={handleCancelClick}
+                        className="min-w-[100px] justify-center"
                       >
-                        <Pause className="w-4 h-4 mr-1" />
                         Cancel
                       </Button>
                     ) : !isComplete ? (
-                      <Button size="sm" variant="outline" onClick={resumeTimer}>
-                        <Play className="w-4 h-4 mr-1" />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={resumeTimer}
+                        className="min-w-[120px] justify-center"
+                      >
                         Resume
                       </Button>
                     ) : null}
@@ -789,7 +675,7 @@ const Scouting = () => {
                                   ? `#${idx + 1} — active`
                                   : `#${idx + 1}`}
                               </div>
-                          </div>
+                            </div>
                           </div>
 
                           <div className="flex items-center gap-3">
@@ -846,7 +732,11 @@ const Scouting = () => {
                           disabled={queueLoading}
                           className="flex-1"
                         >
-                          {isInQueue ? <Minus className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                          {isInQueue ? (
+                            <Minus className="w-4 h-4 mr-2" />
+                          ) : (
+                            <Plus className="w-4 h-4 mr-2" />
+                          )}
                           {isInQueue ? "Leave queue" : "Join queue"}
                         </Button>
                       ) : (
@@ -1035,29 +925,39 @@ const Scouting = () => {
                     >
                       {formatTime(timeRemaining)}
                     </div>
-                    {isTimerRunning ? (
-                      <Button
-                        onClick={pauseTimer}
-                        variant="outline"
-                        className="mt-4"
-                        size="sm"
-                      >
-                        <Pause className="w-4 h-4 mr-2" />
-                        Pause Timer
-                      </Button>
-                    ) : (
-                      !isComplete && (
+                    <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                      {isAutonomousPhase && (
+                        <Button onClick={switchToTeleop} size="sm">
+                          Switch to Teleop
+                        </Button>
+                      )}
+                      {isTeleopPhase && (
+                        <Button onClick={endGame} size="sm">
+                          End Game
+                        </Button>
+                      )}
+                      {isTimerRunning ? (
                         <Button
-                          onClick={resumeTimer}
+                          onClick={pauseTimer}
                           variant="outline"
-                          className="mt-4"
                           size="sm"
                         >
-                          <Play className="w-4 h-4 mr-2" />
-                          Resume Timer
+                          <Pause className="w-4 h-4 mr-2" />
+                          Pause Timer
                         </Button>
-                      )
-                    )}
+                      ) : (
+                        !isComplete && (
+                          <Button
+                            onClick={resumeTimer}
+                            variant="outline"
+                            size="sm"
+                          >
+                            <Play className="w-4 h-4 mr-2" />
+                            Resume Timer
+                          </Button>
+                        )
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1085,7 +985,7 @@ const Scouting = () => {
             )}
 
             {/* Autonomous Phase Content */}
-            {isAutonomousPhase && (
+            {isActivePhase && (
               <Card>
                 <CardHeader>
                   <CardTitle>Autonomous Fuel</CardTitle>
@@ -1104,16 +1004,14 @@ const Scouting = () => {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={removeFuel}
-                        disabled={autonomousFuel === 0}
-                      >
-                        <Minus className="w-4 h-4" />
+                      <Button variant="outline" size="sm" onClick={() => addFuelBy(1)}>
+                        +1
                       </Button>
-                      <Button variant="outline" size="icon" onClick={addFuel}>
-                        <Plus className="w-4 h-4" />
+                      <Button variant="outline" size="sm" onClick={() => addFuelBy(3)}>
+                        +3
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => addFuelBy(5)}>
+                        +5
                       </Button>
                     </div>
                   </div>
@@ -1121,34 +1019,11 @@ const Scouting = () => {
               </Card>
             )}
 
-            {/* Teleop Notes - Available throughout match */}
+            {/* Auto Climb */}
             {isActivePhase && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Teleop Notes</CardTitle>
-                  <CardDescription>
-                    Record observations during teleop period (available
-                    throughout match)
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Textarea
-                    placeholder="Enter your notes here..."
-                    value={teleopNotes}
-                    onChange={(e) => setTeleopNotes(e.target.value)}
-                    className="min-h-[120px]"
-                  />
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Climb Capability - Show during autonomous and 5 seconds after autonomous ends */}
-            {(isAutonomousPhase ||
-              (isTransitionPhase &&
-                timeRemaining >= PHASE_DURATIONS.TRANSITION - 5)) && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Climb Capability</CardTitle>
+                  <CardTitle>Auto Climb</CardTitle>
                   <CardDescription>Can this team climb?</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -1166,13 +1041,33 @@ const Scouting = () => {
               </Card>
             )}
 
+            {/* Teleop Notes - Teleop only */}
+            {isTeleopPhase && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Teleop Notes</CardTitle>
+                  <CardDescription>
+                    Record observations during teleop period
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Textarea
+                    placeholder="Enter your notes here..."
+                    value={teleopNotes}
+                    onChange={(e) => setTeleopNotes(e.target.value)}
+                    className="min-h-[120px]"
+                  />
+                </CardContent>
+              </Card>
+            )}
+
             {/* Teleop Phase - Fuel tracking */}
             {isTeleopPhase && (
               <Card>
                 <CardHeader>
                   <CardTitle>Teleop Fuel</CardTitle>
                   <CardDescription>
-                    Fuel scored during transition, alliance shifts, and end game
+                    Fuel scored during teleop period
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -1186,16 +1081,14 @@ const Scouting = () => {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={removeFuel}
-                        disabled={teleopFuel === 0}
-                      >
-                        <Minus className="w-4 h-4" />
+                      <Button variant="outline" size="sm" onClick={() => addFuelBy(1)}>
+                        +1
                       </Button>
-                      <Button variant="outline" size="icon" onClick={addFuel}>
-                        <Plus className="w-4 h-4" />
+                      <Button variant="outline" size="sm" onClick={() => addFuelBy(3)}>
+                        +3
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => addFuelBy(5)}>
+                        +5
                       </Button>
                     </div>
                   </div>
@@ -1203,12 +1096,12 @@ const Scouting = () => {
               </Card>
             )}
 
-            {isEndGamePhase && (
+            {isTeleopPhase && (
               <>
-                {/* Climb Completion */}
+                {/* Teleop Climb */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Climb Completion</CardTitle>
+                    <CardTitle>Teleop Climb</CardTitle>
                     <CardDescription>
                       Did the team successfully climb?
                     </CardDescription>
@@ -1236,7 +1129,7 @@ const Scouting = () => {
                 {didClimb && (
                   <Card>
                     <CardHeader>
-                      <CardTitle>Climb Level</CardTitle>
+                      <CardTitle>Teleop Climb Level</CardTitle>
                       <CardDescription>
                         Select the achieved climb level
                       </CardDescription>
