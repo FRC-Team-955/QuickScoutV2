@@ -517,17 +517,10 @@ const Scouting = () => {
   };
 
   const resetScouting = async () => {
-    if (Math.random() * 10 < 1) {
-      triggerConfetti();
-      triggerConfetti();
-      triggerConfetti();
-      triggerConfetti();
-      triggerConfetti();
-      triggerConfetti();
-      triggerConfetti();
-      triggerConfetti();
-      triggerConfetti();
-      triggerConfetti();
+    if (Math.random() * 10 < 2) {
+      for (let i = 0; i < 5; i++) {
+        triggerConfetti();
+      }
     } else {
       triggerConfetti();
     }
