@@ -706,12 +706,6 @@ const Scouting = () => {
         <div className="p-6">
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <div>
-                <h2 className="font-mono font-bold text-foreground text-2xl">
-                  Scouting
-                </h2>
-                <p className="text-muted-foreground mt-1">Scout for Team 955</p>
-              </div>
             </div>
 
             {(isLead || (phase === "idle" && !activeMatch)) && (
