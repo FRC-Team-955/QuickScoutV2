@@ -386,9 +386,7 @@ const Scouting = () => {
       if (!assignment) {
         if (!matchEndedHandledRef.current && phase !== "idle") {
           matchEndedHandledRef.current = true;
-          alert(
-            "Scouting Completed and Data has been saved",
-          );
+          alert("Scouting Completed and Data has been saved");
         }
         return;
       }
@@ -685,7 +683,11 @@ const Scouting = () => {
                   {/* Right: Controls */}
                   <div className="flex items-center gap-2">
                     {isTimerRunning ? (
-                      <Button size="sm" variant="outline" onClick={handleCancelClick}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleCancelClick}
+                      >
                         <Pause className="w-4 h-4 mr-1" />
                         Cancel
                       </Button>
@@ -705,8 +707,7 @@ const Scouting = () => {
         {/* Page Content */}
         <div className="p-6">
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-            </div>
+            <div className="flex items-center justify-between"></div>
 
             {(isLead || (phase === "idle" && !activeMatch)) && (
               /* Match Queue (lead: start match, others: join queue) */
@@ -812,7 +813,7 @@ const Scouting = () => {
                           disabled={queueLoading}
                           className="flex-1"
                         >
-                          <Plus className="w-4 h-4 mr-2" />
+                          {isInQueue ? <Minus className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
                           {isInQueue ? "Leave queue" : "Join queue"}
                         </Button>
                       ) : (
@@ -872,11 +873,11 @@ const Scouting = () => {
               </Card>
             )}
 
-            {/* Start Scouting Card */}
+            {/* Start Manual Scouting Card */}
             {phase === "idle" && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Start Scouting Session</CardTitle>
+                  <CardTitle>Start Manual Scouting Session</CardTitle>
                   <CardDescription>
                     Enter the team number you're scouting and begin
                   </CardDescription>
@@ -893,7 +894,7 @@ const Scouting = () => {
                     />
                   </div>
 
-                  {isLead ? (
+                  {isLead || !isLead ? (
                     <Button
                       onClick={() => startScouting()}
                       className="w-full"
