@@ -18,7 +18,7 @@ const Index = () => {
     // Update active tab based on current route
     if (location.pathname === "/scouting") {
       setActiveTab("scouting");
-    } else if (location.pathname === "/") {
+    } else if (location.pathname === "/dashboard") {
       setActiveTab("dashboard");
     } else if (location.pathname === "/analytics") {
       setActiveTab("analytics");
@@ -39,7 +39,7 @@ const Index = () => {
     if (tab === "scouting") {
       navigate("/scouting");
     } else if (tab === "dashboard") {
-      navigate("/");
+      navigate("/dashboard");
     } else if (tab === "analytics") {
       navigate("/analytics");
     } else if (tab === "matches") {
