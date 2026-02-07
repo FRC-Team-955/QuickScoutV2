@@ -1,12 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
-import { Drawer, DrawerTrigger, DrawerContent } from "@/components/ui/drawer";
-import MobileSidebarContent from "@/components/MobileSidebarContent";
-import { Button } from "@/components/ui/button";
+import TopBar from "@/components/Topbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuth } from "@/contexts/AuthContext";
-import { Bell, Search, User, LogOut, Menu, Clipboard } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -43,7 +39,6 @@ export type MatchEntry = {
 };
 
 const Analytics = () => {
-  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("analytics");
   const [sortBy, setSortBy] = useState<Filters["sortBy"]>("newest");
@@ -58,11 +53,6 @@ const Analytics = () => {
     if (tab === "analytics") navigate("/analytics");
     if (tab === "matches") navigate("/matches");
     if (tab === "leaderboard") navigate("/leaderboard");
-  };
-
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
   };
 
   // ---- Fetch from Firebase ----
@@ -154,29 +144,7 @@ const Analytics = () => {
       <Sidebar activeTab={activeTab} onTabChange={handleTabChange} />
 
       <main className="md:ml-64 min-h-screen max-h-screen overflow-auto">
-        {/* Top Bar */}
-        <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3 flex-1">
-            <div className="md:hidden">
-              <Drawer>
-                <DrawerTrigger><Menu className="w-5 h-5" /></DrawerTrigger>
-                <DrawerContent><MobileSidebarContent activeTab={activeTab} onTabChange={handleTabChange} /></DrawerContent>
-              </Drawer>
-            </div>
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search team, scout, or match ID..."
-                className="w-full pl-10 pr-4 py-2 bg-secondary/50 border rounded-lg text-sm"
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-4 ml-4">
-             <Button variant="ghost" size="icon" onClick={handleLogout}><LogOut className="w-4 h-4" /></Button>
-          </div>
-        </header>
+        <TopBar activeTab={activeTab} onTabChange={handleTabChange} />
 
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
