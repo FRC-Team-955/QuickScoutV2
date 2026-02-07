@@ -26,7 +26,6 @@ const navItems = [
   { id: "matches", label: "Match Schedule", icon: Trophy },
   { id: "scouting", label: "Scouting", icon: ClipboardList },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
-  { id: "settings", label: "Settings", icon: Settings },
   { id: "leaderboard", label: "Leaderboard", icon: Trophy },
 ];
 
@@ -106,7 +105,7 @@ const MobileSidebarContent = ({
       </div>
 
       {/* Search */}
-      <div className="p-4">
+      {/* <div className="p-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -114,7 +113,7 @@ const MobileSidebarContent = ({
             className="pl-10"
           />
         </div>
-      </div>
+      </div> */}
 
       {/* Nav */}
       <div

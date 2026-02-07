@@ -155,26 +155,62 @@ const Analytics = () => {
 
       <main className="md:ml-64 min-h-screen max-h-screen overflow-auto">
         {/* Top Bar */}
-        <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3 flex-1">
-            <div className="md:hidden">
-              <Drawer>
-                <DrawerTrigger><Menu className="w-5 h-5" /></DrawerTrigger>
-                <DrawerContent><MobileSidebarContent activeTab={activeTab} onTabChange={handleTabChange} /></DrawerContent>
-              </Drawer>
+        <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="md:hidden">
+                <Drawer>
+                  <DrawerTrigger>
+                    <button className="p-2">
+                      <Menu className="w-5 h-5" />
+                    </button>
+                  </DrawerTrigger>
+                  <DrawerContent>
+                    <MobileSidebarContent
+                      activeTab={activeTab}
+                      onTabChange={handleTabChange}
+                    />
+                  </DrawerContent>
+                </Drawer>
+              </div>
+              <div className="hidden md:block relative flex-1 max-w-md">
+                {/* <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search teams, matches, data..."
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-secondary/50 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                /> */}
+              </div>
             </div>
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search team, scout, or match ID..."
-                className="w-full pl-10 pr-4 py-2 bg-secondary/50 border rounded-lg text-sm"
-              />
+            <div className="flex items-center gap-4">
+              {/* <button className="relative p-2 text-muted-foreground hover:text-foreground transition-colors">
+                <Bell className="w-5 h-5" />
+                <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
+              </button> */}
+              <div className="flex items-center gap-3 pl-4 border-l border-border">
+                <div className="text-right">
+                  <p className="text-sm font-medium text-foreground">
+                    {user?.name || "Scout"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Team {user?.teamNumber || 955}
+                  </p>
+                </div>
+                <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center">
+                  <User className="w-5 h-5 text-primary" />
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleLogout}
+                  title="Logout"
+                >
+                  <LogOut className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-4 ml-4">
-             <Button variant="ghost" size="icon" onClick={handleLogout}><LogOut className="w-4 h-4" /></Button>
           </div>
         </header>
 

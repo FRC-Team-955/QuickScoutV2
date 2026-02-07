@@ -6,7 +6,7 @@ import {
   TrendingUp,
   Clock,
 } from "lucide-react";
-import StatCard from "../components/StatCard";
+import { StatCard, StatCard1 } from "../components/StatCard";
 import TeamCard from "../components/TeamCard";
 import MatchesTable from "../components/MatchesTable";
 import AllianceComparison from "../components/AllianceComparison";
@@ -60,19 +60,9 @@ const Dashboard = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-mono font-bold text-foreground">
-            Dashboard
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Overview of scouting progress and statistics
-          </p>
-        </div>
-      </div>
       <div className="flex items-center gap-3">
         {/* Go to Scouting button */}
-        <button
+        {/* <button
           onClick={() => navigate("/scouting")}
           className="flex items-center gap-2 px-4 py-2 rounded-lg
                bg-primary text-primary-foreground
@@ -80,20 +70,27 @@ const Dashboard = () => {
         >
           <Target className="w-4 h-4" />
           Scouting
-        </button>
+        </button> */}
 
         {/* Match status */}
-        <div className="flex items-center gap-2 bg-secondary/50 px-4 py-2 rounded-lg">
+        {/* <div className="flex items-center gap-2 bg-secondary/50 px-4 py-2 rounded-lg">
           <Clock className="w-4 h-4 text-primary" />
           <span className="font-mono text-sm text-foreground">
             Match 43 • Live
           </span>
           <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
-        </div>
+        </div> */}
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard1
+          title="TO GO TO SCOUTING PAGE"
+          value="CLICK HERE"
+          changeType="positive"
+          icon={Users}
+          onClick={() => navigate("/scouting")}
+        />
         <StatCard
           title="Teams Scouted"
           value="32/48"
@@ -134,7 +131,9 @@ const Dashboard = () => {
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-mono font-bold text-foreground">Top Teams</h2>
-            <button className="text-sm text-primary hover:underline">
+            <button 
+              onClick={() => navigate("/analytics")}
+            className="text-sm text-primary hover:underline">
               View All →
             </button>
           </div>

@@ -134,7 +134,7 @@ const Matches = () => {
                 </Drawer>
               </div>
 
-              <div className="relative flex-1 max-w-md">
+              {/* <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   value={query}
@@ -142,13 +142,13 @@ const Matches = () => {
                   placeholder="Search match or team…"
                   className="pl-10"
                 />
-              </div>
+              </div> */}
             </div>
 
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon">
+              {/* <Button variant="ghost" size="icon">
                 <Bell className="w-5 h-5" />
-              </Button>
+              </Button> */}
               <div className="flex items-center gap-3 pl-4 border-l border-border">
                 <div className="text-right">
                   <p className="text-sm font-medium">{user?.name}</p>
