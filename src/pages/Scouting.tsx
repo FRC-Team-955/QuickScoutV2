@@ -1004,13 +1004,25 @@ const Scouting = () => {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => addFuelBy(1)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => addFuelBy(1)}
+                      >
                         +1
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => addFuelBy(3)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => addFuelBy(3)}
+                      >
                         +3
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => addFuelBy(5)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => addFuelBy(5)}
+                      >
                         +5
                       </Button>
                     </div>
@@ -1081,13 +1093,25 @@ const Scouting = () => {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => addFuelBy(1)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => addFuelBy(1)}
+                      >
                         +1
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => addFuelBy(3)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => addFuelBy(3)}
+                      >
                         +3
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => addFuelBy(5)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => addFuelBy(5)}
+                      >
                         +5
                       </Button>
                     </div>
@@ -1098,6 +1122,31 @@ const Scouting = () => {
 
             {isTeleopPhase && (
               <>
+                {/* Defense Score */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Defense Score</CardTitle>
+                    <CardDescription>
+                      Rate the team's defensive performance
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Select
+                      value={defenseScore}
+                      onValueChange={setDefenseScore}
+                    >
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Select score" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1 - Poor</SelectItem>
+                        <SelectItem value="2">2 - Fair</SelectItem>
+                        <SelectItem value="3">3 - Good</SelectItem>
+                        <SelectItem value="4">4 - Excellent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </CardContent>
+                </Card>
                 {/* Teleop Climb */}
                 <Card>
                   <CardHeader>
@@ -1148,31 +1197,6 @@ const Scouting = () => {
                     </CardContent>
                   </Card>
                 )}
-                {/* Defense Score */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Defense Score</CardTitle>
-                    <CardDescription>
-                      Rate the team's defensive performance
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Select
-                      value={defenseScore}
-                      onValueChange={setDefenseScore}
-                    >
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Select score" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">1 - Poor</SelectItem>
-                        <SelectItem value="2">2 - Fair</SelectItem>
-                        <SelectItem value="3">3 - Good</SelectItem>
-                        <SelectItem value="4">4 - Excellent</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </CardContent>
-                </Card>
               </>
             )}
 
@@ -1234,15 +1258,6 @@ const Scouting = () => {
                       </p>
                       <p className="text-2xl font-bold">
                         {didClimb ? climbLevel || "N/A" : "N/A"}
-                      </p>
-                    </div>
-
-                    <div className="p-4 border rounded-lg">
-                      <p className="text-sm text-muted-foreground">
-                        Defense Score
-                      </p>
-                      <p className="text-2xl font-bold">
-                        {defenseScore || "N/A"}
                       </p>
                     </div>
                   </div>
