@@ -52,7 +52,7 @@ const Matches = () => {
   // --------- navigation ---------
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
-    if (tab === "dashboard") navigate("/");
+    if (tab === "dashboard") navigate("/dashboard");
     if (tab === "scouting") navigate("/scouting");
     if (tab === "analytics") navigate("/analytics");
     if (tab === "matches") navigate("/matches");

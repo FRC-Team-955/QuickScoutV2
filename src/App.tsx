@@ -2,8 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { BrowserRouter, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Index from "./components/Index";
 import Login from "./pages/Login";
@@ -22,7 +22,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuth();
-  return !isAuthenticated ? <>{children}</> : <Navigate to="/" replace />;
+  return !isAuthenticated ? <>{children}</> : <Navigate to="/dashboard" replace />;
 };
 
 const RedirectHandler = () => {
@@ -39,6 +39,95 @@ const RedirectHandler = () => {
   return null;
 };
 
+const AppContent = () => {
+  const { isAuthenticated, loading } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [currentView, setCurrentView] = useState(
+    location.pathname === "/dashboard" ? "/dashboard" : location.pathname,
+  );
+  const lastPathRef = useRef(location.pathname);
+  const suppressRootSyncRef = useRef(false);
+
+  useEffect(() => {
+    const path = location.pathname;
+
+    if (path !== "/") {
+      setCurrentView(path);
+      suppressRootSyncRef.current = true;
+      navigate("/", { replace: true });
+    } else {
+      if (suppressRootSyncRef.current) {
+        suppressRootSyncRef.current = false;
+      } else if (lastPathRef.current !== "/dashboard") {
+        setCurrentView("/dashboard");
+      }
+    }
+
+    lastPathRef.current = path;
+  }, [location.pathname, navigate]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    if (isAuthenticated && currentView === "/login") {
+      setCurrentView("/dashboard");
+    } else if (!isAuthenticated && currentView !== "/login") {
+      setCurrentView("/login");
+    }
+  }, [currentView, isAuthenticated, loading]);
+
+  const renderPage = () => {
+    switch (currentView) {
+      case "/login":
+        return (
+          <PublicRoute>
+            <Login />
+          </PublicRoute>
+        );
+      case "/dashboard":
+        return (
+          <ProtectedRoute>
+            <Index />
+          </ProtectedRoute>
+        );
+      case "/scouting":
+        return (
+          <ProtectedRoute>
+            <Scouting />
+          </ProtectedRoute>
+        );
+      case "/analytics":
+        return (
+          <ProtectedRoute>
+            <Analytics />
+          </ProtectedRoute>
+        );
+      case "/matches":
+        return (
+          <ProtectedRoute>
+            <Matches />
+          </ProtectedRoute>
+        );
+      case "/leaderboard":
+        return (
+          <ProtectedRoute>
+            <Leaderboard />
+          </ProtectedRoute>
+        );
+      default:
+        return <NotFound />;
+    }
+  };
+
+  return (
+    <>
+      <RedirectHandler />
+      {renderPage()}
+    </>
+  );
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -46,59 +135,7 @@ const App = () => (
       <Sonner />
       <AuthProvider>
         <BrowserRouter basename="/QuickScoutV2">
-          <RedirectHandler />
-          <Routes>
-            <Route
-              path="/login"
-              element={
-                <PublicRoute>
-                  <Login />
-                </PublicRoute>
-              }
-            />
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <Index />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/scouting"
-              element={
-                <ProtectedRoute>
-                  <Scouting />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/analytics"
-              element={
-                <ProtectedRoute>
-                  <Analytics />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/matches"
-              element={
-                <ProtectedRoute>
-                  <Matches />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/leaderboard"
-              element={
-                <ProtectedRoute>
-                  <Leaderboard />
-                </ProtectedRoute>
-              }
-             />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <AppContent />
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>

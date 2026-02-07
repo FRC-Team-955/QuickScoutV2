@@ -35,7 +35,7 @@ const Leaderboard = () => {
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     if (tab === "dashboard") {
-      navigate("/");
+      navigate("/dashboard");
     } else if (tab === "scouting") {
       navigate("/scouting");
     } else if (tab === "analytics") {
