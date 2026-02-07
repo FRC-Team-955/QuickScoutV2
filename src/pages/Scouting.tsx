@@ -774,13 +774,13 @@ const Scouting = () => {
                                   ? `#${idx + 1} — active`
                                   : `#${idx + 1}`}
                               </div>
-                            </div>
+                          </div>
                           </div>
 
                           <div className="flex items-center gap-3">
                             {user?.id === q.userId && isInTopSix && (
                               <div className="text-xs text-success font-medium">
-                                You are in the active 6
+                                You are in the next match!
                               </div>
                             )}
 
