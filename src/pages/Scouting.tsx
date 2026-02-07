@@ -205,7 +205,7 @@ const Scouting = () => {
   const triggerConfetti = useCallback(() => {
     setShowConfetti(true);
     if (audioTimeoutRef.current) {
-      clearTimeout(audioTimeoutRef.current);
+      //clearTimeout(audioTimeoutRef.current);
     }
     audioTimeoutRef.current = setTimeout(() => {
       const audio = new Audio(successAudio);
@@ -517,7 +517,20 @@ const Scouting = () => {
   };
 
   const resetScouting = async () => {
-    triggerConfetti();
+    if (Math.random() * 10 < 1) {
+      triggerConfetti();
+      triggerConfetti();
+      triggerConfetti();
+      triggerConfetti();
+      triggerConfetti();
+      triggerConfetti();
+      triggerConfetti();
+      triggerConfetti();
+      triggerConfetti();
+      triggerConfetti();
+    } else {
+      triggerConfetti();
+    }
     try {
       const matchId = currentMatchIdRef.current;
       const assignedTeam = assignedTeamRef.current;
