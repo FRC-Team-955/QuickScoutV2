@@ -34,6 +34,7 @@ import {
   remove,
 } from "firebase/database";
 import { get } from "firebase/database";
+import successAudio from "/partyblower.mp3";
 
 const PHASE_DURATIONS = {
   AUTONOMOUS: 20,
@@ -199,9 +200,20 @@ const Scouting = () => {
   const [showConfetti, setShowConfetti] = useState(false);
   const [confettiSize, setConfettiSize] = useState({ width: 0, height: 0 });
   const confettiTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const audioTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const triggerConfetti = useCallback(() => {
     setShowConfetti(true);
+    if (audioTimeoutRef.current) {
+      clearTimeout(audioTimeoutRef.current);
+    }
+    audioTimeoutRef.current = setTimeout(() => {
+      const audio = new Audio(successAudio);
+      audio.play().catch((err) => {
+        console.warn("Unable to play success audio", err);
+      });
+      audioTimeoutRef.current = null;
+    }, 2000);
     if (confettiTimeoutRef.current) {
       clearTimeout(confettiTimeoutRef.current);
     }
@@ -386,7 +398,7 @@ const Scouting = () => {
       if (!assignment) {
         if (!matchEndedHandledRef.current && phase !== "idle") {
           matchEndedHandledRef.current = true;
-          alert("Scouting Completed and Data has been saved");
+          // alert("Scouting Completed and Data has been saved");
         }
         return;
       }
@@ -642,7 +654,7 @@ const Scouting = () => {
           width={confettiSize.width}
           height={confettiSize.height}
           recycle={false}
-          numberOfPieces={300}
+          numberOfPieces={1000}
         />
       )}
       <Sidebar activeTab={activeTab} onTabChange={handleTabChange} />
