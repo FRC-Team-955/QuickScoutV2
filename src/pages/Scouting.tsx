@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import Confetti from "react-confetti";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
 import { Drawer, DrawerTrigger, DrawerContent } from "@/components/ui/drawer";
@@ -213,6 +214,20 @@ const Scouting = () => {
 
   const timerCardRef = useRef<HTMLDivElement | null>(null);
   const [showStickyTimer, setShowStickyTimer] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [confettiSize, setConfettiSize] = useState({ width: 0, height: 0 });
+  const confettiTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const triggerConfetti = useCallback(() => {
+    setShowConfetti(true);
+    if (confettiTimeoutRef.current) {
+      clearTimeout(confettiTimeoutRef.current);
+    }
+    confettiTimeoutRef.current = setTimeout(() => {
+      setShowConfetti(false);
+      confettiTimeoutRef.current = null;
+    }, 5000);
+  }, []);
 
   const getPhaseDuration = (currentPhase: ScoutingPhase): number => {
     switch (currentPhase) {
@@ -380,7 +395,7 @@ const Scouting = () => {
     setDidClimb(false);
   };
 
-  // Auto-start when assigned by a lead: subscribe to our /users/{id}/currentAssignment
+  // Auto-start when assigned by a lead: subscribe to our /users/{id}/currentAssignmet
   const lastProcessedAssignmentRef = useRef<string | null>(null);
   useEffect(() => {
     if (!user?.id) return;
@@ -390,7 +405,7 @@ const Scouting = () => {
         if (!matchEndedHandledRef.current && phase !== "idle") {
           matchEndedHandledRef.current = true;
           alert(
-            "The lead has signaled the end of the match. Please finish and submit your scouting.",
+            "Scouting Completed and Data has been saved",
           );
         }
         return;
@@ -510,6 +525,7 @@ const Scouting = () => {
   };
 
   const resetScouting = async () => {
+    triggerConfetti();
     try {
       const matchId = currentMatchIdRef.current;
       const assignedTeam = assignedTeamRef.current;
@@ -608,6 +624,20 @@ const Scouting = () => {
   const isActivePhase = phase !== "idle" && phase !== "complete";
 
   useEffect(() => {
+    if (!isComplete) return;
+    triggerConfetti();
+  }, [isComplete, triggerConfetti]);
+
+  useEffect(() => {
+    const updateSize = () => {
+      setConfettiSize({ width: window.innerWidth, height: window.innerHeight });
+    };
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
+  }, []);
+
+  useEffect(() => {
     if (!timerCardRef.current) return;
 
     const observer = new IntersectionObserver(
@@ -627,6 +657,14 @@ const Scouting = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {showConfetti && confettiSize.width > 0 && (
+        <Confetti
+          width={confettiSize.width}
+          height={confettiSize.height}
+          recycle={false}
+          numberOfPieces={300}
+        />
+      )}
       <Sidebar activeTab={activeTab} onTabChange={handleTabChange} />
 
       {/* Main Content */}
@@ -696,20 +734,20 @@ const Scouting = () => {
                   </DrawerContent>
                 </Drawer>
               </div>
-              <div className="hidden md:block relative flex-1 max-w-md">
+              {/* <div className="hidden md:block relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Search teams, matches, data..."
                   className="w-full pl-10 pr-4 py-2 bg-secondary/50 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
                 />
-              </div>
+              </div> */}
             </div>
             <div className="flex items-center gap-4">
-              <button className="relative p-2 text-muted-foreground hover:text-foreground transition-colors">
+              {/* <button className="relative p-2 text-muted-foreground hover:text-foreground transition-colors">
                 <Bell className="w-5 h-5" />
                 <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
-              </button>
+              </button> */}
               <div className="flex items-center gap-3 pl-4 border-l border-border">
                 <div className="text-right">
                   <p className="text-sm font-medium text-foreground">
