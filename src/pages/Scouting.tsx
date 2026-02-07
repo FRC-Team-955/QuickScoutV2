@@ -2,8 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Confetti from "react-confetti";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
-import { Drawer, DrawerTrigger, DrawerContent } from "@/components/ui/drawer";
-import MobileSidebarContent from "@/components/MobileSidebarContent";
+import TopBar from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,19 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  Clock,
-  Plus,
-  Minus,
-  Play,
-  Pause,
-  Bell,
-  Search,
-  User,
-  LogOut,
-  X,
-  Menu,
-} from "lucide-react";
+import { Clock, Plus, Minus, Play, Pause, X } from "lucide-react";
 import { useQueue } from "@/hooks/use-queue";
 import { subscribeToUserAssignment } from "@/lib/queue";
 import {
@@ -67,7 +54,7 @@ type ScoutingPhase =
   | "complete";
 
 const Scouting = () => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("scouting");
 
@@ -84,11 +71,6 @@ const Scouting = () => {
     } else if (tab === "leaderboard") {
       navigate("/leaderboard");
     }
-  };
-
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
   };
 
   // queue + role helpers
@@ -672,106 +654,53 @@ const Scouting = () => {
         className="md:ml-64 min-h-screen max-h-screen overflow-auto touch-pan-y"
         style={{ WebkitOverflowScrolling: "touch" }}
       >
-        {/* Top Bar */}
-        <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border px-6 py-4">
-          {/* Sticky Timer Bar */}
-          {isActivePhase && (
-            <div className="sticky top-[72px] z-20 bg-background/95 backdrop-blur border-b border-border">
-              <div className="px-6 py-3 flex items-center justify-between">
-                {/* Left: Phase + Team */}
-                <div>
-                  <div className="font-mono font-bold text-sm">
-                    {getPhaseName(phase)}
-                  </div>
-                  {teamNumber && (
-                    <div className="text-xs text-muted-foreground">
-                      Team {teamNumber}
+        <TopBar
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          topContent={
+            isActivePhase ? (
+              <div className="sticky top-[72px] z-20 bg-background/95 backdrop-blur border-b border-border">
+                <div className="px-6 py-3 flex items-center justify-between">
+                  {/* Left: Phase + Team */}
+                  <div>
+                    <div className="font-mono font-bold text-sm">
+                      {getPhaseName(phase)}
                     </div>
-                  )}
-                </div>
+                    {teamNumber && (
+                      <div className="text-xs text-muted-foreground">
+                        Team {teamNumber}
+                      </div>
+                    )}
+                  </div>
 
-                {/* Center: Timer */}
-                <div
-                  className={`text-3xl font-mono font-bold ${
-                    isTimerRunning ? "text-primary" : "text-muted-foreground"
-                  }`}
-                >
-                  {formatTime(timeRemaining)}
-                </div>
+                  {/* Center: Timer */}
+                  <div
+                    className={`text-3xl font-mono font-bold ${
+                      isTimerRunning ? "text-primary" : "text-muted-foreground"
+                    }`}
+                  >
+                    {formatTime(timeRemaining)}
+                  </div>
 
-                {/* Right: Controls */}
-                <div className="flex items-center gap-2">
-                  {isTimerRunning ? (
-                    <Button size="sm" variant="outline" onClick={handleCancelClick}>
-                      <Pause className="w-4 h-4 mr-1" />
-                      Cancel
-                    </Button>
-                  ) : !isComplete ? (
-                    <Button size="sm" variant="outline" onClick={resumeTimer}>
-                      <Play className="w-4 h-4 mr-1" />
-                      Resume
-                    </Button>
-                  ) : null}
+                  {/* Right: Controls */}
+                  <div className="flex items-center gap-2">
+                    {isTimerRunning ? (
+                      <Button size="sm" variant="outline" onClick={handleCancelClick}>
+                        <Pause className="w-4 h-4 mr-1" />
+                        Cancel
+                      </Button>
+                    ) : !isComplete ? (
+                      <Button size="sm" variant="outline" onClick={resumeTimer}>
+                        <Play className="w-4 h-4 mr-1" />
+                        Resume
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="md:hidden">
-                <Drawer>
-                  <DrawerTrigger>
-                    <button className="p-2">
-                      <Menu className="w-5 h-5" />
-                    </button>
-                  </DrawerTrigger>
-                  <DrawerContent>
-                    <MobileSidebarContent
-                      activeTab={activeTab}
-                      onTabChange={handleTabChange}
-                    />
-                  </DrawerContent>
-                </Drawer>
-              </div>
-              {/* <div className="hidden md:block relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Search teams, matches, data..."
-                  className="w-full pl-10 pr-4 py-2 bg-secondary/50 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                />
-              </div> */}
-            </div>
-            <div className="flex items-center gap-4">
-              {/* <button className="relative p-2 text-muted-foreground hover:text-foreground transition-colors">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
-              </button> */}
-              <div className="flex items-center gap-3 pl-4 border-l border-border">
-                <div className="text-right">
-                  <p className="text-sm font-medium text-foreground">
-                    {user?.name || "Scout"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Team {user?.teamNumber || 955}
-                  </p>
-                </div>
-                <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center">
-                  <User className="w-5 h-5 text-primary" />
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleLogout}
-                  title="Logout"
-                >
-                  <LogOut className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
-        </header>
+            ) : null
+          }
+        />
 
         {/* Page Content */}
         <div className="p-6">
