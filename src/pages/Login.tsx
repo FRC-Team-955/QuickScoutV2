@@ -1,17 +1,29 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Bot } from "lucide-react";
+import { isLeadEmail } from "@/lib/lead-users";
+import { set } from "date-fns";
+
+const DEFAULT_PASSWORD = "123456";
 
 const Login = () => {
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
+  const isLead = isLeadEmail(email);
+
+  useEffect(() => {
+    if (!isLead) {
+      setPassword(DEFAULT_PASSWORD);
+    } else {
+      setPassword("");
+    }
+  }, [isLead]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,24 +31,19 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const trimmed = name.trim();
-      if (!trimmed) {
-        setError("Please enter your name");
+      if (!email.trim()) {
+        setError("Please enter your email");
         setLoading(false);
         return;
       }
 
-      const isLead = /\blead\b/i.test(trimmed);
-      if (isLead) {
-        if (!email.trim() || !password) {
-          setError("Please enter email and password");
-          setLoading(false);
-          return;
-        }
-        await login(trimmed, email, password);
-      } else {
-        await login(trimmed);
+      if (isLead && !password) {
+        setError("Please enter your password");
+        setLoading(false);
+        return;
       }
+
+      await login(email, password || DEFAULT_PASSWORD);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Login failed";
       // Friendly mapping for common Firebase auth errors
@@ -61,8 +68,8 @@ const Login = () => {
               <Bot className="w-8 h-8 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-mono">FRC Scout Hub</CardTitle>
-          <CardDescription>Team 955 - Member Login</CardDescription>
+          <CardTitle className="text-2xl font-mono">QuickScoutV2</CardTitle>
+          <CardDescription>Team 955 / 749 - Scout Login</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -73,57 +80,39 @@ const Login = () => {
             )}
 
             <div className="space-y-2">
-              <label htmlFor="name" className="text-sm font-medium text-foreground">
-                Your Name
+              <label htmlFor="email" className="text-sm font-medium text-foreground">
+                Email
               </label>
               <Input
-                id="name"
-                type="text"
-                placeholder="Enter your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                id="email"
+                type="email"
+                placeholder="first.last@student.csd509j.net"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
                 className="w-full"
               />
             </div>
-
-            {/* If the name indicates a lead role, show Email and Password */}
-            {/\blead\b/i.test(name) && (
-              <>
-                <div className="space-y-2">
-                  <label htmlFor="email" className="text-sm font-medium text-foreground">
-                    Email
-                  </label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="lead@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    disabled={loading}
-                    className="w-full"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label htmlFor="password" className="text-sm font-medium text-foreground">
-                    Password
-                  </label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Enter password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={loading}
-                    className="w-full"
-                  />
-                </div>
-              </>
+            {isLead && (
+              <div className="space-y-2">
+                <label htmlFor="password" className="text-sm font-medium text-foreground">
+                  Password
+                </label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Enter password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                  className="w-full"
+                />
+              </div>
             )}
             <Button
               type="submit"
               className="w-full"
-              disabled={loading || !name.trim() || (/\blead\b/i.test(name) && (!email.trim() || !password))}
+              disabled={loading || !email.trim() || (isLead && !password)}
             >
               {loading ? "Logging in..." : "Login"}
             </Button>

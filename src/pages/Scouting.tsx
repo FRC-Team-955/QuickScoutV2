@@ -76,7 +76,6 @@ const Scouting = () => {
   };
 
   // queue + role helpers
-  const isLeadName = (name?: string) => !!name && /\blead\b/i.test(name);
   const {
     queue,
     topSix,
@@ -89,7 +88,7 @@ const Scouting = () => {
     isInTopSix,
     loading: queueLoading,
   } = useQueue(user ? { id: user.id, name: user.name } : null);
-  const isLead = isLeadName(user?.name);
+  const isLead = !!user?.isLead;
 
   const handleQueueToggle = async () => {
     try {
