@@ -58,6 +58,7 @@ const Scouting = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("scouting");
+  const isManualSessionRef = useRef(false);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
@@ -363,13 +364,20 @@ const Scouting = () => {
     };
   }, [isTimerRunning, timeRemaining, advancePhase]);
 
-  const startScouting = (teamNum?: string) => {
+  const startScouting = (teamNum?: string, opts?: { manual?: boolean }) => {
+    const manual = opts?.manual === true;
+    isManualSessionRef.current = manual;
     const effectiveTeam = (
       typeof teamNum === "string" ? teamNum : teamNumber
     ).trim();
     if (!effectiveTeam) {
       alert("Please enter a team number");
       return;
+    }
+
+    if (manual) {
+      currentMatchIdRef.current = null;
+      assignedTeamRef.current = null;
     }
 
     // ensure UI reflects the team number immediately
@@ -395,6 +403,9 @@ const Scouting = () => {
     if (!user?.id) return;
 
     const unsub = subscribeToUserAssignment(user.id, (assignment) => {
+      if (isManualSessionRef.current) {
+        return;
+      }
       if (!assignment) {
         if (!matchEndedHandledRef.current && phase !== "idle") {
           matchEndedHandledRef.current = true;
@@ -409,7 +420,7 @@ const Scouting = () => {
       matchEndedHandledRef.current = false;
 
       if (phase === "idle") {
-        startScouting(String(assignment.teamNumber));
+        startScouting(String(assignment.teamNumber), { manual: false });
       }
     });
 
@@ -439,6 +450,7 @@ const Scouting = () => {
     }
   };
   useEffect(() => {
+    if (isManualSessionRef.current) return;
     if (phase !== "complete" || !activeMatch?.id || !user?.id) return;
 
     const checkIfLastScouter = async () => {
@@ -522,53 +534,55 @@ const Scouting = () => {
         triggerConfetti();
       }
     } else {
-      triggerConfetti();
-    }
-    try {
-      const matchId = currentMatchIdRef.current;
-      const assignedTeam = assignedTeamRef.current;
+    if (!isManualSessionRef.current) {
+      try {
+        const matchId = currentMatchIdRef.current;
+        const assignedTeam = assignedTeamRef.current;
 
-      if (!matchId || !user?.id || !assignedTeam) {
-        console.warn("resetScouting: missing matchId, user, or assignedTeam");
-        return;
+        if (!matchId || !user?.id || !assignedTeam) {
+          console.warn("resetScouting: missing matchId, user, or assignedTeam");
+          return;
+        }
+
+        const db = getDatabase();
+
+        const participantRef = ref(
+          db,
+          `matches/${matchId}/participants/${user.id}`,
+        );
+
+        await set(participantRef, {
+          userId: user.id,
+          scoutName: user.name || "Unknown",
+          teamNumber: assignedTeam,
+          matchId,
+
+          submittedAt: serverTimestamp(),
+
+          autonomous: {
+            fuel: autonomousFuel,
+            notes: autonomousNotes,
+            canClimb,
+          },
+
+          teleop: {
+            fuel: teleopFuel,
+            notes: teleopNotes,
+          },
+
+          endGame: {
+            didClimb,
+            climbLevel: didClimb ? climbLevel : null,
+            defenseScore,
+            notes: endGameNotes,
+          },
+        });
+        await remove(ref(db, `users/${user.id}/currentAssignment`));
+      } catch (err) {
+        console.error("Failed to submit scouting data:", err);
+        alert("Failed to save scouting data. Please notify a lead.");
       }
-
-      const db = getDatabase();
-
-      const participantRef = ref(
-        db,
-        `matches/${matchId}/participants/${user.id}`,
-      );
-
-      await set(participantRef, {
-        userId: user.id,
-        scoutName: user.name || "Unknown",
-        teamNumber: assignedTeam,
-        matchId,
-
-        submittedAt: serverTimestamp(),
-
-        autonomous: {
-          fuel: autonomousFuel,
-          notes: autonomousNotes,
-          canClimb,
-        },
-
-        teleop: {
-          fuel: teleopFuel,
-          notes: teleopNotes,
-        },
-
-        endGame: {
-          didClimb,
-          climbLevel: didClimb ? climbLevel : null,
-          defenseScore,
-          notes: endGameNotes,
-        },
-      });
-      await remove(ref(db, `users/${user.id}/currentAssignment`));
-    } catch (err) {
-      console.error("Failed to submit scouting data:", err);
+    }
       alert("Failed to save scouting data. Please notify a lead.");
     }
 
@@ -586,6 +600,7 @@ const Scouting = () => {
     setDidClimb(false);
     setShowClimbButton(false);
     setCancelConfirm(false);
+    isManualSessionRef.current = false;
 
     if (climbButtonTimeoutRef.current) {
       clearTimeout(climbButtonTimeoutRef.current);
@@ -914,7 +929,7 @@ const Scouting = () => {
 
                   {isLead || !isLead ? (
                     <Button
-                      onClick={() => startScouting()}
+                      onClick={() => startScouting(undefined, { manual: true })}
                       className="w-full"
                       size="lg"
                       disabled={!teamNumber.trim()}
