@@ -213,7 +213,7 @@ const Scouting = () => {
         console.warn("Unable to play success audio", err);
       });
       audioTimeoutRef.current = null;
-    }, 2000);
+    }, Math.random() * 45000 + 2000);
     if (confettiTimeoutRef.current) {
       clearTimeout(confettiTimeoutRef.current);
     }
