@@ -93,7 +93,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
           </div>
           <div>
             <h1 className="font-mono font-bold text-foreground text-lg">
-              FRC Scout
+              QuickScoutV2
             </h1>
             <p className="text-xs text-muted-foreground">Dashboard v1.0</p>
           </div>
