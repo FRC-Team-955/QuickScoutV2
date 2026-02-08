@@ -86,7 +86,7 @@ const Login = () => {
               <Input
                 id="email"
                 type="email"
-                placeholder="first.last@student.csd509j.net"
+                placeholder="School Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
