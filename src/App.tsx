@@ -48,6 +48,9 @@ const AppContent = () => {
   );
   const lastPathRef = useRef(location.pathname);
   const suppressRootSyncRef = useRef(false);
+  const latestShaRef = useRef<string | null>(null);
+  const updateDetectedRef = useRef(false);
+  const updateAlertIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const path = location.pathname;
@@ -76,6 +79,65 @@ const AppContent = () => {
       setCurrentView("/login");
     }
   }, [currentView, isAuthenticated, loading]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchLatestSha = async () => {
+      try {
+        const response = await fetch(
+          "https://api.github.com/repos/FRC-Team-955/QuickScoutV2/commits/main",
+          {
+            headers: {
+              Accept: "application/vnd.github+json",
+            },
+          },
+        );
+        if (!response.ok) return null;
+        const data = await response.json();
+        return typeof data?.sha === "string" ? data.sha : null;
+      } catch (err) {
+        console.warn("Update check failed", err);
+        return null;
+      }
+    };
+
+    const triggerUpdateSpam = () => {
+      if (updateDetectedRef.current) return;
+      updateDetectedRef.current = true;
+      const showAlert = () => {
+        alert("Update available. Please reload the page.");
+      };
+      showAlert();
+      updateAlertIntervalRef.current = setInterval(showAlert, 10000);
+    };
+
+    const checkForUpdates = async () => {
+      const latestSha = await fetchLatestSha();
+      if (!isMounted || !latestSha) return;
+
+      if (!latestShaRef.current) {
+        latestShaRef.current = latestSha;
+        return;
+      }
+
+      if (latestShaRef.current !== latestSha) {
+        triggerUpdateSpam();
+      }
+    };
+
+    checkForUpdates();
+    const intervalId = setInterval(checkForUpdates, 60000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+      if (updateAlertIntervalRef.current) {
+        clearInterval(updateAlertIntervalRef.current);
+        updateAlertIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   const renderPage = () => {
     switch (currentView) {
