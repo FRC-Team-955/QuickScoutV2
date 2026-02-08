@@ -1,7 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { isLeadEmail } from "@/lib/lead-users";
 import { setUserPresence, clearUserPresence, removeUserCompletely, leaveQueue, setSuppressPresenceOnUnload, shouldSuppressPresenceOnUnload, removeUserLastActive } from "@/lib/queue";
 
 interface User {
@@ -19,6 +18,10 @@ interface AuthContextType {
   isAuthenticated: boolean;
   loading: boolean;
 }
+
+const isLeadGmail = (email?: string) => {
+  return typeof email === "string" && email.toLowerCase().endsWith("@gmail.com");
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -40,7 +43,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           name: formatName,
           email: firebaseUser.email || undefined,
           teamNumber: 955,
-          isLead: isLeadEmail(firebaseUser.email || undefined),
+          isLead: isLeadGmail(firebaseUser.email || undefined),
         };
         setUser(mappedUser);
         setUserPresence(mappedUser).catch(console.error);
@@ -86,7 +89,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         name: formatName,
         email: signed.email || undefined,
         teamNumber: 955,
-        isLead: isLeadEmail(signed.email || undefined),
+        isLead: isLeadGmail(signed.email || undefined),
       };
       setUser(mapped);
       await setUserPresence(mapped);
