@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Bot } from "lucide-react";
-import { isLeadEmail } from "@/lib/lead-users";
-import { set } from "date-fns";
 
 const DEFAULT_PASSWORD = "123456";
+
+const isLeadGmail = (email: string) => {
+  return email.trim().toLowerCase().endsWith("@gmail.com");
+};
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -15,7 +17,7 @@ const Login = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
-  const isLead = isLeadEmail(email);
+  const isLead = isLeadGmail(email);
 
   useEffect(() => {
     if (!isLead) {
