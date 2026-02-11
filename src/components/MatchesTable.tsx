@@ -1,6 +1,18 @@
+import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 
-interface Match {
+type TbaMatch = {
+  key: string;
+  match_number: number;
+  comp_level: "qm" | "qf" | "sf" | "f";
+  alliances: {
+    red: { team_keys: string[]; score: number };
+    blue: { team_keys: string[]; score: number };
+  };
+  time?: number;
+};
+
+type MatchRow = {
   id: string;
   matchNumber: number;
   type: "Qualification" | "Playoff" | "Final";
@@ -10,56 +22,56 @@ interface Match {
   blueScore: number;
   status: "completed" | "upcoming" | "live";
   time: string;
-}
+};
 
-const mockMatches: Match[] = [
-  {
-    id: "1",
-    matchNumber: 42,
-    type: "Qualification",
-    redAlliance: [254, 1678, 971],
-    blueAlliance: [118, 2056, 987],
-    redScore: 156,
-    blueScore: 142,
-    status: "completed",
-    time: "10:30 AM",
-  },
-  {
-    id: "2",
-    matchNumber: 43,
-    type: "Qualification",
-    redAlliance: [3310, 4414, 5940],
-    blueAlliance: [2910, 1323, 6328],
-    redScore: 0,
-    blueScore: 0,
-    status: "live",
-    time: "10:45 AM",
-  },
-  {
-    id: "3",
-    matchNumber: 44,
-    type: "Qualification",
-    redAlliance: [2767, 3847, 1241],
-    blueAlliance: [4499, 5406, 2659],
-    redScore: 0,
-    blueScore: 0,
-    status: "upcoming",
-    time: "11:00 AM",
-  },
-  {
-    id: "4",
-    matchNumber: 45,
-    type: "Qualification",
-    redAlliance: [1114, 2481, 3478],
-    blueAlliance: [5172, 6672, 7028],
-    redScore: 0,
-    blueScore: 0,
-    status: "upcoming",
-    time: "11:15 AM",
-  },
-];
+const levelLabel = (lvl: string): MatchRow["type"] => {
+  if (lvl === "qm") return "Qualification";
+  if (lvl === "qf" || lvl === "sf") return "Playoff";
+  return "Final";
+};
 
-const MatchesTable = () => {
+const formatTeams = (keys: string[]) =>
+  keys.map((k) => Number(k.replace("frc", "")) || 0).filter(Boolean);
+
+const formatTime = (time?: number) => {
+  if (!time) return "TBD";
+  return new Date(time * 1000).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
+const MatchesTable = ({
+  matches,
+  loading = false,
+}: {
+  matches: TbaMatch[];
+  loading?: boolean;
+}) => {
+  const rows = useMemo<MatchRow[]>(() => {
+    if (!matches.length) return [];
+    const sorted = [...matches].sort(
+      (a, b) =>
+        (b.time ?? 0) - (a.time ?? 0) || b.match_number - a.match_number,
+    );
+    return sorted.slice(0, 4).map((match) => {
+      const redScore = match.alliances.red.score;
+      const blueScore = match.alliances.blue.score;
+      const completed = redScore >= 0 && blueScore >= 0;
+      return {
+        id: match.key,
+        matchNumber: match.match_number,
+        type: levelLabel(match.comp_level),
+        redAlliance: formatTeams(match.alliances.red.team_keys),
+        blueAlliance: formatTeams(match.alliances.blue.team_keys),
+        redScore: completed ? redScore : 0,
+        blueScore: completed ? blueScore : 0,
+        status: completed ? "completed" : "upcoming",
+        time: formatTime(match.time),
+      };
+    });
+  }, [matches]);
+
   return (
     <div className="stat-card !p-0 overflow-hidden animate-fade-in">
       <div className="p-5 border-b border-border">
@@ -80,7 +92,7 @@ const MatchesTable = () => {
             </tr>
           </thead>
           <tbody>
-            {mockMatches.map((match) => (
+            {rows.map((match) => (
               <tr key={match.id} className="group">
                 <td>
                   <span className="font-mono font-semibold text-foreground">
@@ -158,6 +170,20 @@ const MatchesTable = () => {
                 </td>
               </tr>
             ))}
+            {!rows.length && !loading && (
+              <tr>
+                <td colSpan={7} className="py-6 text-center text-sm text-muted-foreground">
+                  No matches available yet.
+                </td>
+              </tr>
+            )}
+            {loading && (
+              <tr>
+                <td colSpan={7} className="py-6 text-center text-sm text-muted-foreground">
+                  Loading matches...
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
