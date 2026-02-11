@@ -1,62 +1,246 @@
-import {
-  Users,
-  Trophy,
-  ClipboardCheck,
-  Target,
-  TrendingUp,
-  Clock,
-} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Users, Trophy, TrendingUp } from "lucide-react";
 import { StatCard, StatCard1 } from "../components/StatCard";
 import TeamCard from "../components/TeamCard";
 import MatchesTable from "../components/MatchesTable";
 import AllianceComparison from "../components/AllianceComparison";
 import { useNavigate } from "react-router-dom";
+import { getEventMatches } from "@/lib/tba";
+import { db } from "@/lib/firebase";
+import { get, ref } from "firebase/database";
 
-const mockTeams = [
-  {
-    teamNumber: 254,
-    teamName: "The Cheesy Poofs",
-    ranking: 1,
-    avgScore: 156,
-    autoPoints: 45,
-    teleopPoints: 92,
-    climbSuccess: 95,
-    status: "online" as const,
-  },
-  {
-    teamNumber: 1678,
-    teamName: "Citrus Circuits",
-    ranking: 2,
-    avgScore: 148,
-    autoPoints: 42,
-    teleopPoints: 88,
-    climbSuccess: 90,
-    status: "online" as const,
-  },
-  {
-    teamNumber: 118,
-    teamName: "Robonauts",
-    ranking: 3,
-    avgScore: 142,
-    autoPoints: 38,
-    teleopPoints: 85,
-    climbSuccess: 88,
-    status: "pending" as const,
-  },
-  {
-    teamNumber: 971,
-    teamName: "Spartan Robotics",
-    ranking: 4,
-    avgScore: 138,
-    autoPoints: 35,
-    teleopPoints: 82,
-    climbSuccess: 85,
-    status: "offline" as const,
-  },
-];
+type TbaMatch = {
+  key: string;
+  match_number: number;
+  comp_level: "qm" | "qf" | "sf" | "f";
+  alliances: {
+    red: { team_keys: string[]; score: number };
+    blue: { team_keys: string[]; score: number };
+  };
+  score_breakdown?: {
+    red?: { autoPoints?: number; teleopPoints?: number; endGamePoints?: number };
+    blue?: { autoPoints?: number; teleopPoints?: number; endGamePoints?: number };
+  };
+  time?: number;
+};
+
+type ScoutingEntry = {
+  teamNumber: number;
+  autoPoints: number;
+  teleopPoints: number;
+  didClimb: boolean;
+  submittedAt: number;
+};
+
+type TeamStat = {
+  teamNumber: number;
+  teamName: string;
+  ranking: number;
+  avgScore: number;
+  autoPoints: number;
+  teleopPoints: number;
+  climbSuccess: number;
+  status: "online" | "offline" | "pending";
+};
+
+const extractScoutingEntries = (matchesData: Record<string, any>) => {
+  const entries: ScoutingEntry[] = [];
+
+  Object.values(matchesData).forEach((matchValue) => {
+    const participantsRoot = matchValue?.participants || matchValue;
+    if (!participantsRoot || typeof participantsRoot !== "object") return;
+
+    Object.values(participantsRoot as Record<string, any>).forEach((data) => {
+      if (!data || typeof data !== "object") return;
+
+      const hasSubmission =
+        data.teamNumber != null ||
+        data.submittedAt != null ||
+        data.autonomous ||
+        data.teleop ||
+        data.endGame;
+      if (!hasSubmission) return;
+
+      const teamNumber = Number.parseInt(String(data.teamNumber), 10);
+      if (!Number.isFinite(teamNumber)) return;
+
+      const autoPoints =
+        Number(data.autonomous?.score) || Number(data.autonomous?.fuel) || 0;
+      const teleopPoints =
+        Number(data.teleop?.score) || Number(data.teleop?.fuel) || 0;
+      const didClimb = Boolean(data.endGame?.didClimb);
+      const submittedAt =
+        typeof data.submittedAt === "number"
+          ? data.submittedAt
+          : Number(data.submittedAt) || 0;
+
+      entries.push({
+        teamNumber,
+        autoPoints,
+        teleopPoints,
+        didClimb,
+        submittedAt,
+      });
+    });
+  });
+
+  return entries;
+};
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const eventKey = "2025wayak";
+  const [tbaMatches, setTbaMatches] = useState<TbaMatch[]>([]);
+  const [tbaLoading, setTbaLoading] = useState(false);
+  const [scoutingEntries, setScoutingEntries] = useState<ScoutingEntry[]>([]);
+  const [scoutingLoading, setScoutingLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchMatches = async () => {
+      setTbaLoading(true);
+      try {
+        const data = await getEventMatches(eventKey);
+        setTbaMatches(data || []);
+      } catch (err) {
+        console.error("Failed to load TBA matches", err);
+        setTbaMatches([]);
+      } finally {
+        setTbaLoading(false);
+      }
+    };
+
+    fetchMatches();
+  }, [eventKey]);
+
+  useEffect(() => {
+    const fetchScouting = async () => {
+      setScoutingLoading(true);
+      try {
+        const snap = await get(ref(db, "matches"));
+        if (!snap.exists()) {
+          setScoutingEntries([]);
+          return;
+        }
+        const entries = extractScoutingEntries(snap.val() || {});
+        setScoutingEntries(entries);
+      } catch (err) {
+        console.error("Failed to load scouting data", err);
+        setScoutingEntries([]);
+      } finally {
+        setScoutingLoading(false);
+      }
+    };
+
+    fetchScouting();
+  }, []);
+
+  const playedMatches = useMemo(
+    () =>
+      tbaMatches.filter(
+        (m) => m.alliances.red.score >= 0 && m.alliances.blue.score >= 0,
+      ),
+    [tbaMatches],
+  );
+
+  const eventTeamCount = useMemo(() => {
+    const teams = new Set<string>();
+    tbaMatches.forEach((match) => {
+      match.alliances.red.team_keys.forEach((team) => teams.add(team));
+      match.alliances.blue.team_keys.forEach((team) => teams.add(team));
+    });
+    return teams.size;
+  }, [tbaMatches]);
+
+  const teamsScoutedSet = useMemo(() => {
+    const teams = new Set<number>();
+    scoutingEntries.forEach((entry) => teams.add(entry.teamNumber));
+    return teams;
+  }, [scoutingEntries]);
+
+  const teamsScoutedToday = useMemo(() => {
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const startMs = dayStart.getTime();
+    const teams = new Set<number>();
+    scoutingEntries.forEach((entry) => {
+      if (entry.submittedAt >= startMs) teams.add(entry.teamNumber);
+    });
+    return teams.size;
+  }, [scoutingEntries]);
+
+  const completionRate = useMemo(() => {
+    if (!eventTeamCount) return 0;
+    return (teamsScoutedSet.size / eventTeamCount) * 100;
+  }, [eventTeamCount, teamsScoutedSet]);
+
+  const avgMatchScore = useMemo(() => {
+    if (!playedMatches.length) return 0;
+    const total = playedMatches.reduce(
+      (sum, match) => sum + match.alliances.red.score + match.alliances.blue.score,
+      0,
+    );
+    return total / playedMatches.length;
+  }, [playedMatches]);
+
+  const topTeams = useMemo<TeamStat[]>(() => {
+    const byTeam = new Map<
+      number,
+      { auto: number; teleop: number; climb: number; count: number }
+    >();
+
+    scoutingEntries.forEach((entry) => {
+      const current = byTeam.get(entry.teamNumber) || {
+        auto: 0,
+        teleop: 0,
+        climb: 0,
+        count: 0,
+      };
+      current.auto += entry.autoPoints;
+      current.teleop += entry.teleopPoints;
+      current.climb += entry.didClimb ? 1 : 0;
+      current.count += 1;
+      byTeam.set(entry.teamNumber, current);
+    });
+
+    const sorted = Array.from(byTeam.entries())
+      .map(([teamNumber, stats]) => {
+        const count = stats.count || 1;
+        const autoAvg = stats.auto / count;
+        const teleopAvg = stats.teleop / count;
+        const avgScore = autoAvg + teleopAvg;
+        const climbSuccess = Math.round((stats.climb / count) * 100);
+        const status = count >= 3 ? "online" : "pending";
+        return {
+          teamNumber,
+          teamName: `Team ${teamNumber}`,
+          ranking: 0,
+          avgScore: Number(avgScore.toFixed(1)),
+          autoPoints: Number(autoAvg.toFixed(1)),
+          teleopPoints: Number(teleopAvg.toFixed(1)),
+          climbSuccess,
+          status,
+        } as TeamStat;
+      })
+      .sort((a, b) => b.avgScore - a.avgScore);
+
+    return sorted.slice(0, 4).map((team, index) => ({
+      ...team,
+      ranking: index + 1,
+    }));
+  }, [scoutingEntries]);
+
+  const teamsScoutedLabel = scoutingLoading
+    ? "—"
+    : `${teamsScoutedSet.size}/${eventTeamCount || "—"}`;
+  const matchesPlayedLabel = tbaLoading ? "—" : `${playedMatches.length}`;
+  const avgMatchScoreLabel = tbaLoading
+    ? "—"
+    : avgMatchScore.toFixed(1);
+
+  const matchesRemaining = Math.max(
+    0,
+    (tbaMatches.length || 0) - playedMatches.length,
+  );
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -93,35 +277,35 @@ const Dashboard = () => {
         />
         <StatCard
           title="Teams Scouted"
-          value="32/48"
-          change="+8 today"
+          value={teamsScoutedLabel}
+          change={
+            scoutingLoading
+              ? undefined
+              : `+${teamsScoutedToday} today`
+          }
           changeType="positive"
           icon={Users}
-          subtitle="67% completion rate"
+          subtitle={
+            scoutingLoading || !eventTeamCount
+              ? "Completion rate pending"
+              : `${Math.round(completionRate)}% completion rate`
+          }
         />
         <StatCard
           title="Matches Played"
-          value="42"
-          change="6 remaining"
+          value={matchesPlayedLabel}
+          change={tbaLoading ? undefined : `${matchesRemaining} remaining`}
           changeType="neutral"
           icon={Trophy}
-          subtitle="Qualification rounds"
-        />
-        <StatCard
-          title="Data Points"
-          value="1,284"
-          change="+156"
-          changeType="positive"
-          icon={ClipboardCheck}
-          subtitle="Total observations"
+          subtitle={tbaLoading ? "Event matches" : `Event ${eventKey}`}
         />
         <StatCard
           title="Avg Match Score"
-          value="138.5"
-          change="+12.3%"
-          changeType="positive"
+          value={avgMatchScoreLabel}
+          change={tbaLoading ? undefined : `from ${playedMatches.length} matches`}
+          changeType="neutral"
           icon={TrendingUp}
-          subtitle="All teams combined"
+          subtitle="All alliances combined"
         />
       </div>
 
@@ -138,7 +322,7 @@ const Dashboard = () => {
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {mockTeams.map((team) => (
+            {topTeams.map((team) => (
               <TeamCard key={team.teamNumber} {...team} />
             ))}
           </div>
@@ -146,12 +330,12 @@ const Dashboard = () => {
 
         {/* Alliance Comparison */}
         <div>
-          <AllianceComparison />
+          <AllianceComparison matches={tbaMatches} loading={tbaLoading} />
         </div>
       </div>
 
       {/* Matches Table */}
-      <MatchesTable />
+      <MatchesTable matches={tbaMatches} loading={tbaLoading} />
     </div>
   );
 };

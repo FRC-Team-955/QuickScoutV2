@@ -86,18 +86,17 @@ const TeamCard = ({
             "status-badge",
             status === "online" && "status-online",
             status === "offline" && "status-offline",
-            status === "pending" && "status-pending"
+            status === "pending" && "status-online"
           )}
         >
           <span className={cn(
             "w-1.5 h-1.5 rounded-full",
             status === "online" && "bg-success",
             status === "offline" && "bg-destructive",
-            status === "pending" && "bg-warning"
+            status === "pending" && "bg-success"
           )} />
-          {status === "online" ? "Scouted" : status === "pending" ? "In Progress" : "Not Scouted"}
+          {status === "online" ? "Scouted" : status === "pending" ? "Completed" : "Not Scouted"}
         </span>
-        <span className="text-xs text-muted-foreground">View Details →</span>
       </div>
     </div>
   );
