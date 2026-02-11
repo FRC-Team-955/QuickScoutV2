@@ -49,7 +49,7 @@ const ComparisonBar = ({
           {diff > 0 ? (
             <TrendingUp className="w-3 h-3 text-destructive" />
           ) : diff < 0 ? (
-            <TrendingDown className="w-3 h-3 text-primary" />
+            <TrendingDown className="w-3 h-3 text-[hsl(var(--alliance-blue))]" />
           ) : (
             <Minus className="w-3 h-3 text-muted-foreground" />
           )}
@@ -68,11 +68,11 @@ const ComparisonBar = ({
             style={{ width: `${redPercent}%` }}
           />
           <div
-            className="h-full bg-primary transition-all duration-500"
+            className="h-full bg-[hsl(var(--alliance-blue))] transition-all duration-500"
             style={{ width: `${bluePercent}%` }}
           />
         </div>
-        <span className="font-mono text-sm text-primary w-12">
+        <span className="font-mono text-sm text-[hsl(var(--alliance-blue))] w-12">
           {blueValue}{unit}
         </span>
       </div>
@@ -94,7 +94,7 @@ const AllianceComparison = () => {
             <span className="text-sm text-muted-foreground">Red</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-primary" />
+            <div className="w-3 h-3 rounded-full bg-[hsl(var(--alliance-blue))]" />
             <span className="text-sm text-muted-foreground">Blue</span>
           </div>
         </div>
