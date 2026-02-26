@@ -645,9 +645,6 @@ const Scouting = () => {
                       <div className="text-sm text-muted-foreground">
                         Live queue — ordered by join time
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        Active slots: 6
-                      </div>
                     </div>
 
                     <ul className="space-y-2 mt-2">
@@ -705,22 +702,30 @@ const Scouting = () => {
 
                   {/* Lead: team-number assignment inputs */}
                   {isLead && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {Array.from({ length: 6 }).map((_, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <label className="text-xs text-muted-foreground w-6">
-                            #{i + 1}
-                          </label>
-                          <Input
-                            aria-label={`Team number ${i + 1}`}
-                            value={teamAssignments[i]}
-                            onChange={(e) => setAssignment(i, e.target.value)}
-                            className="w-28"
-                            placeholder="team #"
-                            inputMode="numeric"
-                          />
-                        </div>
-                      ))}
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {/* Order: 1, 4, 2, 5, 3, 6 (indices 0,3,1,4,2,5) */}
+                      {[0, 3, 1, 4, 2, 5].map((i) => {
+                        const placeholders = [
+                          "Red 1",
+                          "Red 2",
+                          "Red 3",
+                          "Blue 1",
+                          "Blue 2",
+                          "Blue 3",
+                        ];
+                        return (
+                          <div key={i} className="flex items-center gap-2">
+                            <Input
+                              aria-label={`Team number ${i + 1}`}
+                              value={teamAssignments[i]}
+                              onChange={(e) => setAssignment(i, e.target.value)}
+                              className="w-28"
+                              placeholder={placeholders[i]}
+                              inputMode="numeric"
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -776,21 +781,6 @@ const Scouting = () => {
                         Assign & Start match
                       </Button>
                     )}
-
-                    <div className="w-48 text-right text-sm text-muted-foreground">
-                      {isLead ? (
-                        <div>
-                          Lead controls — assign teams to the active 6 and start
-                          match
-                        </div>
-                      ) : (
-                        <div>
-                          {isInTopSix
-                            ? "You're in the active 6"
-                            : "First 6 will be selected automatically"}
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </CardContent>
               </Card>
