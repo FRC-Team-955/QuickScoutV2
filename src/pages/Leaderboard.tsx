@@ -129,7 +129,6 @@ const Leaderboard = () => {
     <div className="min-h-screen bg-background">
       <Sidebar activeTab={activeTab} onTabChange={handleTabChange} />
 
-      {/* Main Content */}
       <main
         className="md:ml-64 min-h-screen max-h-screen overflow-auto touch-pan-y"
         style={{ WebkitOverflowScrolling: "touch" }}
@@ -220,3 +219,4 @@ const Leaderboard = () => {
 };
 
 export default Leaderboard;
+
