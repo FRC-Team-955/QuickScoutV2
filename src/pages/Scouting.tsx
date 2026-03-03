@@ -164,17 +164,22 @@ const Scouting = () => {
   // Autonomous data
   const [autonomousNotes, setAutonomousNotes] = useState("");
   const [autonomousFuel, setAutonomousFuel] = useState(0);
-  const [canClimb, setCanClimb] = useState(false);
+  const [autoClimb, setAutoClimb] = useState<string>("");
 
   // Teleop fuel tracking
   const [teleopNotes, setTeleopNotes] = useState("");
   const [teleopFuel, setTeleopFuel] = useState(0);
+  const [teleopClimb, setTeleopClimb] = useState<string>("");
 
   // End game data
   const [endGameNotes, setEndGameNotes] = useState("");
   const [didClimb, setDidClimb] = useState(false);
   const [climbLevel, setClimbLevel] = useState("");
   const [defenseScore, setDefenseScore] = useState("");
+
+  // SOTM and Robot Tipped
+  const [sotm, setSotm] = useState<string>("");
+  const [robotTipped, setRobotTipped] = useState<string>("");
 
   // Cancel confirmation state
   const [cancelConfirm, setCancelConfirm] = useState(false);
@@ -280,7 +285,7 @@ const Scouting = () => {
     // Reset all data
     setAutonomousNotes("");
     setAutonomousFuel(0);
-    setCanClimb(false);
+    setAutoClimb("");
     setTeleopNotes("");
     setTeleopFuel(0);
     setDefenseScore("");
@@ -446,12 +451,14 @@ const Scouting = () => {
             autonomous: {
               fuel: autonomousFuel,
               notes: autonomousNotes,
-              canClimb,
+              autoClimb,
             },
 
             teleop: {
               fuel: teleopFuel,
               notes: teleopNotes,
+              teleopClimb,
+              climbLevel: teleopClimb === "yes" ? climbLevel : null,
             },
 
             endGame: {
@@ -460,6 +467,8 @@ const Scouting = () => {
               defenseScore,
               notes: endGameNotes,
             },
+            sotm,
+            robotTipped,
           });
           await remove(ref(db, `users/${user.id}/currentAssignment`));
         } catch (err) {
@@ -475,13 +484,15 @@ const Scouting = () => {
     setTeamNumber("");
     setAutonomousNotes("");
     setAutonomousFuel(0);
-    setCanClimb(false);
+    setAutoClimb("");
     setTeleopFuel(0);
     setTeleopNotes("");
     setDefenseScore("");
     setEndGameNotes("");
     setDidClimb(false);
     setCancelConfirm(false);
+    setSotm("");
+    setRobotTipped("");
     isManualSessionRef.current = false;
     if (cancelTimeoutRef.current) {
       clearTimeout(cancelTimeoutRef.current);
@@ -645,9 +656,6 @@ const Scouting = () => {
                       <div className="text-sm text-muted-foreground">
                         Live queue — ordered by join time
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        Active slots: 6
-                      </div>
                     </div>
 
                     <ul className="space-y-2 mt-2">
@@ -705,22 +713,30 @@ const Scouting = () => {
 
                   {/* Lead: team-number assignment inputs */}
                   {isLead && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {Array.from({ length: 6 }).map((_, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <label className="text-xs text-muted-foreground w-6">
-                            #{i + 1}
-                          </label>
-                          <Input
-                            aria-label={`Team number ${i + 1}`}
-                            value={teamAssignments[i]}
-                            onChange={(e) => setAssignment(i, e.target.value)}
-                            className="w-28"
-                            placeholder="team #"
-                            inputMode="numeric"
-                          />
-                        </div>
-                      ))}
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {/* Order: 1, 4, 2, 5, 3, 6 (indices 0,3,1,4,2,5) */}
+                      {[0, 3, 1, 4, 2, 5].map((i) => {
+                        const placeholders = [
+                          "Red 1",
+                          "Red 2",
+                          "Red 3",
+                          "Blue 1",
+                          "Blue 2",
+                          "Blue 3",
+                        ];
+                        return (
+                          <div key={i} className="flex items-center gap-2">
+                            <Input
+                              aria-label={`Team number ${i + 1}`}
+                              value={teamAssignments[i]}
+                              onChange={(e) => setAssignment(i, e.target.value)}
+                              className="w-28"
+                              placeholder={placeholders[i]}
+                              inputMode="numeric"
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -776,21 +792,6 @@ const Scouting = () => {
                         Assign & Start match
                       </Button>
                     )}
-
-                    <div className="w-48 text-right text-sm text-muted-foreground">
-                      {isLead ? (
-                        <div>
-                          Lead controls — assign teams to the active 6 and start
-                          match
-                        </div>
-                      ) : (
-                        <div>
-                          {isInTopSix
-                            ? "You're in the active 6"
-                            : "First 6 will be selected automatically"}
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1039,15 +1040,19 @@ const Scouting = () => {
                   <CardDescription>Can this team climb?</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="can-climb"
-                      checked={canClimb}
-                      onCheckedChange={setCanClimb}
-                    />
-                    <Label htmlFor="can-climb" className="cursor-pointer">
-                      {canClimb ? "Yes, can climb" : "No, cannot climb"}
-                    </Label>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={autoClimb === "yes" ? "default" : "outline"}
+                      onClick={() => setAutoClimb("yes")}
+                    >
+                      Yes
+                    </Button>
+                    <Button
+                      variant={autoClimb === "no" ? "default" : "outline"}
+                      onClick={() => setAutoClimb("no")}
+                    >
+                      No
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -1120,84 +1125,55 @@ const Scouting = () => {
               </Card>
             )}
 
+            {/* Teleop Climb Yes/No Buttons */}
             {isTeleopPhase && (
-              <>
-                {/* Defense Score */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Defense Score</CardTitle>
-                    <CardDescription>
-                      Rate the team's defensive performance
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Select
-                      value={defenseScore}
-                      onValueChange={setDefenseScore}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Teleop Climb</CardTitle>
+                  <CardDescription>Did the team successfully climb?</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-2 mb-4">
+                    <Button
+                      variant={teleopClimb === "yes" ? "default" : "outline"}
+                      onClick={() => setTeleopClimb("yes")}
                     >
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Select score" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">1 - Poor</SelectItem>
-                        <SelectItem value="2">2 - Fair</SelectItem>
-                        <SelectItem value="3">3 - Good</SelectItem>
-                        <SelectItem value="4">4 - Excellent</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </CardContent>
-                </Card>
-                {/* Teleop Climb */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Teleop Climb</CardTitle>
-                    <CardDescription>
-                      Did the team successfully climb?
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="did-climb"
-                        checked={didClimb}
-                        onCheckedChange={(checked) => {
-                          setDidClimb(checked);
-                          if (!checked) setClimbLevel("");
-                        }}
-                      />
-                      <Label htmlFor="did-climb" className="cursor-pointer">
-                        {didClimb
-                          ? "Yes, climbed successfully"
-                          : "No, did not climb"}
-                      </Label>
+                      Yes
+                    </Button>
+                    <Button
+                      variant={teleopClimb === "no" ? "default" : "outline"}
+                      onClick={() => setTeleopClimb("no")}
+                    >
+                      No
+                    </Button>
+                  </div>
+                  {teleopClimb === "yes" && (
+                    <div>
+                      <div className="font-medium mb-2">Climb Level</div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant={climbLevel === "L1" ? "default" : "outline"}
+                          onClick={() => setClimbLevel("L1")}
+                        >
+                          L1
+                        </Button>
+                        <Button
+                          variant={climbLevel === "L2" ? "default" : "outline"}
+                          onClick={() => setClimbLevel("L2")}
+                        >
+                          L2
+                        </Button>
+                        <Button
+                          variant={climbLevel === "L3" ? "default" : "outline"}
+                          onClick={() => setClimbLevel("L3")}
+                        >
+                          L3
+                        </Button>
+                      </div>
                     </div>
-                  </CardContent>
-                </Card>
-
-                {/* Climb Level Dropdown */}
-                {didClimb && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Teleop Climb Level</CardTitle>
-                      <CardDescription>
-                        Select the achieved climb level
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <Select value={climbLevel} onValueChange={setClimbLevel}>
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Select level" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="L1">L1</SelectItem>
-                          <SelectItem value="L2">L2</SelectItem>
-                          <SelectItem value="L3">L3</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </CardContent>
-                  </Card>
-                )}
-              </>
+                  )}
+                </CardContent>
+              </Card>
             )}
 
             {/* Complete State */}
@@ -1223,7 +1199,7 @@ const Scouting = () => {
                         Auto Climb?
                       </p>
                       <p className="text-2xl font-bold">
-                        {canClimb ? "Yes" : "No"}
+                        {autoClimb === "yes" ? "Yes" : "No"}
                       </p>
                     </div>
 
@@ -1239,7 +1215,7 @@ const Scouting = () => {
                         Teleop Climb?
                       </p>
                       <p className="text-2xl font-bold">
-                        {didClimb ? "Yes" : "No"}
+                        {teleopClimb === "yes" ? "Yes" : "No"}
                       </p>
                     </div>
 
@@ -1257,7 +1233,7 @@ const Scouting = () => {
                         Climb Level
                       </p>
                       <p className="text-2xl font-bold">
-                        {didClimb ? climbLevel || "N/A" : "N/A"}
+                        {teleopClimb === "yes" ? climbLevel || "N/A" : "N/A"}
                       </p>
                     </div>
                   </div>
@@ -1268,6 +1244,54 @@ const Scouting = () => {
                   >
                     Start New Scouting Session
                   </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* SOTM and Robot Tipped Buttons */}
+            {isActivePhase && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Shooting on the Move & Robot Tipped</CardTitle>
+                  <CardDescription>
+                    Select Yes or No for each
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="mb-4">
+                    <div className="font-medium mb-2">Shooting on the Move (SOTM)</div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant={sotm === "yes" ? "default" : "outline"}
+                        onClick={() => setSotm("yes")}
+                      >
+                        Yes
+                      </Button>
+                      <Button
+                        variant={sotm === "no" ? "default" : "outline"}
+                        onClick={() => setSotm("no")}
+                      >
+                        No
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium mb-2">Robot Tipped</div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant={robotTipped === "yes" ? "default" : "outline"}
+                        onClick={() => setRobotTipped("yes")}
+                      >
+                        Yes
+                      </Button>
+                      <Button
+                        variant={robotTipped === "no" ? "default" : "outline"}
+                        onClick={() => setRobotTipped("no")}
+                      >
+                        No
+                      </Button>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             )}

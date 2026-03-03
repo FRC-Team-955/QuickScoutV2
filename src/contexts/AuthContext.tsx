@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { setUserPresence, clearUserPresence, removeUserCompletely, leaveQueue, setSuppressPresenceOnUnload, shouldSuppressPresenceOnUnload, removeUserLastActive } from "@/lib/queue";
+import { get, ref } from "firebase/database";
 
 interface User {
   id: string;
@@ -73,6 +74,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = async (email: string, password: string) => {
     try {
+      const userSnap = await get(ref(db, `users`));
+      if (userSnap.exists()) {
+        const users = userSnap.val();
+        const found = Object.values(users).find((u) => (u as { email?: string }).email === email);
+        const lastActive = found && typeof (found as { lastActive?: number }).lastActive === "number" ? (found as { lastActive?: number }).lastActive : null;
+        if (lastActive && Date.now() - lastActive < 2 * 60 * 1000) {
+          throw new Error("This user is already logged in elsewhere. Please log out from other devices first.");
+        }
+      }
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const signed = cred.user || auth.currentUser;
       if (!signed) throw new Error("Login failed");

@@ -16,7 +16,7 @@ const Login = () => {
   const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, user, isAuthenticated } = useAuth();
   const isLead = isLeadGmail(email);
 
   useEffect(() => {
@@ -74,6 +74,11 @@ const Login = () => {
           <CardDescription>Team 955 / 749 - Scout Login</CardDescription>
         </CardHeader>
         <CardContent>
+          {isAuthenticated && user && (
+            <div className="p-3 bg-primary/10 text-primary text-sm rounded-md mb-4">
+              You are already logged in as <b>{user.name}</b> ({user.email}). Please log out before logging in again.
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="p-3 bg-destructive/10 text-destructive text-sm rounded-md">
@@ -91,7 +96,7 @@ const Login = () => {
                 placeholder="School Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
+                disabled={loading || isAuthenticated}
                 className="w-full"
               />
             </div>
@@ -106,7 +111,7 @@ const Login = () => {
                   placeholder="Enter password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  disabled={loading}
+                  disabled={loading || isAuthenticated}
                   className="w-full"
                 />
               </div>
@@ -114,7 +119,7 @@ const Login = () => {
             <Button
               type="submit"
               className="w-full"
-              disabled={loading || !email.trim() || (isLead && !password)}
+              disabled={loading || !email.trim() || (isLead && !password) || isAuthenticated}
             >
               {loading ? "Logging in..." : "Login"}
             </Button>
