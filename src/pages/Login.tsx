@@ -48,11 +48,10 @@ const Login = () => {
       await login(email, password || DEFAULT_PASSWORD);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Login failed";
-      // Friendly mapping for common Firebase auth errors
       if (errorMessage.includes("auth/wrong-password") || errorMessage.includes("password")) {
         setError("Incorrect email or password.");
       } else if (errorMessage.includes("already logged in")) {
-        setError(errorMessage); // preserve the clear, user-friendly message
+        setError(errorMessage);
       } else {
         setError(errorMessage);
       }

@@ -14,7 +14,6 @@ import {
 
 import { getEventMatches } from "@/lib/tba";
 
-// ---------------- Types ----------------
 type TbaMatch = {
   key: string;
   match_number: number;
@@ -30,14 +29,12 @@ const Matches = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("matches");
 
-  // --------- UI state ---------
-  const [eventKey, setEventKey] = useState("2025wayak"); // change per event
+  const [eventKey, setEventKey] = useState("2025wayak");
   const [loading, setLoading] = useState(false);
   const [matches, setMatches] = useState<TbaMatch[]>([]);
   const [filter, setFilter] = useState<string>("all");
   const [query, setQuery] = useState("");
 
-  // --------- navigation ---------
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     if (tab === "dashboard") navigate("/dashboard");
@@ -47,13 +44,11 @@ const Matches = () => {
     if (tab === "leaderboard") navigate("/leaderboard");
   };
 
-  // --------- fetch from TBA ---------
   useEffect(() => {
     const run = async () => {
       setLoading(true);
       try {
         const data = await getEventMatches(eventKey);
-        // sort by time then match number
         data.sort((a: TbaMatch, b: TbaMatch) =>
           (a.time ?? 0) - (b.time ?? 0) || a.match_number - b.match_number
         );
@@ -69,7 +64,6 @@ const Matches = () => {
     run();
   }, [eventKey]);
 
-  // --------- helpers ---------
   const formatTeams = (keys: string[]) =>
     keys.map((k) => k.replace("frc", "")).join(", ");
 
@@ -99,7 +93,6 @@ const Matches = () => {
       <main className="md:ml-64 min-h-screen overflow-auto">
         <TopBar activeTab={activeTab} onTabChange={handleTabChange} />
 
-        {/* Page Content */}
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
