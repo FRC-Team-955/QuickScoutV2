@@ -14,6 +14,17 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ref, get } from "firebase/database";
 import { db } from "@/lib/firebase";
+import {
+  ResponsiveContainer,
+  ScatterChart,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip as ReTooltip,
+  Scatter,
+  ZAxis,
+  Legend,
+} from "recharts";
 
 type Filters = {
   sortBy:
@@ -38,6 +49,7 @@ export type MatchEntry = {
   climbValue: number;
   defense_rating: string;
   defense_rating_value: number;
+  robotTipped?: boolean;
   submittedAt: number;
 };
 
@@ -158,6 +170,9 @@ const Analytics = () => {
             const defenseRaw = (data.teleop as Record<string, unknown>)?.defenseScore ?? 0;
             const { defenseValue, defenseDisplay } = parseDefenseRating(defenseRaw);
 
+            const robotTippedRaw = (data as Record<string, unknown>)?.robotTipped ?? false;
+            const robotTipped = robotTippedRaw === true || String(robotTippedRaw).toLowerCase() === "yes";
+
             allEntries.push({
               id: `${matchKey}_${stationId}_${(data.submittedAt as number) || Math.random()}`,
               matchKey: matchKey,
@@ -171,6 +186,7 @@ const Analytics = () => {
               climbValue: climbValue,
               defense_rating: defenseDisplay,
               defense_rating_value: defenseValue,
+              robotTipped,
               submittedAt: (data.submittedAt as number) || 0
             });
           });
@@ -233,6 +249,17 @@ const Analytics = () => {
     };
   }, [matchEntries, teamNumberInput]);
 
+  const bubbleData = useMemo(() => {
+    return matchEntries.map((m) => ({
+      x: m.score_teleop,
+      y: m.score_auto,
+      r: Math.max(3, (m.climbValue || 0) * 6),
+      robotTipped: !!m.robotTipped,
+      team: m.teamNumber,
+      id: m.id,
+    }));
+  }, [matchEntries]);
+
   return (
     <div className="min-h-screen bg-background">
       <Sidebar activeTab={activeTab} onTabChange={handleTabChange} />
@@ -250,6 +277,7 @@ const Analytics = () => {
             <TabsList>
               <TabsTrigger value="all">All Matches</TabsTrigger>
               <TabsTrigger value="team">Team Search</TabsTrigger>
+              <TabsTrigger value="bubble">Bubble Chart</TabsTrigger>
             </TabsList>
 
             <TabsContent value="all" className="space-y-4">
@@ -505,6 +533,44 @@ const Analytics = () => {
                   </p>
                 </div>
               )}
+            </TabsContent>
+            <TabsContent value="bubble" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Bubble Chart</CardTitle>
+                  <p className="text-sm text-muted-foreground">X = Teleop Points, Y = Auto Points, Size = Teleop Climb</p>
+                </CardHeader>
+                <CardContent>
+                  <div style={{ width: '100%', height: 480 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ScatterChart>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" dataKey="x" name="Teleop Points" unit="" />
+                        <YAxis type="number" dataKey="y" name="Auto Points" unit="" />
+                        <ZAxis dataKey="r" range={[50, 400]} />
+                        <ReTooltip cursor={{ strokeDasharray: '3 3' }} formatter={(value: any, name: any) => [value, name]} />
+                        <Legend />
+                        <Scatter
+                          name="Scouts"
+                          data={bubbleData}
+                          fill="#00C853"
+                          shape={(props) => {
+                            const { cx, cy, payload } = props as any;
+                            const color = payload.robotTipped ? '#FF5252' : '#2ECC71';
+                            const radius = payload.r || 6;
+                            return (
+                              <g>
+                                <circle cx={cx} cy={cy} r={radius} fill={color} fillOpacity={0.7} stroke="#fff" strokeWidth={1} />
+                                <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize={10} fill="#000">{payload.team}</text>
+                              </g>
+                            );
+                          }}
+                        />
+                      </ScatterChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
           </Tabs>
         </div>

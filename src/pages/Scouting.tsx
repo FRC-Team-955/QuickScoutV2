@@ -373,9 +373,9 @@ const Scouting = () => {
 
   const addFuelBy = (amount: number) => {
     if (isAutonomousPhase) {
-      setAutonomousFuel((prev) => prev + amount);
+      setAutonomousFuel((prev) => Math.max(0, prev + amount));
     } else if (isTeleopPhase) {
-      setTeleopFuel((prev) => prev + amount);
+      setTeleopFuel((prev) => Math.max(0, prev + amount));
     }
   };
 
@@ -978,6 +978,13 @@ const Scouting = () => {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => setAutonomousFuel((prev) => Math.max(0, prev - 1))}
+                      >
+                        -1
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => setAutonomousFuel((prev) => prev + 1)}
                       >
                         +1
@@ -1068,21 +1075,28 @@ const Scouting = () => {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => addFuelBy(1)}
+                        onClick={() => setTeleopFuel((prev) => Math.max(0, prev - 1))}
+                      >
+                        -1
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setTeleopFuel((prev) => prev + 1)}
                       >
                         +1
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => addFuelBy(3)}
+                        onClick={() => setTeleopFuel((prev) => prev + 3)}
                       >
                         +3
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => addFuelBy(5)}
+                        onClick={() => setTeleopFuel((prev) => prev + 5)}
                       >
                         +5
                       </Button>
