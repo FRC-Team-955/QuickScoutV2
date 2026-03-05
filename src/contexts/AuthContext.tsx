@@ -34,11 +34,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const name =
-          firebaseUser.displayName ||
-          firebaseUser.email?.split("@")[0]||
-          "User";
-        const formatName = 
-          name.split(".").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+            firebaseUser.displayName ||
+            firebaseUser.email?.split("@")[0]||
+            "User";
+        const formatName =
+            name.split(".").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
         const mappedUser: User = {
           id: firebaseUser.uid,
           name: formatName,
@@ -60,10 +60,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const handler = () => {
-      // if we've explicitly suppressed unload-presence (for example during logout), skip writing
       if (shouldSuppressPresenceOnUnload()) return;
       if (user?.id) {
-        // best-effort: mark offline on unload (do NOT create lastActive when we're intentionally removing the user)
         clearUserPresence(user.id).catch(console.error);
       }
     };
@@ -78,27 +76,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const signed = cred.user || auth.currentUser;
       if (!signed) throw new Error("Login failed");
 
-      try {
-        const userSnap = await get(ref(db, `users`));
-        if (userSnap.exists()) {
-          const users = userSnap.val();
-          const found = Object.values(users).find((u) => (u as { email?: string }).email === email);
-          const lastActive = found && typeof (found as { lastActive?: number }).lastActive === "number" ? (found as { lastActive?: number }).lastActive : null;
-          if (lastActive && Date.now() - lastActive < 2 * 60 * 1000) {
-            try { await signOut(auth); } catch (e) { console.warn('Failed to sign out after concurrent-login detection', e); }
-            throw new Error("This user is already logged in elsewhere. Please log out from other devices first.");
-          }
+      const userSnap = await get(ref(db, `users`));
+      if (userSnap.exists()) {
+        const users = userSnap.val();
+        const found = Object.values(users).find((u) => (u as any).email === email) as any;
+
+        // Only block if explicitly marked online (not just lastActive)
+        if (found?.isOnline === true) {
+          await signOut(auth);
+          throw new Error("This user is already logged in elsewhere. Please log out from other devices first.");
         }
-      } catch (dbErr) {
-        console.warn('Could not read users after sign-in (allowing login):', dbErr);
       }
 
-      const name =
-        signed.displayName ||
-        signed.email?.split("@")[0] ||
-        "User";
-      const formatName = 
-          name.split(".").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+      const name = signed.displayName || signed.email?.split("@")[0] || "User";
+      const formatName = name.split(".").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
 
       const mapped: User = {
         id: signed.uid,
@@ -109,7 +100,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       };
       setUser(mapped);
       await setUserPresence(mapped);
-      return;
     } catch (error) {
       console.error("Login error:", error);
       throw error;
@@ -159,9 +149,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user, loading }}>
-      {children}
-    </AuthContext.Provider>
+      <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user, loading }}>
+        {children}
+      </AuthContext.Provider>
   );
 };
 
