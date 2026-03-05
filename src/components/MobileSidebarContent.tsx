@@ -1,20 +1,10 @@
-import {
-  LayoutDashboard,
-  Users,
-  Trophy,
-  BarChart3,
-  Settings,
-  ClipboardList,
-  Bot,
-  Zap,
-  Search,
-} from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { LayoutDashboard, Trophy, BarChart3, ClipboardList, Bot, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
-import { getDatabase, ref, get } from "firebase/database";
+import { ref, get } from "firebase/database";
 import { checkTBAHealth } from "@/lib/tba";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 interface MobileSidebarContentProps {
   activeTab: string;
@@ -40,16 +30,58 @@ const MobileSidebarContent = ({
 
   // ---- Firebase check ----
   useEffect(() => {
+    let mounted = true;
+
     const checkFirebase = async () => {
+      if (!mounted) return;
+      // If unauthenticated, avoid calling DB (rules likely block read) and mark as degraded
+      if (!auth?.currentUser) {
+        setFirebaseStatus("degraded");
+      } else {
+        try {
+          await get(ref(db, "__healthcheck"));
+          setFirebaseStatus("ok");
+        } catch (err: unknown) {
+          // fallback try users/{uid}
+          try {
+            await get(ref(db, `users/${auth.currentUser!.uid}`));
+            setFirebaseStatus("ok");
+          } catch (fallbackErr: unknown) {
+            const errObj = fallbackErr as { code?: string; message?: string };
+            const codeStr = String(errObj.code || "").toLowerCase();
+            const msg = String(errObj.message || "");
+            if (
+              codeStr.includes("permission") ||
+              /permission denied/i.test(msg) ||
+              /permission-denied/i.test(codeStr)
+            ) {
+              setFirebaseStatus("degraded");
+            } else {
+              console.debug("__healthcheck read failed and fallback failed:", errObj);
+              setFirebaseStatus("down");
+            }
+          }
+        }
+      }
+
       try {
-        await get(ref(db, "__healthcheck"));
-        setFirebaseStatus("ok");
+        await checkTBAHealth();
+        setTbaStatus("ok");
       } catch {
-        setFirebaseStatus("down");
+        setTbaStatus("down");
       }
     };
 
     checkFirebase();
+
+    const unsub = onAuthStateChanged(auth, () => {
+      checkFirebase().catch((e) => console.debug('mobile checkFirebase after auth change failed', e));
+    });
+
+    return () => {
+      mounted = false;
+      unsub();
+    };
   }, []);
 
   // ---- TBA check ----

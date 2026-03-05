@@ -1,6 +1,5 @@
 import {
   LayoutDashboard,
-  Users,
   Trophy,
   BarChart3,
   Settings,
@@ -12,9 +11,9 @@ import {
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { get, ref } from "firebase/database";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 import { checkTBAHealth } from "@/lib/tba";
-import { i } from "node_modules/vite/dist/node/types.d-aGj9QkWt";
 
 interface SidebarProps {
   activeTab: string;
@@ -37,15 +36,42 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     const runChecks = async () => {
+      if (!mounted) return;
       setLoading(true);
 
-      // ---- Firebase check ----
-      try {
-        await get(ref(db, "__healthcheck"));
-        setFirebaseStatus("ok");
-      } catch {
-        setFirebaseStatus("down");
+      // If the client is not authenticated, assume the DB is locked by rules and mark as degraded
+      const currentUser = auth?.currentUser;
+      if (!currentUser) {
+        setFirebaseStatus("degraded");
+      } else {
+        // ---- Firebase check ----
+        try {
+          await get(ref(db, "__healthcheck"));
+          setFirebaseStatus("ok");
+        } catch (err: unknown) {
+          // attempt an authenticated fallback/read to users/{uid} to confirm DB access
+          try {
+            await get(ref(db, `users/${currentUser.uid}`));
+            setFirebaseStatus("ok");
+          } catch (fallbackErr: unknown) {
+            const errObj = fallbackErr as { code?: string; message?: string };
+            const codeStr = String(errObj.code || "").toLowerCase();
+            const msg = String(errObj.message || "");
+            if (
+              codeStr.includes("permission") ||
+              /permission denied/i.test(msg) ||
+              /permission-denied/i.test(codeStr)
+            ) {
+              setFirebaseStatus("degraded");
+            } else {
+              console.debug("__healthcheck read failed and fallback failed:", errObj);
+              setFirebaseStatus("down");
+            }
+          }
+        }
       }
 
       // ---- TBA check ----
@@ -56,10 +82,51 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
         setTbaStatus("down");
       }
 
-      setLoading(false);
+      if (mounted) setLoading(false);
     };
 
+    // run on mount
     runChecks();
+
+    // subscribe to auth state changes so we re-run checks after login/logout
+    const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      // if user just signed in, immediately try the DB health read (use firebaseUser to avoid race)
+      if (firebaseUser) {
+        get(ref(db, "__healthcheck"))
+          .then(() => setFirebaseStatus("ok"))
+          .catch(async (err: unknown) => {
+            // fallback: try authenticated users/{uid} read
+            try {
+              await get(ref(db, `users/${firebaseUser.uid}`));
+              setFirebaseStatus("ok");
+            } catch (fallbackErr: unknown) {
+              const errObj = fallbackErr as { code?: string; message?: string };
+              const codeStr = String(errObj.code || "").toLowerCase();
+              const msg = String(errObj.message || "");
+              if (
+                codeStr.includes("permission") ||
+                /permission denied/i.test(msg) ||
+                /permission-denied/i.test(codeStr)
+              ) {
+                setFirebaseStatus("degraded");
+              } else {
+                console.debug("__healthcheck read failed after auth change and fallback failed:", errObj);
+                setFirebaseStatus("down");
+              }
+            }
+          });
+      } else {
+        // logged out
+        setFirebaseStatus("degraded");
+      }
+
+      runChecks().catch((e) => console.debug("runChecks after auth change failed", e));
+    });
+
+    return () => {
+      mounted = false;
+      unsubAuth();
+    };
   }, []);
 
   const overallStatus: SystemStatus =

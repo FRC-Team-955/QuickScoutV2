@@ -99,7 +99,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isLead: isLeadGmail(signed.email || undefined),
       };
       setUser(mapped);
+      console.debug("Auth.login: calling setUserPresence for", mapped.id);
       await setUserPresence(mapped);
+      console.debug("Auth.login: setUserPresence complete");
+
+      // notify other listeners (sidebar healthchecks) that auth changed
+      try {
+        window.dispatchEvent(new CustomEvent('qs:auth-changed', { detail: { userId: mapped.id } }));
+      } catch (e) {
+        console.debug('qs:auth-changed dispatch failed', e);
+      }
+      return;
     } catch (error) {
       console.error("Login error:", error);
       throw error;
@@ -142,6 +152,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       setUser(null);
 
+      // notify others of logout
+      try {
+        window.dispatchEvent(new CustomEvent('qs:auth-changed', { detail: { userId: null } }));
+      } catch (e) {
+        console.debug('qs:auth-changed dispatch failed', e);
+      }
     } catch (error) {
       console.error("Logout error:", error);
       throw error;
