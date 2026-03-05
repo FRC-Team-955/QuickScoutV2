@@ -14,6 +14,7 @@ import {useQueue} from "@/hooks/use-queue";
 import {subscribeToUserAssignment} from "@/lib/queue";
 import {get, getDatabase, ref, remove, serverTimestamp, set,} from "firebase/database";
 import successAudio from "/partyblower.mp3";
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select.tsx";
 
 const PHASE_DURATIONS = {
     AUTONOMOUS: 20,
@@ -1164,30 +1165,17 @@ const Scouting = () => {
                                 </CardHeader>
                                 <CardContent>
                                     <div className="flex gap-2">
-                                        <Button
-                                            variant={defenseScore === "1" ? "default" : "outline"}
-                                            onClick={() => setDefenseScore("1")}
-                                        >
-                                            1 - Poor
-                                        </Button>
-                                        <Button
-                                            variant={defenseScore === "2" ? "default" : "outline"}
-                                            onClick={() => setDefenseScore("2")}
-                                        >
-                                            2 - Fair
-                                        </Button>
-                                        <Button
-                                            variant={defenseScore === "3" ? "default" : "outline"}
-                                            onClick={() => setDefenseScore("3")}
-                                        >
-                                            3 - Good
-                                        </Button>
-                                        <Button
-                                            variant={defenseScore === "4" ? "default" : "outline"}
-                                            onClick={() => setDefenseScore("4")}
-                                        >
-                                            4 - Excellent
-                                        </Button>
+                                        <Select value={defenseScore} onValueChange={setDefenseScore}>
+                                            <SelectTrigger className="w-[180px]">
+                                                <SelectValue placeholder="Select Score"/>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="1">1 - Poor</SelectItem>
+                                                <SelectItem value="2">2 - Fair</SelectItem>
+                                                <SelectItem value="3">3 - Good</SelectItem>
+                                                <SelectItem value="4">4 - Excellent</SelectItem>
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                 </CardContent>
                             </Card>
