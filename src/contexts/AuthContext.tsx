@@ -74,18 +74,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = async (email: string, password: string) => {
     try {
-      const userSnap = await get(ref(db, `users`));
-      if (userSnap.exists()) {
-        const users = userSnap.val();
-        const found = Object.values(users).find((u) => (u as { email?: string }).email === email);
-        const lastActive = found && typeof (found as { lastActive?: number }).lastActive === "number" ? (found as { lastActive?: number }).lastActive : null;
-        if (lastActive && Date.now() - lastActive < 2 * 60 * 1000) {
-          throw new Error("This user is already logged in elsewhere. Please log out from other devices first.");
-        }
-      }
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const signed = cred.user || auth.currentUser;
       if (!signed) throw new Error("Login failed");
+
+      try {
+        const userSnap = await get(ref(db, `users`));
+        if (userSnap.exists()) {
+          const users = userSnap.val();
+          const found = Object.values(users).find((u) => (u as { email?: string }).email === email);
+          const lastActive = found && typeof (found as { lastActive?: number }).lastActive === "number" ? (found as { lastActive?: number }).lastActive : null;
+          if (lastActive && Date.now() - lastActive < 2 * 60 * 1000) {
+            try { await signOut(auth); } catch (e) { console.warn('Failed to sign out after concurrent-login detection', e); }
+            throw new Error("This user is already logged in elsewhere. Please log out from other devices first.");
+          }
+        }
+      } catch (dbErr) {
+        console.warn('Could not read users after sign-in (allowing login):', dbErr);
+      }
 
       const name =
         signed.displayName ||
