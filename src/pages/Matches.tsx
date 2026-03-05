@@ -29,7 +29,7 @@ const Matches = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("matches");
 
-  const [eventKey, setEventKey] = useState("2025wayak");
+  const [eventKey, setEventKey] = useState("2026orsal");
   const [loading, setLoading] = useState(false);
   const [matches, setMatches] = useState<TbaMatch[]>([]);
   const [filter, setFilter] = useState<string>("all");

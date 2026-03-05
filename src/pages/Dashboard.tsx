@@ -89,7 +89,7 @@ const extractScoutingEntries = (matchesData: Record<string, any>) => {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const eventKey = "2025wayak";
+  const eventKey = "2026orsal";
   const [tbaMatches, setTbaMatches] = useState<TbaMatch[]>([]);
   const [tbaLoading, setTbaLoading] = useState(false);
   const [scoutingEntries, setScoutingEntries] = useState<ScoutingEntry[]>([]);
