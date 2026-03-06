@@ -8,6 +8,7 @@ import {AuthProvider, useAuth} from "@/contexts/AuthContext";
 import Index from "./components/Index";
 import Login from "./pages/Login";
 import Scouting from "./pages/Scouting";
+import PitScouting from "./pages/PitScouting";
 import NotFound from "./pages/NotFound";
 import Analytics from "./pages/Analytics";
 import Matches from "./pages/Matches";
@@ -158,6 +159,12 @@ const AppContent = () => {
                 return (
                     <ProtectedRoute>
                         <Scouting/>
+                    </ProtectedRoute>
+                );
+            case "/pit-scouting":
+                return (
+                    <ProtectedRoute>
+                        <PitScouting/>
                     </ProtectedRoute>
                 );
             case "/analytics":

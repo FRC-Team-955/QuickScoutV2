@@ -1,156 +1,151 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import {useEffect, useState} from "react";
+import {useNavigate} from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/Topbar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
+import {Calendar} from "lucide-react";
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue,} from "@/components/ui/select";
 
-import { getEventMatches } from "@/lib/tba";
+import {getEventMatches} from "@/lib/tba";
 
 type TbaMatch = {
-  key: string;
-  match_number: number;
-  comp_level: "qm" | "qf" | "sf" | "f";
-  alliances: {
-    red: { team_keys: string[]; score: number };
-    blue: { team_keys: string[]; score: number };
-  };
-  time?: number;
+    key: string;
+    match_number: number;
+    comp_level: "qm" | "qf" | "sf" | "f";
+    alliances: {
+        red: { team_keys: string[]; score: number };
+        blue: { team_keys: string[]; score: number };
+    };
+    time?: number;
 };
 
 const Matches = () => {
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("matches");
+    const navigate = useNavigate();
+    const [activeTab, setActiveTab] = useState("matches");
 
-  const [eventKey, setEventKey] = useState("2026orsal");
-  const [loading, setLoading] = useState(false);
-  const [matches, setMatches] = useState<TbaMatch[]>([]);
-  const [filter, setFilter] = useState<string>("all");
-  const [query, setQuery] = useState("");
+    const [eventKey, setEventKey] = useState("2026orsal");
+    const [loading, setLoading] = useState(false);
+    const [matches, setMatches] = useState<TbaMatch[]>([]);
+    const [filter, setFilter] = useState<string>("all");
+    const [query, setQuery] = useState("");
 
-  const handleTabChange = (tab: string) => {
-    setActiveTab(tab);
-    if (tab === "dashboard") navigate("/dashboard");
-    if (tab === "scouting") navigate("/scouting");
-    if (tab === "analytics") navigate("/analytics");
-    if (tab === "matches") navigate("/matches");
-    if (tab === "leaderboard") navigate("/leaderboard");
-  };
-
-  useEffect(() => {
-    const run = async () => {
-      setLoading(true);
-      try {
-        const data = await getEventMatches(eventKey);
-        data.sort((a: TbaMatch, b: TbaMatch) =>
-          (a.time ?? 0) - (b.time ?? 0) || a.match_number - b.match_number
-        );
-        setMatches(data);
-      } catch (err) {
-        console.error("Failed to load TBA matches", err);
-        setMatches([]);
-      } finally {
-        setLoading(false);
-      }
+    const handleTabChange = (tab: string) => {
+        setActiveTab(tab);
+        if (tab === "dashboard") navigate("/dashboard");
+        if (tab === "scouting") navigate("/scouting");
+        if (tab === "pit-scouting") navigate("/pit-scouting");
+        if (tab === "analytics") navigate("/analytics");
+        if (tab === "matches") navigate("/matches");
+        if (tab === "leaderboard") navigate("/leaderboard");
     };
 
-    run();
-  }, [eventKey]);
+    useEffect(() => {
+        const run = async () => {
+            setLoading(true);
+            try {
+                const data = await getEventMatches(eventKey);
+                data.sort((a: TbaMatch, b: TbaMatch) =>
+                    (a.time ?? 0) - (b.time ?? 0) || a.match_number - b.match_number
+                );
+                setMatches(data);
+            } catch (err) {
+                console.error("Failed to load TBA matches", err);
+                setMatches([]);
+            } finally {
+                setLoading(false);
+            }
+        };
 
-  const formatTeams = (keys: string[]) =>
-    keys.map((k) => k.replace("frc", "")).join(", ");
+        run();
+    }, [eventKey]);
 
-  const levelLabel = (lvl: string) => {
-    if (lvl === "qm") return "Qual";
-    if (lvl === "qf") return "Quarterfinal";
-    if (lvl === "sf") return "Semifinal";
-    if (lvl === "f") return "Final";
-    return lvl;
-  };
+    const formatTeams = (keys: string[]) =>
+        keys.map((k) => k.replace("frc", "")).join(", ");
 
-  const filtered = matches.filter((m) => {
-    if (filter !== "all" && m.comp_level !== filter) return false;
-    if (!query) return true;
-    const q = query.toLowerCase();
+    const levelLabel = (lvl: string) => {
+        if (lvl === "qm") return "Qual";
+        if (lvl === "qf") return "Quarterfinal";
+        if (lvl === "sf") return "Semifinal";
+        if (lvl === "f") return "Final";
+        return lvl;
+    };
+
+    const filtered = matches.filter((m) => {
+        if (filter !== "all" && m.comp_level !== filter) return false;
+        if (!query) return true;
+        const q = query.toLowerCase();
+        return (
+            m.key.toLowerCase().includes(q) ||
+            m.alliances.red.team_keys.some((t) => t.includes(q)) ||
+            m.alliances.blue.team_keys.some((t) => t.includes(q))
+        );
+    });
+
     return (
-      m.key.toLowerCase().includes(q) ||
-      m.alliances.red.team_keys.some((t) => t.includes(q)) ||
-      m.alliances.blue.team_keys.some((t) => t.includes(q))
-    );
-  });
+        <div className="min-h-screen bg-background">
+            <Sidebar activeTab={activeTab} onTabChange={handleTabChange}/>
 
-  return (
-    <div className="min-h-screen bg-background">
-      <Sidebar activeTab={activeTab} onTabChange={handleTabChange} />
+            <main className="md:ml-64 min-h-screen overflow-auto">
+                <TopBar activeTab={activeTab} onTabChange={handleTabChange}/>
 
-      <main className="md:ml-64 min-h-screen overflow-auto">
-        <TopBar activeTab={activeTab} onTabChange={handleTabChange} />
+                <div className="p-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h1 className="text-2xl font-mono font-bold">Matches</h1>
+                            <p className="text-muted-foreground">Event {eventKey}</p>
+                        </div>
 
-        <div className="p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-mono font-bold">Matches</h1>
-              <p className="text-muted-foreground">Event {eventKey}</p>
-            </div>
+                        <div className="flex items-center gap-2">
+                            <Select value={filter} onValueChange={setFilter}>
+                                <SelectTrigger className="w-[180px]">
+                                    <SelectValue placeholder="Filter"/>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All</SelectItem>
+                                    <SelectItem value="qm">Qual</SelectItem>
+                                    <SelectItem value="qf">Quarterfinal</SelectItem>
+                                    <SelectItem value="sf">Semifinal</SelectItem>
+                                    <SelectItem value="f">Final</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
 
-            <div className="flex items-center gap-2">
-              <Select value={filter} onValueChange={setFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="qm">Qual</SelectItem>
-                  <SelectItem value="qf">Quarterfinal</SelectItem>
-                  <SelectItem value="sf">Semifinal</SelectItem>
-                  <SelectItem value="f">Final</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+                    {loading && <p className="text-muted-foreground">Loading matches…</p>}
 
-          {loading && <p className="text-muted-foreground">Loading matches…</p>}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {!loading &&
-              filtered.map((m) => (
-                <Card key={m.key}>
-                  <CardHeader>
-                    <CardTitle className="flex items-center justify-between">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {!loading &&
+                            filtered.map((m) => (
+                                <Card key={m.key}>
+                                    <CardHeader>
+                                        <CardTitle className="flex items-center justify-between">
                       <span>
                         {levelLabel(m.comp_level)} {m.match_number}
                       </span>
-                      <Calendar className="w-4 h-4 text-muted-foreground" />
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-sm space-y-2">
-                    <div className="flex justify-between">
+                                            <Calendar className="w-4 h-4 text-muted-foreground"/>
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="text-sm space-y-2">
+                                        <div className="flex justify-between">
                       <span className="text-red-400">
                         Red: {formatTeams(m.alliances.red.team_keys)}
                       </span>
-                      <span>{m.alliances.red.score}</span>
-                    </div>
-                    <div className="flex justify-between">
+                                            <span>{m.alliances.red.score}</span>
+                                        </div>
+                                        <div className="flex justify-between">
                       <span className="text-blue-400">
                         Blue: {formatTeams(m.alliances.blue.team_keys)}
                       </span>
-                      <span>{m.alliances.blue.score}</span>
+                                            <span>{m.alliances.blue.score}</span>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-          </div>
+                </div>
+            </main>
         </div>
-      </main>
-    </div>
-  );
+    );
 };
 
 export default Matches;

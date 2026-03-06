@@ -1,143 +1,144 @@
-import { LayoutDashboard, Trophy, BarChart3, ClipboardList, Bot, Zap } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useEffect, useState } from "react";
-import { ref, get } from "firebase/database";
-import { checkTBAHealth } from "@/lib/tba";
-import { db, auth } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
+import {BarChart3, Bot, ClipboardList, LayoutDashboard, Trophy, Zap} from "lucide-react";
+import {cn} from "@/lib/utils";
+import {useEffect, useState} from "react";
+import {get, ref} from "firebase/database";
+import {checkTBAHealth} from "@/lib/tba";
+import {auth, db} from "@/lib/firebase";
+import {onAuthStateChanged} from "firebase/auth";
 
 interface MobileSidebarContentProps {
-  activeTab: string;
-  onTabChange: (tab: string) => void;
+    activeTab: string;
+    onTabChange: (tab: string) => void;
 }
 
 const navItems = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "matches", label: "Match Schedule", icon: Trophy },
-  { id: "scouting", label: "Scouting", icon: ClipboardList },
-  { id: "analytics", label: "Analytics", icon: BarChart3 },
-  { id: "leaderboard", label: "Leaderboard", icon: Trophy },
+    {id: "dashboard", label: "Dashboard", icon: LayoutDashboard},
+    {id: "matches", label: "Match Schedule", icon: Trophy},
+    {id: "scouting", label: "Scouting", icon: ClipboardList},
+    {id: "pit-scouting", label: "Pit Scouting", icon: Bot},
+    {id: "analytics", label: "Analytics", icon: BarChart3},
+    {id: "leaderboard", label: "Leaderboard", icon: Trophy},
 ];
 
 type SystemStatus = "ok" | "degraded" | "down";
 
 const MobileSidebarContent = ({
-  activeTab,
-  onTabChange,
-}: MobileSidebarContentProps) => {
-  const [firebaseStatus, setFirebaseStatus] = useState<SystemStatus>("down");
-  const [tbaStatus, setTbaStatus] = useState<SystemStatus>("down");
+                                  activeTab,
+                                  onTabChange,
+                              }: MobileSidebarContentProps) => {
+    const [firebaseStatus, setFirebaseStatus] = useState<SystemStatus>("down");
+    const [tbaStatus, setTbaStatus] = useState<SystemStatus>("down");
 
-  // ---- Firebase check ----
-  useEffect(() => {
-    let mounted = true;
+    // ---- Firebase check ----
+    useEffect(() => {
+        let mounted = true;
 
-    const checkFirebase = async () => {
-      if (!mounted) return;
-      // If unauthenticated, avoid calling DB (rules likely block read) and mark as degraded
-      if (!auth?.currentUser) {
-        setFirebaseStatus("degraded");
-      } else {
-        try {
-          await get(ref(db, "__healthcheck"));
-          setFirebaseStatus("ok");
-        } catch (err: unknown) {
-          // fallback try users/{uid}
-          try {
-            await get(ref(db, `users/${auth.currentUser!.uid}`));
-            setFirebaseStatus("ok");
-          } catch (fallbackErr: unknown) {
-            const errObj = fallbackErr as { code?: string; message?: string };
-            const codeStr = String(errObj.code || "").toLowerCase();
-            const msg = String(errObj.message || "");
-            if (
-              codeStr.includes("permission") ||
-              /permission denied/i.test(msg) ||
-              /permission-denied/i.test(codeStr)
-            ) {
-              setFirebaseStatus("degraded");
+        const checkFirebase = async () => {
+            if (!mounted) return;
+            // If unauthenticated, avoid calling DB (rules likely block read) and mark as degraded
+            if (!auth?.currentUser) {
+                setFirebaseStatus("degraded");
             } else {
-              console.debug("__healthcheck read failed and fallback failed:", errObj);
-              setFirebaseStatus("down");
+                try {
+                    await get(ref(db, "__healthcheck"));
+                    setFirebaseStatus("ok");
+                } catch (err: unknown) {
+                    // fallback try users/{uid}
+                    try {
+                        await get(ref(db, `users/${auth.currentUser!.uid}`));
+                        setFirebaseStatus("ok");
+                    } catch (fallbackErr: unknown) {
+                        const errObj = fallbackErr as { code?: string; message?: string };
+                        const codeStr = String(errObj.code || "").toLowerCase();
+                        const msg = String(errObj.message || "");
+                        if (
+                            codeStr.includes("permission") ||
+                            /permission denied/i.test(msg) ||
+                            /permission-denied/i.test(codeStr)
+                        ) {
+                            setFirebaseStatus("degraded");
+                        } else {
+                            console.debug("__healthcheck read failed and fallback failed:", errObj);
+                            setFirebaseStatus("down");
+                        }
+                    }
+                }
             }
-          }
-        }
-      }
 
-      try {
-        await checkTBAHealth();
-        setTbaStatus("ok");
-      } catch {
-        setTbaStatus("down");
-      }
-    };
+            try {
+                await checkTBAHealth();
+                setTbaStatus("ok");
+            } catch {
+                setTbaStatus("down");
+            }
+        };
 
-    checkFirebase();
+        checkFirebase();
 
-    const unsub = onAuthStateChanged(auth, () => {
-      checkFirebase().catch((e) => console.debug('mobile checkFirebase after auth change failed', e));
-    });
+        const unsub = onAuthStateChanged(auth, () => {
+            checkFirebase().catch((e) => console.debug('mobile checkFirebase after auth change failed', e));
+        });
 
-    return () => {
-      mounted = false;
-      unsub();
-    };
-  }, []);
+        return () => {
+            mounted = false;
+            unsub();
+        };
+    }, []);
 
-  // ---- TBA check ----
-  useEffect(() => {
-    const checkTBA = async () => {
-      try {
-        await checkTBAHealth();
-        setTbaStatus("ok");
-      } catch {
-        setTbaStatus("down");
-      }
-    };
+    // ---- TBA check ----
+    useEffect(() => {
+        const checkTBA = async () => {
+            try {
+                await checkTBAHealth();
+                setTbaStatus("ok");
+            } catch {
+                setTbaStatus("down");
+            }
+        };
 
-    checkTBA();
-  }, []);
+        checkTBA();
+    }, []);
 
-  const overallStatus =
-    firebaseStatus === "ok" && tbaStatus === "ok"
-      ? "ok"
-      : firebaseStatus === "down" || tbaStatus === "down"
-      ? "down"
-      : "degraded";
+    const overallStatus =
+        firebaseStatus === "ok" && tbaStatus === "ok"
+            ? "ok"
+            : firebaseStatus === "down" || tbaStatus === "down"
+                ? "down"
+                : "degraded";
 
-  const statusColor =
-    overallStatus === "ok"
-      ? "bg-success"
-      : overallStatus === "down"
-      ? "bg-destructive"
-      : "bg-yellow-400";
+    const statusColor =
+        overallStatus === "ok"
+            ? "bg-success"
+            : overallStatus === "down"
+                ? "bg-destructive"
+                : "bg-yellow-400";
 
-  const statusText =
-    overallStatus === "ok"
-      ? "All systems operational"
-      : overallStatus === "down"
-      ? "System issues detected"
-      : "Checking systems…";
+    const statusText =
+        overallStatus === "ok"
+            ? "All systems operational"
+            : overallStatus === "down"
+                ? "System issues detected"
+                : "Checking systems…";
 
-  return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="p-4 border-b">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
-            <Bot className="w-6 h-6 text-primary" />
-          </div>
-          <div>
-            <h1 className="font-mono font-bold text-foreground text-lg">
-              QuickScoutV2
-            </h1>
-            <p className="text-xs text-muted-foreground">Dashboard v1.0</p>
-          </div>
-        </div>
-      </div>
+    return (
+        <div className="flex flex-col h-full">
+            {/* Header */}
+            <div className="p-4 border-b">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                        <Bot className="w-6 h-6 text-primary"/>
+                    </div>
+                    <div>
+                        <h1 className="font-mono font-bold text-foreground text-lg">
+                            QuickScoutV2
+                        </h1>
+                        <p className="text-xs text-muted-foreground">Dashboard v1.0</p>
+                    </div>
+                </div>
+            </div>
 
-      {/* Search */}
-      {/* <div className="p-4">
+            {/* Search */}
+            {/* <div className="p-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -147,81 +148,81 @@ const MobileSidebarContent = ({
         </div>
       </div> */}
 
-      {/* Nav */}
-      <div
-        className="flex-1 overflow-auto mt-2 px-4 pb-4 touch-pan-y"
-        onTouchStart={(e) => e.stopPropagation()}
-        onTouchMove={(e) => e.stopPropagation()}
-        onWheel={(e) => e.stopPropagation()}
-      >
-        <nav className="mt-4 space-y-2">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-            Main Menu
-          </p>
-
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => onTabChange(item.id)}
-              className={cn(
-                "w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-secondary/50",
-                activeTab === item.id && "bg-secondary/50"
-              )}
+            {/* Nav */}
+            <div
+                className="flex-1 overflow-auto mt-2 px-4 pb-4 touch-pan-y"
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+                onWheel={(e) => e.stopPropagation()}
             >
-              <item.icon className="w-5 h-5" />
-              <span className="font-medium">{item.label}</span>
-            </button>
-          ))}
+                <nav className="mt-4 space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                        Main Menu
+                    </p>
 
-          {/* System Status */}
-          <div className="mt-6 border-t pt-4 space-y-2">
-            <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-primary" />
-              <span className="text-xs font-medium text-foreground">
+                    {navItems.map((item) => (
+                        <button
+                            key={item.id}
+                            onClick={() => onTabChange(item.id)}
+                            className={cn(
+                                "w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-secondary/50",
+                                activeTab === item.id && "bg-secondary/50"
+                            )}
+                        >
+                            <item.icon className="w-5 h-5"/>
+                            <span className="font-medium">{item.label}</span>
+                        </button>
+                    ))}
+
+                    {/* System Status */}
+                    <div className="mt-6 border-t pt-4 space-y-2">
+                        <div className="flex items-center gap-2">
+                            <Zap className="w-4 h-4 text-primary"/>
+                            <span className="text-xs font-medium text-foreground">
                 System Status
               </span>
-            </div>
+                        </div>
 
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${statusColor}`} />
-              <span className="text-xs text-muted-foreground">{statusText}</span>
-            </div>
+                        <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${statusColor}`}/>
+                            <span className="text-xs text-muted-foreground">{statusText}</span>
+                        </div>
 
-            <div className="text-xs text-muted-foreground space-y-1 pl-4">
-              <div>
-                Firebase:{" "}
-                <span
-                  className={
-                    firebaseStatus === "ok"
-                      ? "text-success"
-                      : firebaseStatus === "down"
-                      ? "text-destructive"
-                      : ""
-                  }
-                >
+                        <div className="text-xs text-muted-foreground space-y-1 pl-4">
+                            <div>
+                                Firebase:{" "}
+                                <span
+                                    className={
+                                        firebaseStatus === "ok"
+                                            ? "text-success"
+                                            : firebaseStatus === "down"
+                                                ? "text-destructive"
+                                                : ""
+                                    }
+                                >
                   {firebaseStatus}
                 </span>
-              </div>
-              <div>
-                TBA API:{" "}
-                <span
-                  className={
-                    tbaStatus === "ok"
-                      ? "text-success"
-                      : tbaStatus === "down"
-                      ? "text-destructive"
-                      : ""
-                  }
-                >
+                            </div>
+                            <div>
+                                TBA API:{" "}
+                                <span
+                                    className={
+                                        tbaStatus === "ok"
+                                            ? "text-success"
+                                            : tbaStatus === "down"
+                                                ? "text-destructive"
+                                                : ""
+                                    }
+                                >
                   {tbaStatus}
                 </span>
-              </div>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
             </div>
-          </div>
-        </nav>
-      </div>
-    </div>
-  );
+        </div>
+    );
 };
 
 export default MobileSidebarContent;

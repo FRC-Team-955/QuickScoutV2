@@ -43,6 +43,8 @@ const Scouting = () => {
             navigate("/dashboard");
         } else if (tab === "scouting") {
             navigate("/scouting");
+        } else if (tab === "pit-scouting") {
+            navigate("/pit-scouting");
         } else if (tab === "analytics") {
             navigate("/analytics");
         } else if (tab === "matches") {
