@@ -468,6 +468,26 @@ const Scouting = () => {
         return unsub;
     }, [user?.id, isInSubjectiveScouting]);
 
+    // Add beforeunload event listener to prevent accidental reload during scouting
+    useEffect(() => {
+        const isScoutingActive = phase !== "idle" || isInSubjectiveScouting;
+
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (isScoutingActive) {
+                e.preventDefault();
+                e.returnValue = "";
+                return "";
+            }
+        };
+
+        if (isScoutingActive) {
+            window.addEventListener("beforeunload", handleBeforeUnload);
+            return () => {
+                window.removeEventListener("beforeunload", handleBeforeUnload);
+            };
+        }
+    }, [phase, isInSubjectiveScouting]);
+
     const pauseTimer = () => {
         setIsTimerRunning(false);
     };
