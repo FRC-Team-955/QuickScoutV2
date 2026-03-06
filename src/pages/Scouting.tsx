@@ -15,6 +15,7 @@ import {subscribeToUserAssignment} from "@/lib/queue";
 import {get, getDatabase, ref, remove, serverTimestamp, set,} from "firebase/database";
 import successAudio from "/partyblower.mp3";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select.tsx";
+import {toast} from "sonner";
 
 const PHASE_DURATIONS = {
     AUTONOMOUS: 20,
@@ -74,7 +75,7 @@ const Scouting = () => {
             }
         } catch (err) {
             console.error(err);
-            alert((err as Error)?.message || "Queue error");
+            toast((err as Error)?.message || "Queue error");
         }
     };
 
@@ -99,7 +100,7 @@ const Scouting = () => {
     const handleStartMatch = async () => {
         try {
             if (activeMatch) {
-                alert("A match is already running — end it before starting a new one.");
+                toast("A match is already running — end it before starting a new one.");
                 return;
             }
 
@@ -107,28 +108,28 @@ const Scouting = () => {
             const assigned = teamAssignments.slice(0, required);
             const invalid = assigned.some((v) => !validAssignment(v));
             if (required > 0 && invalid) {
-                alert(
+                toast(
                     "Please enter valid team numbers for the active slots (numbers only)",
                 );
                 return;
             }
 
             const matchId = await start(assigned);
-            alert(`Match started — id: ${matchId}`);
+            toast(`Match started — id: ${matchId}`);
             setTeamAssignments(["", "", "", "", "", ""]);
         } catch (err) {
             console.error(err);
-            alert((err as Error)?.message || "Failed to start match");
+            toast((err as Error)?.message || "Failed to start match");
         }
     };
 
     const handleEndMatch = async () => {
         try {
-            if (!activeMatch?.id) return alert("No active match to end");
+            if (!activeMatch?.id) return toast("No active match to end");
             await endMatch(activeMatch.id);
         } catch (err) {
             console.error(err);
-            alert((err as Error)?.message || "Failed to end match");
+            toast((err as Error)?.message || "Failed to end match");
         }
     };
 
@@ -235,7 +236,7 @@ const Scouting = () => {
             typeof teamNum === "string" ? teamNum : teamNumber
         ).trim();
         if (!effectiveTeam) {
-            alert("Please enter a team number");
+            toast("Please enter a team number");
             return;
         }
 
@@ -437,7 +438,7 @@ const Scouting = () => {
                     await remove(ref(db, `users/${user.id}/currentAssignment`));
                 } catch (err) {
                     console.error("Failed to submit scouting data:", err);
-                    alert("Failed to save scouting data. Please notify a lead.");
+                    toast("Failed to save scouting data. Please notify a lead.");
                 }
             }
         }
