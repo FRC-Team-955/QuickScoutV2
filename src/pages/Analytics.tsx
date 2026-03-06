@@ -56,6 +56,31 @@ export type PitScoutingEntry = {
     submittedAt: number;
 };
 
+export type SubjectiveScoutingEntry = {
+    id: string;
+    matchId: string;
+    teamNumber: string;
+    scoutName: string;
+    userId: string;
+    robotPerformance: {
+        autonomousEffectiveness: string;
+        canQuicklyScore: string;
+        canClimb: string;
+        climbLevel?: string | null;
+    };
+    teamDynamics: {
+        performanceUnderPressure: string;
+        teamFocus: string;
+        driverSynchronization: string;
+    };
+    tacticalInsights: {
+        defensiveStrategy: string;
+        blockingEffectiveness: string;
+        allyCooperation: string;
+    };
+    submittedAt: number;
+};
+
 const Analytics = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState("analytics");
@@ -66,6 +91,8 @@ const Analytics = () => {
     const [matchEntries, setMatchEntries] = useState<MatchEntry[]>([]);
     const [pitScoutingEntries, setPitScoutingEntries] = useState<PitScoutingEntry[]>([]);
     const [pitTeamNumberInput, setPitTeamNumberInput] = useState("");
+    const [subjectiveScoutingEntries, setSubjectiveScoutingEntries] = useState<SubjectiveScoutingEntry[]>([]);
+    const [subjectiveTeamNumberInput, setSubjectiveTeamNumberInput] = useState("");
 
     const handleTabChange = (tab: string) => {
         setActiveTab(tab);
@@ -237,6 +264,62 @@ const Analytics = () => {
                     console.log(`Successfully loaded ${allPitEntries.length} pit scouting entries.`);
                     setPitScoutingEntries(allPitEntries);
                 }
+
+                // Fetch subjective scouting data
+                const subjectiveRef = ref(db, "subjectiveMatches");
+                const subjectiveSnap = await get(subjectiveRef);
+
+                if (!subjectiveSnap.exists()) {
+                    console.log("No subjective scouting data found");
+                    setSubjectiveScoutingEntries([]);
+                } else {
+                    const subjectiveData = subjectiveSnap.val();
+                    const allSubjectiveEntries: SubjectiveScoutingEntry[] = [];
+
+                    // subjectiveData structure: { matchId: { participants: { userId: { data } } } }
+                    Object.entries(subjectiveData).forEach(([matchId, matchValue]: [string, Record<string, unknown>]) => {
+                        if (!matchValue || typeof matchValue !== 'object') return;
+
+                        const participants = matchValue.participants as Record<string, unknown> | undefined;
+                        if (!participants || typeof participants !== 'object') return;
+
+                        Object.entries(participants).forEach(([userId, participantValue]: [string, Record<string, unknown>]) => {
+                            if (!participantValue || typeof participantValue !== 'object') return;
+
+                            const robotPerf = participantValue.robotPerformance as Record<string, unknown> || {};
+                            const teamDyn = participantValue.teamDynamics as Record<string, unknown> || {};
+                            const tactical = participantValue.tacticalInsights as Record<string, unknown> || {};
+
+                            allSubjectiveEntries.push({
+                                id: `${matchId}_${userId}`,
+                                matchId,
+                                teamNumber: (participantValue.teamNumber as string) || "N/A",
+                                scoutName: (participantValue.scoutName as string) || "Unknown",
+                                userId,
+                                robotPerformance: {
+                                    autonomousEffectiveness: (robotPerf.autonomousEffectiveness as string) || "",
+                                    canQuicklyScore: (robotPerf.canQuicklyScore as string) || "",
+                                    canClimb: (robotPerf.canClimb as string) || "",
+                                    climbLevel: (robotPerf.climbLevel as string | null) || null,
+                                },
+                                teamDynamics: {
+                                    performanceUnderPressure: (teamDyn.performanceUnderPressure as string) || "",
+                                    teamFocus: (teamDyn.teamFocus as string) || "",
+                                    driverSynchronization: (teamDyn.driverSynchronization as string) || "",
+                                },
+                                tacticalInsights: {
+                                    defensiveStrategy: (tactical.defensiveStrategy as string) || "",
+                                    blockingEffectiveness: (tactical.blockingEffectiveness as string) || "",
+                                    allyCooperation: (tactical.allyCooperation as string) || "",
+                                },
+                                submittedAt: (participantValue.submittedAt as number) || 0,
+                            });
+                        });
+                    });
+
+                    console.log(`Successfully loaded ${allSubjectiveEntries.length} subjective scouting entries.`);
+                    setSubjectiveScoutingEntries(allSubjectiveEntries);
+                }
             } catch (error) {
                 console.error("Error fetching data:", error);
             } finally {
@@ -329,6 +412,7 @@ const Analytics = () => {
                             <TabsTrigger value="team">Team Search</TabsTrigger>
                             <TabsTrigger value="bubble">Bubble Chart</TabsTrigger>
                             <TabsTrigger value="pit-scouting">Pit Scouting</TabsTrigger>
+                            <TabsTrigger value="subjective">Subjective Scouting</TabsTrigger>
                         </TabsList>
 
                         <TabsContent value="all" className="space-y-4">
@@ -837,6 +921,105 @@ const Analytics = () => {
                                             );
                                         })}
                                     </div>
+                                </div>
+                            )}
+                        </TabsContent>
+
+                        <TabsContent value="subjective" className="space-y-4">
+                            <div>
+                                <p className="text-muted-foreground">Viewing {subjectiveScoutingEntries.length} subjective
+                                    scouting entries</p>
+                            </div>
+
+                            {loading ? (
+                                <p>Loading subjective scouting data...</p>
+                            ) : subjectiveScoutingEntries.length === 0 ? (
+                                <p className="text-muted-foreground">No subjective scouting data found</p>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-4">
+                                    {subjectiveScoutingEntries.map((entry) => (
+                                        <Card key={entry.id} className="overflow-hidden border-l-4 border-l-accent">
+                                            <CardHeader className="bg-gradient-to-r from-accent/10 to-accent/5 pb-3">
+                                                <CardTitle className="flex justify-between items-start">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span
+                                                            className="text-2xl font-bold">Team {entry.teamNumber}</span>
+                                                        <span
+                                                            className="text-xs text-muted-foreground">Scout: {entry.scoutName}</span>
+                                                    </div>
+                                                    <div className="bg-secondary px-3 py-1 rounded text-xs font-mono">
+                                                        {new Date(entry.submittedAt).toLocaleDateString([], {timeZone: "America/Los_Angeles"})}
+                                                    </div>
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="pt-4 space-y-4">
+                                                {/* Section 1: Robot Performance and Strategy */}
+                                                <div className="border-b pb-4">
+                                                    <h4 className="font-semibold text-sm mb-3 text-primary">Section 1:
+                                                        Robot Performance and Strategy</h4>
+                                                    <div className="space-y-2 text-sm">
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Autonomous Effectiveness</p>
+                                                            <p className="text-foreground mt-1">{entry.robotPerformance.autonomousEffectiveness || "N/A"}</p>
+                                                        </div>
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Can Quickly Score Fuels</p>
+                                                            <p className="text-foreground mt-1">{entry.robotPerformance.canQuicklyScore || "N/A"}</p>
+                                                        </div>
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Can Climb</p>
+                                                            <div className="text-foreground mt-1">
+                                                                <p>{entry.robotPerformance.canClimb || "N/A"}</p>
+                                                                {entry.robotPerformance.climbLevel && (
+                                                                    <p className="text-xs text-muted-foreground mt-1">Level: {entry.robotPerformance.climbLevel}</p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Section 2: Team Dynamics */}
+                                                <div className="border-b pb-4">
+                                                    <h4 className="font-semibold text-sm mb-3 text-primary">Section 2:
+                                                        Team Dynamics</h4>
+                                                    <div className="space-y-2 text-sm">
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Performance Under Pressure</p>
+                                                            <p className="text-foreground mt-1">{entry.teamDynamics.performanceUnderPressure || "N/A"}</p>
+                                                        </div>
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Team Focus</p>
+                                                            <p className="text-foreground mt-1">{entry.teamDynamics.teamFocus || "N/A"}</p>
+                                                        </div>
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Driver Synchronization</p>
+                                                            <p className="text-foreground mt-1">{entry.teamDynamics.driverSynchronization || "N/A"}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Section 3: Tactical Insights */}
+                                                <div>
+                                                    <h4 className="font-semibold text-sm mb-3 text-primary">Section 3:
+                                                        Tactical Insights</h4>
+                                                    <div className="space-y-2 text-sm">
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Defensive Strategy</p>
+                                                            <p className="text-foreground mt-1">{entry.tacticalInsights.defensiveStrategy || "N/A"}</p>
+                                                        </div>
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Blocking Effectiveness</p>
+                                                            <p className="text-foreground mt-1">{entry.tacticalInsights.blockingEffectiveness || "N/A"}</p>
+                                                        </div>
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Ally Cooperation</p>
+                                                            <p className="text-foreground mt-1">{entry.tacticalInsights.allyCooperation || "N/A"}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    ))}
                                 </div>
                             )}
                         </TabsContent>
