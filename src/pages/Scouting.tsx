@@ -1171,6 +1171,7 @@ const Scouting = () => {
                                                 <SelectValue placeholder="Select Score"/>
                                             </SelectTrigger>
                                             <SelectContent>
+                                                <SelectItem value="0">0 - None</SelectItem>
                                                 <SelectItem value="1">1 - Poor</SelectItem>
                                                 <SelectItem value="2">2 - Fair</SelectItem>
                                                 <SelectItem value="3">3 - Good</SelectItem>
