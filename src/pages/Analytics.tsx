@@ -6,6 +6,7 @@ import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue,} from "@/components/ui/select";
 import {Input} from "@/components/ui/input";
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
+import {Button} from "@/components/ui/button";
 import {get, ref} from "firebase/database";
 import {db} from "@/lib/firebase";
 import {
@@ -396,6 +397,85 @@ const Analytics = () => {
         }));
     }, [matchEntries]);
 
+    const handleExportAllData = () => {
+        const csv: string[] = [];
+
+        // Export Match Scouting Data
+        csv.push("MATCH SCOUTING DATA");
+        csv.push("Match Key,Station,Team Number,Scout Name,Auto Score,Teleop Score,Total Score,Climb,Defense Rating,Robot Tipped,Submitted At");
+        matchEntries.forEach((entry) => {
+            const row = [
+                entry.matchKey,
+                entry.station,
+                entry.teamNumber,
+                entry.scoutName,
+                entry.score_auto,
+                entry.score_teleop,
+                entry.total_score,
+                entry.climb,
+                entry.defense_rating,
+                entry.robotTipped ? "Yes" : "No",
+                new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"})
+            ];
+            csv.push(row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
+        });
+
+        csv.push("");
+        csv.push("");
+
+        // Export Pit Scouting Data
+        csv.push("PIT SCOUTING DATA");
+        csv.push("Team Number,Scout Name,Scout ID,Submitted At,Responses");
+        pitScoutingEntries.forEach((entry) => {
+            const responsesStr = JSON.stringify(entry.responses).replace(/"/g, '""');
+            const row = [
+                entry.teamNumber,
+                entry.scoutName,
+                entry.scoutId,
+                new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"}),
+                responsesStr
+            ];
+            csv.push(row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
+        });
+
+        csv.push("");
+        csv.push("");
+
+        // Export Subjective Scouting Data
+        csv.push("SUBJECTIVE SCOUTING DATA");
+        csv.push("Match ID,Team Number,Scout Name,Autonomous Effectiveness,Can Quickly Score,Can Climb,Climb Level,Performance Under Pressure,Team Focus,Driver Synchronization,Defensive Strategy,Blocking Effectiveness,Ally Cooperation,Submitted At");
+        subjectiveScoutingEntries.forEach((entry) => {
+            const row = [
+                entry.matchId,
+                entry.teamNumber,
+                entry.scoutName,
+                entry.robotPerformance.autonomousEffectiveness,
+                entry.robotPerformance.canQuicklyScore,
+                entry.robotPerformance.canClimb,
+                entry.robotPerformance.climbLevel || "N/A",
+                entry.teamDynamics.performanceUnderPressure,
+                entry.teamDynamics.teamFocus,
+                entry.teamDynamics.driverSynchronization,
+                entry.tacticalInsights.defensiveStrategy,
+                entry.tacticalInsights.blockingEffectiveness,
+                entry.tacticalInsights.allyCooperation,
+                new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"})
+            ];
+            csv.push(row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
+        });
+
+        const csvContent = csv.join("\n");
+        const blob = new Blob([csvContent], {type: "text/csv;charset=utf-8;"});
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `QuickScout_Export_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = "hidden";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     return (
         <div className="min-h-screen bg-background">
             <Sidebar activeTab={activeTab} onTabChange={handleTabChange}/>
@@ -422,18 +502,23 @@ const Analytics = () => {
                             <div className="flex items-center justify-between">
                                 <p className="text-muted-foreground">Viewing {sortedAndFiltered.length} individual
                                     reports</p>
-                                <Select value={sortBy} onValueChange={(v) => setSortBy(v as Filters["sortBy"])}>
-                                    <SelectTrigger className="w-[220px]">
-                                        <SelectValue placeholder="Sort by"/>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="newest">Newest First</SelectItem>
-                                        <SelectItem value="highest_total_score">Highest Total Score</SelectItem>
-                                        <SelectItem value="highest_score_auto">Highest Auto</SelectItem>
-                                        <SelectItem value="highest_climb">Highest Climb</SelectItem>
-                                        <SelectItem value="best_defense">Best Defense</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                <div className="flex gap-2">
+                                    <Button onClick={handleExportAllData} variant="outline">
+                                        Export All Data
+                                    </Button>
+                                    <Select value={sortBy} onValueChange={(v) => setSortBy(v as Filters["sortBy"])}>
+                                        <SelectTrigger className="w-[220px]">
+                                            <SelectValue placeholder="Sort by"/>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="newest">Newest First</SelectItem>
+                                            <SelectItem value="highest_total_score">Highest Total Score</SelectItem>
+                                            <SelectItem value="highest_score_auto">Highest Auto</SelectItem>
+                                            <SelectItem value="highest_climb">Highest Climb</SelectItem>
+                                            <SelectItem value="best_defense">Best Defense</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
