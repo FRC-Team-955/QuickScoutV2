@@ -470,7 +470,7 @@ const Scouting = () => {
 
     // Add beforeunload event listener to prevent accidental reload during scouting
     useEffect(() => {
-        const isScoutingActive = phase !== "idle" || isInSubjectiveScouting;
+        const isScoutingActive = phase !== "idle" || isInSubjectiveScouting || isInQueue || isInSubjectiveQueue;
 
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
             if (isScoutingActive) {
