@@ -11,7 +11,8 @@ import {Label} from "@/components/ui/label";
 import {useAuth} from "@/contexts/AuthContext";
 import {Minus, Pause, Play, Plus, X} from "lucide-react";
 import {useQueue} from "@/hooks/use-queue";
-import {subscribeToUserAssignment} from "@/lib/queue";
+import {useSubjectiveQueue} from "@/hooks/use-subjective-queue";
+import {subscribeToUserAssignment, subscribeToUserSubjectiveAssignment} from "@/lib/queue";
 import {get, getDatabase, ref, remove, serverTimestamp, set,} from "firebase/database";
 import successAudio from "/partyblower.mp3";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select.tsx";
@@ -66,6 +67,20 @@ const Scouting = () => {
         isInTopSix,
         loading: queueLoading,
     } = useQueue(user ? {id: user.id, name: user.name} : null);
+
+    const {
+        queue: subjectiveQueue,
+        topSix: subjectiveTopSix,
+        join: subjectiveJoin,
+        leave: subjectiveLeave,
+        start: subjectiveStart,
+        endMatch: subjectiveEndMatch,
+        activeMatch: subjectiveActiveMatch,
+        isInQueue: isInSubjectiveQueue,
+        isInTopSix: isInSubjectiveTopSix,
+        loading: subjectiveQueueLoading,
+    } = useSubjectiveQueue(user ? {id: user.id, name: user.name} : null);
+
     const isLead = !!user?.isLead;
 
     const handleQueueToggle = async () => {
@@ -78,6 +93,19 @@ const Scouting = () => {
         } catch (err) {
             console.error(err);
             toast((err as Error)?.message || "Queue error");
+        }
+    };
+
+    const handleSubjectiveQueueToggle = async () => {
+        try {
+            if (isInSubjectiveQueue) {
+                await subjectiveLeave();
+            } else {
+                await subjectiveJoin();
+            }
+        } catch (err) {
+            console.error(err);
+            toast((err as Error)?.message || "Subjective queue error");
         }
     };
 
@@ -97,6 +125,7 @@ const Scouting = () => {
             return copy;
         });
     };
+
 
     const validAssignment = (s: string) => /^\d{1,5}$/.test(s);
     const handleStartMatch = async () => {
@@ -125,6 +154,31 @@ const Scouting = () => {
         }
     };
 
+    const handleStartSubjectiveMatch = async () => {
+        try {
+            if (subjectiveActiveMatch) {
+                toast("A subjective match is already running — end it before starting a new one.");
+                return;
+            }
+
+            const required = Math.min(6, subjectiveTopSix.length);
+            const assigned = teamAssignments.slice(0, required);
+            const invalid = assigned.some((v) => !validAssignment(v));
+            if (required > 0 && invalid) {
+                toast(
+                    "Please enter valid team numbers for the active slots (numbers only)",
+                );
+                return;
+            }
+
+            const matchId = await subjectiveStart(assigned);
+            toast(`Subjective match started — id: ${matchId}`);
+        } catch (err) {
+            console.error(err);
+            toast((err as Error)?.message || "Failed to start subjective match");
+        }
+    };
+
     const handleEndMatch = async () => {
         try {
             if (!activeMatch?.id) return toast("No active match to end");
@@ -133,6 +187,94 @@ const Scouting = () => {
             console.error(err);
             toast((err as Error)?.message || "Failed to end match");
         }
+    };
+
+    const handleEndSubjectiveMatch = async () => {
+        try {
+            if (!subjectiveActiveMatch?.id) return toast("No active subjective match to end");
+            await subjectiveEndMatch(subjectiveActiveMatch.id);
+        } catch (err) {
+            console.error(err);
+            toast((err as Error)?.message || "Failed to end subjective match");
+        }
+    };
+
+    const startSubjectiveScouting = (teamNum?: string) => {
+        const effectiveTeam = (
+            typeof teamNum === "string" ? teamNum : subjectiveTeamNumber
+        ).trim();
+        if (!effectiveTeam) {
+            toast("Please enter a team number");
+            return;
+        }
+
+        if (teamNum) setSubjectiveTeamNumber(String(teamNum));
+
+        setIsInSubjectiveScouting(true);
+        setAutonomousEffectiveness("");
+        setCanQuicklyScore("");
+        setCanClimb("");
+        setClimbLevelSubjective("");
+        setPerformanceUnderPressure("");
+        setTeamFocus("");
+        setDriverSynchronization("");
+        setDefensiveStrategy("");
+        setBlockingEffectiveness("");
+        setAllyCooperation("");
+    };
+
+    const resetSubjectiveScouting = async () => {
+        if (isInSubjectiveScouting && user?.id && subjectiveActiveMatch?.id) {
+            try {
+                const db = getDatabase();
+                const participantRef = ref(
+                    db,
+                    `subjectiveMatches/${subjectiveActiveMatch.id}/participants/${user.id}`,
+                );
+
+                await set(participantRef, {
+                    userId: user.id,
+                    scoutName: user.name || "Unknown",
+                    teamNumber: subjectiveTeamNumber,
+                    matchId: subjectiveActiveMatch.id,
+                    submittedAt: serverTimestamp(),
+                    robotPerformance: {
+                        autonomousEffectiveness,
+                        canQuicklyScore,
+                        canClimb,
+                        climbLevel: canClimb === "yes" ? climbLevelSubjective : null,
+                    },
+                    teamDynamics: {
+                        performanceUnderPressure,
+                        teamFocus,
+                        driverSynchronization,
+                    },
+                    tacticalInsights: {
+                        defensiveStrategy,
+                        blockingEffectiveness,
+                        allyCooperation,
+                    },
+                });
+                await remove(ref(db, `users/${user.id}/currentSubjectiveAssignment`));
+                toast("Subjective scouting submitted!");
+            } catch (err) {
+                console.error("Failed to submit subjective scouting data:", err);
+                toast("Failed to save subjective scouting data. Please notify a lead.");
+            }
+        }
+
+        setIsInSubjectiveScouting(false);
+        setSubjectiveTeamNumber("");
+        setAutonomousEffectiveness("");
+        setCanQuicklyScore("");
+        setCanClimb("");
+        setClimbLevelSubjective("");
+        setPerformanceUnderPressure("");
+        setTeamFocus("");
+        setDriverSynchronization("");
+        setDefensiveStrategy("");
+        setBlockingEffectiveness("");
+        setAllyCooperation("");
     };
 
     const [phase, setPhase] = useState<ScoutingPhase>("idle");
@@ -155,6 +297,26 @@ const Scouting = () => {
 
     const [sotm, setSotm] = useState<string>("");
     const [robotTipped, setRobotTipped] = useState<string>("");
+
+    // Subjective Scouting State
+    const [subjectiveTeamNumber, setSubjectiveTeamNumber] = useState("");
+    const [isInSubjectiveScouting, setIsInSubjectiveScouting] = useState(false);
+
+    // Section 1: Robot Performance and Strategy
+    const [autonomousEffectiveness, setAutonomousEffectiveness] = useState<string>("");
+    const [canQuicklyScore, setCanQuicklyScore] = useState<string>("");
+    const [canClimb, setCanClimb] = useState<string>("");
+    const [climbLevelSubjective, setClimbLevelSubjective] = useState<string>("");
+
+    // Section 2: Team Dynamics
+    const [performanceUnderPressure, setPerformanceUnderPressure] = useState<string>("");
+    const [teamFocus, setTeamFocus] = useState<string>("");
+    const [driverSynchronization, setDriverSynchronization] = useState<string>("");
+
+    // Section 3: Tactical Insights
+    const [defensiveStrategy, setDefensiveStrategy] = useState<string>("");
+    const [blockingEffectiveness, setBlockingEffectiveness] = useState<string>("");
+    const [allyCooperation, setAllyCooperation] = useState<string>("");
 
     const [cancelConfirm, setCancelConfirm] = useState(false);
     const cancelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -289,6 +451,22 @@ const Scouting = () => {
 
         return unsub;
     }, [user?.id, phase]);
+
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const unsub = subscribeToUserSubjectiveAssignment(user.id, (assignment) => {
+            if (!assignment) {
+                return;
+            }
+
+            if (!isInSubjectiveScouting) {
+                startSubjectiveScouting(String(assignment.teamNumber));
+            }
+        });
+
+        return unsub;
+    }, [user?.id, isInSubjectiveScouting]);
 
     const pauseTimer = () => {
         setIsTimerRunning(false);
@@ -603,7 +781,7 @@ const Scouting = () => {
                     <div className="space-y-6">
                         <div className="flex items-center justify-between"></div>
 
-                        {(isLead || (phase === "idle" && !activeMatch)) && (
+                        {(isLead || (phase === "idle" && !activeMatch)) && !isInSubjectiveScouting && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Match Queue</CardTitle>
@@ -715,7 +893,7 @@ const Scouting = () => {
                                                     ) : (
                                                         <Plus className="w-4 h-4 mr-2"/>
                                                     )}
-                                                    {isInQueue ? "Leave queue" : "Join queue"}
+                                                    {isInQueue ? "Leave match queue" : "Join match queue"}
                                                 </Button>
                                             ) : (
                                                 <div className="flex-1 text-center text-sm text-muted-foreground">
@@ -759,7 +937,136 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {phase === "idle" && (
+                        {(isLead || (phase === "idle" && !subjectiveActiveMatch)) && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Subjective Queue</CardTitle>
+                                    <CardDescription>
+                                        First 6 in the queue will be selected to start subjective scouting
+                                        (real-time)
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <div className="text-sm text-muted-foreground">
+                                                Live queue — ordered by join time
+                                            </div>
+                                        </div>
+
+                                        <ul className="space-y-2 mt-2">
+                                            {subjectiveQueue.length === 0 && (
+                                                <li className="text-sm text-muted-foreground">
+                                                    No one in subjective queue yet
+                                                </li>
+                                            )}
+
+                                            {subjectiveQueue.map((q, idx) => (
+                                                <li
+                                                    key={q.id}
+                                                    className={`flex items-center justify-between p-2 rounded-md border ${idx < 6 ? "bg-primary/5 border-primary/20" : "bg-secondary"}`}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div
+                                                            className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium">
+                                                            {q.name?.charAt(0)?.toUpperCase() || "?"}
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-sm font-medium">
+                                                                {q.name}
+                                                            </div>
+                                                            <div className="text-xs text-muted-foreground">
+                                                                {idx < 6
+                                                                    ? `#${idx + 1} — active`
+                                                                    : `#${idx + 1}`}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-3">
+                                                        {user?.id === q.userId && isInSubjectiveTopSix && (
+                                                            <div className="text-xs text-success font-medium">
+                                                                You are in the next subjective match!
+                                                            </div>
+                                                        )}
+
+                                                        {isLead && idx < 6 && teamAssignments[idx] && (
+                                                            <div
+                                                                className="text-sm px-2 py-1 rounded-md bg-amber-50 text-amber-700">
+                                                                Team {teamAssignments[idx]}
+                                                            </div>
+                                                        )}
+
+                                                        {idx < 6 && (
+                                                            <div
+                                                                className="text-xs px-2 py-1 rounded-md bg-primary/10 text-primary">
+                                                                Active
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+
+                                    <div className="flex gap-3 items-center">
+                                        {!isLead ? (
+                                            phase === "idle" && !subjectiveActiveMatch ? (
+                                                <Button
+                                                    onClick={handleSubjectiveQueueToggle}
+                                                    disabled={subjectiveQueueLoading}
+                                                    className="flex-1"
+                                                >
+                                                    {isInSubjectiveQueue ? (
+                                                        <Minus className="w-4 h-4 mr-2"/>
+                                                    ) : (
+                                                        <Plus className="w-4 h-4 mr-2"/>
+                                                    )}
+                                                    {isInSubjectiveQueue ? "Leave subjective queue" : "Join subjective queue"}
+                                                </Button>
+                                            ) : (
+                                                <div className="flex-1 text-center text-sm text-muted-foreground">
+                                                    Scouting in progress
+                                                </div>
+                                            )
+                                        ) : subjectiveActiveMatch ? (
+                                            subjectiveActiveMatch.startedBy === user?.id ? (
+                                                <Button
+                                                    onClick={handleEndSubjectiveMatch}
+                                                    variant="destructive"
+                                                    className="flex-1"
+                                                    disabled={subjectiveQueueLoading}
+                                                >
+                                                    End subjective match
+                                                </Button>
+                                            ) : (
+                                                <Button className="flex-1" disabled>
+                                                    Subjective match running elsewhere
+                                                </Button>
+                                            )
+                                        ) : (
+                                            <Button
+                                                onClick={handleStartSubjectiveMatch}
+                                                disabled={
+                                                    subjectiveQueueLoading ||
+                                                    subjectiveTopSix.length === 0 ||
+                                                    (subjectiveTopSix.length > 0 &&
+                                                        !teamAssignments
+                                                            .slice(0, Math.min(6, subjectiveTopSix.length))
+                                                            .every((v) => /^\d{1,5}$/.test(v)))
+                                                }
+                                                className="flex-1"
+                                            >
+                                                <Play className="w-4 h-4 mr-2"/>
+                                                Assign & Start subjective match
+                                            </Button>
+                                        )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {phase === "idle" && !isInSubjectiveScouting && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Start Manual Scouting Session</CardTitle>
@@ -1310,6 +1617,163 @@ const Scouting = () => {
                                     </div>
                                 </CardContent>
                             </Card>
+                        )}
+
+                        {isInSubjectiveScouting && subjectiveActiveMatch && (
+                            <>
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Subjective Scouting - Team {subjectiveTeamNumber}</CardTitle>
+                                        <CardDescription>
+                                            Answer the following questions about this team's robot and strategy
+                                        </CardDescription>
+                                    </CardHeader>
+                                </Card>
+
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Robot Performance and Strategy</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-6">
+                                        <div className="space-y-3">
+                                            <Label htmlFor="autonomous-effectiveness" className="text-base font-medium">
+                                                How effective is their robot during the Autonomous period?
+                                            </Label>
+                                            <Input
+                                                id="autonomous-effectiveness"
+                                                placeholder="e.g., Not Effective, Somewhat Effective, Very Effective"
+                                                value={autonomousEffectiveness}
+                                                onChange={(e) => setAutonomousEffectiveness(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="quick-score" className="text-base font-medium">
+                                                Can their robot quickly score fuels?
+                                            </Label>
+                                            <Input
+                                                id="quick-score"
+                                                placeholder="e.g., Yes, No, or description"
+                                                value={canQuicklyScore}
+                                                onChange={(e) => setCanQuicklyScore(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="can-climb" className="text-base font-medium">
+                                                Is their robot able to climb? If so, what level (L1, L2, L3)?
+                                            </Label>
+                                            <Input
+                                                id="can-climb"
+                                                placeholder="e.g., Yes - L1, No, or description"
+                                                value={canClimb}
+                                                onChange={(e) => setCanClimb(e.target.value)}
+                                            />
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Team Dynamics</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-6">
+                                        <div className="space-y-3">
+                                            <Label htmlFor="pressure-performance" className="text-base font-medium">
+                                                Do they perform well under pressure and falter?
+                                            </Label>
+                                            <Input
+                                                id="pressure-performance"
+                                                placeholder="e.g., Perform well under pressure, Falter under pressure, Neutral"
+                                                value={performanceUnderPressure}
+                                                onChange={(e) => setPerformanceUnderPressure(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="team-focus" className="text-base font-medium">
+                                                Do they focus on scoring, passing, defense, or a mix?
+                                            </Label>
+                                            <Input
+                                                id="team-focus"
+                                                placeholder="e.g., Scoring focused, Balanced mix, Defense oriented"
+                                                value={teamFocus}
+                                                onChange={(e) => setTeamFocus(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="driver-sync" className="text-base font-medium">
+                                                How synchronized are their drivers and human players?
+                                            </Label>
+                                            <Input
+                                                id="driver-sync"
+                                                placeholder="e.g., Highly synchronized, Room for improvement, Needs work"
+                                                value={driverSynchronization}
+                                                onChange={(e) => setDriverSynchronization(e.target.value)}
+                                            />
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Tactical Insights</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-6">
+                                        <div className="space-y-3">
+                                            <Label htmlFor="defensive-strategy" className="text-base font-medium">
+                                                How do they defend against scoring attempts (if they defend)?
+                                            </Label>
+                                            <Input
+                                                id="defensive-strategy"
+                                                placeholder="e.g., Aggressive pushing, Blocking strategy, Minimal defense"
+                                                value={defensiveStrategy}
+                                                onChange={(e) => setDefensiveStrategy(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="blocking-effectiveness" className="text-base font-medium">
+                                                How effectively can they block or disrupt scoring (if they defend)?
+                                            </Label>
+                                            <Input
+                                                id="blocking-effectiveness"
+                                                placeholder="e.g., Very effective, Moderately effective, Ineffective"
+                                                value={blockingEffectiveness}
+                                                onChange={(e) => setBlockingEffectiveness(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="ally-cooperation" className="text-base font-medium">
+                                                How well do they work their allies for combined strategies (constantly
+                                                bumping or getting in their way)?
+                                            </Label>
+                                            <Input
+                                                id="ally-cooperation"
+                                                placeholder="e.g., Great teamwork, Often interferes, Gets in the way"
+                                                value={allyCooperation}
+                                                onChange={(e) => setAllyCooperation(e.target.value)}
+                                            />
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Submit Subjective Scouting</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <Button
+                                            onClick={resetSubjectiveScouting}
+                                            className="w-full"
+                                        >
+                                            Submit Subjective Scouting
+                                        </Button>
+                                    </CardContent>
+                                </Card>
+                            </>
                         )}
                     </div>
                 </div>
