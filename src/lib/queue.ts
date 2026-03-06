@@ -1,16 +1,16 @@
 import {
-  equalTo,
-  get,
-  limitToFirst,
-  onDisconnect,
-  onValue,
-  orderByChild,
-  push,
-  query,
-  ref,
-  remove,
-  serverTimestamp,
-  set,
+    equalTo,
+    get,
+    limitToFirst,
+    onDisconnect,
+    onValue,
+    orderByChild,
+    push,
+    query,
+    ref,
+    remove,
+    serverTimestamp,
+    set,
 } from "firebase/database";
 import {db} from "@/lib/firebase";
 import {slugifyName} from "@/lib/utils";
@@ -677,13 +677,14 @@ export const startSubjectiveMatch = async (
         const all = await getAllSubjectiveQueue();
         if (all.length === 0) throw new Error("No users in subjective queue");
 
-        // build participants — attach assignedTeam for the first up-to-6 entries when provided
-        const participants = all.map((t, idx) => {
+        // build participants object keyed by userId — attach assignedTeam for those assigned
+        const participants: Record<string, unknown> = {};
+        all.forEach((t, idx) => {
             const assigned =
                 Array.isArray(teamAssignments) && idx < (teamAssignments || []).length
                     ? teamAssignments![idx]
                     : null;
-            return {
+            participants[t.userId] = {
                 userId: t.userId,
                 name: t.name,
                 assignedTeam: assigned != null ? String(assigned) : null,

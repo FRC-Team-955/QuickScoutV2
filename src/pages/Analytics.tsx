@@ -284,6 +284,9 @@ const Analytics = () => {
                         if (!participants || typeof participants !== 'object') return;
 
                         Object.entries(participants).forEach(([userId, participantValue]: [string, Record<string, unknown>]) => {
+                            // Skip numeric indices (array elements) - only process actual userId keys
+                            if (/^\d+$/.test(userId)) return;
+
                             if (!participantValue || typeof participantValue !== 'object') return;
 
                             const robotPerf = participantValue.robotPerformance as Record<string, unknown> || {};
