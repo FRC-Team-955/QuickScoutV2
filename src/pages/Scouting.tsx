@@ -275,6 +275,13 @@ const Scouting = () => {
         setDefensiveStrategy("");
         setBlockingEffectiveness("");
         setAllyCooperation("");
+        setDefensiveStrategy("");
+        setRobotReliability("");
+        setRobotPenalties("");
+        setAutoFuel("");
+        setAutoClimb1("");
+        setTeleopPassing("");
+        setGameSense("");
     };
 
     const [phase, setPhase] = useState<ScoutingPhase>("idle");
