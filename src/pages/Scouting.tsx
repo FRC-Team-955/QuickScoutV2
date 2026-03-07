@@ -318,6 +318,15 @@ const Scouting = () => {
     const [blockingEffectiveness, setBlockingEffectiveness] = useState<string>("");
     const [allyCooperation, setAllyCooperation] = useState<string>("");
 
+    // Section 4: Misc
+    const [defensiveSkill, setDefensiveSkill] = useState<string>("");
+    const [robotReliablity, setRobotReliability] = useState<string>("");
+    const [robotPenalties, setRobotPenalties] = useState<string>("");
+    const [autoFuel, setAutoFuel] = useState<string>("");
+    const [autoClimb1, setAutoClimb1] = useState<string>("");
+    const [teleopPassing, setTeleopPassing] = useState<string>("");
+    const [gameSense, setGameSense] = useState<string>("");
+
     const [cancelConfirm, setCancelConfirm] = useState(false);
     const cancelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -1871,6 +1880,97 @@ const Scouting = () => {
                                                 placeholder="e.g., Great teamwork, Often interferes, Gets in the way"
                                                 value={allyCooperation}
                                                 onChange={(e) => setAllyCooperation(e.target.value)}
+                                            />
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Misc</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-6">
+                                        <div className="space-y-3">
+                                            <Label htmlFor="defensive-skill" className="text-base font-medium">
+                                                Do they seem experienced with playing defense?
+                                            </Label>
+                                            <Input
+                                                id="defensive-skill"
+                                                placeholder="e.g., Yes, No, A little"
+                                                value={defensiveSkill}
+                                                onChange={(e) => setDefensiveSkill(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="robot-reliability" className="text-base font-medium">
+                                                Was the robot reliable during the entire match?
+                                            </Label>
+                                            <Input
+                                                id="robot-reliability"
+                                                placeholder="e.g., Dead, Stuck, Tipped"
+                                                value={robotReliablity}
+                                                onChange={(e) => setRobotReliability(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="robot-penalties" className="text-base font-medium">
+                                                Did they receive any penalties?
+                                            </Label>
+                                            <Input
+                                                id="robot-penalties"
+                                                placeholder="e.g., Red Card, Yellow Card"
+                                                value={robotPenalties}
+                                                onChange={(e) => setRobotPenalties(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="auto-fuel" className="text-base font-medium">
+                                                Did they score more than eight fuel?
+                                            </Label>
+                                            <Input
+                                                id="auto-fuel"
+                                                placeholder="e.g., Yes, No, 10+"
+                                                value={autoFuel}
+                                                onChange={(e) => setAutoFuel(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="auto-climb" className="text-base font-medium">
+                                                Did they climb during auto?
+                                            </Label>
+                                            <Input
+                                                id="auto-climb"
+                                                placeholder="e.g., No, L1, L2, L3"
+                                                value={autoClimb1}
+                                                onChange={(e) => setAutoClimb1(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="teleop-passing" className="text-base font-medium">
+                                                Can they pass?
+                                            </Label>
+                                            <Input
+                                                id="teleop-passing"
+                                                placeholder="e.g., Yes, No, Sometimes"
+                                                value={teleopPassing}
+                                                onChange={(e) => setTeleopPassing(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="game-sense" className="text-base font-medium">
+                                                Do you think they have game sense?
+                                            </Label>
+                                            <Input
+                                                id="game-sense"
+                                                placeholder="e.g., Yes, No, A little"
+                                                value={gameSense}
+                                                onChange={(e) => setGameSense(e.target.value)}
                                             />
                                         </div>
                                     </CardContent>
