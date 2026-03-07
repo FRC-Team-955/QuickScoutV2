@@ -957,6 +957,54 @@ const Scouting = () => {
                             </Card>
                         )}
 
+                        {isLead && activeMatch && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Active Scouters</CardTitle>
+                                    <CardDescription>
+                                        Scouters currently scouting in the active match
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {activeMatch.participants && activeMatch.participants.length > 0 ? (
+                                        <ul className="space-y-2">
+                                            {activeMatch.participants.map((participant: any, idx: number) => (
+                                                <li
+                                                    key={participant.userId}
+                                                    className="flex items-center justify-between p-2 rounded-md border bg-secondary/50"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div
+                                                            className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium">
+                                                            {participant.name?.charAt(0)?.toUpperCase() || "?"}
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-sm font-medium">
+                                                                {participant.name}
+                                                            </div>
+                                                            <div className="text-xs text-muted-foreground">
+                                                                Team {participant.assignedTeam || "—"}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {idx < 6 && (
+                                                        <div
+                                                            className="text-xs px-2 py-1 rounded-md bg-green-50 text-green-700 font-medium">
+                                                            Scouting
+                                                        </div>
+                                                    )}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p className="text-sm text-muted-foreground">
+                                            No scouters in the active match
+                                        </p>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        )}
+
                         {(isLead || (phase === "idle" && !subjectiveActiveMatch)) && (
                             <Card>
                                 <CardHeader>
@@ -1082,6 +1130,54 @@ const Scouting = () => {
                                             </Button>
                                         )}
                                     </div>
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {isLead && subjectiveActiveMatch && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Active Subjective Scouters</CardTitle>
+                                    <CardDescription>
+                                        Scouters currently scouting in the active subjective match
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {subjectiveActiveMatch.participants && subjectiveActiveMatch.participants.length > 0 ? (
+                                        <ul className="space-y-2">
+                                            {subjectiveActiveMatch.participants.map((participant: any, idx: number) => (
+                                                <li
+                                                    key={participant.userId}
+                                                    className="flex items-center justify-between p-2 rounded-md border bg-secondary/50"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div
+                                                            className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium">
+                                                            {participant.name?.charAt(0)?.toUpperCase() || "?"}
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-sm font-medium">
+                                                                {participant.name}
+                                                            </div>
+                                                            <div className="text-xs text-muted-foreground">
+                                                                Team {participant.assignedTeam || "—"}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {idx < 6 && (
+                                                        <div
+                                                            className="text-xs px-2 py-1 rounded-md bg-green-50 text-green-700 font-medium">
+                                                            Scouting
+                                                        </div>
+                                                    )}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p className="text-sm text-muted-foreground">
+                                            No scouters in the active subjective match
+                                        </p>
+                                    )}
                                 </CardContent>
                             </Card>
                         )}
