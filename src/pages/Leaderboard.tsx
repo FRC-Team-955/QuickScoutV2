@@ -21,7 +21,6 @@ const Leaderboard = () => {
     const [activeTab, setActiveTab] = useState("leaderboard");
     const [loading, setLoading] = useState(false);
     const [rows, setRows] = useState<LeaderboardRow[]>([]);
-    const [query, setQuery] = useState("");
 
     const handleTabChange = (tab: string) => {
         setActiveTab(tab);
@@ -44,57 +43,102 @@ const Leaderboard = () => {
         const fetchLeaderboard = async () => {
             setLoading(true);
             try {
-                const matchesRef = ref(db, "matches");
-                const snap = await get(matchesRef);
-
-                if (!snap.exists()) {
-                    setRows([]);
-                    return;
-                }
-
                 const tally = new Map<
                     string,
                     { scoutName: string; matches: number; lastSubmitted: number }
                 >();
 
-                const matchesData = snap.val();
-                Object.values(matchesData as Record<string, any>).forEach((matchValue) => {
-                    const participantsRoot = matchValue?.participants || matchValue;
-                    if (!participantsRoot || typeof participantsRoot !== "object") return;
+                // Fetch normal matches data
+                const matchesRef = ref(db, "matches");
+                const matchesSnap = await get(matchesRef);
 
-                    Object.entries(participantsRoot).forEach(([_participantId, data]) => {
-                        if (!data || typeof data !== "object") return;
+                if (matchesSnap.exists()) {
+                    const matchesData = matchesSnap.val();
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    Object.values(matchesData as Record<string, Record<string, any>>).forEach((matchValue) => {
+                        const participantsRoot = matchValue?.participants || matchValue;
+                        if (!participantsRoot || typeof participantsRoot !== "object") return;
 
-                        const hasSubmission =
-                            data.teamNumber != null ||
-                            data.submittedAt != null ||
-                            data.autonomous ||
-                            data.teleop ||
-                            data.endGame;
-                        if (!hasSubmission) return;
+                        Object.entries(participantsRoot).forEach(([participantId, data]) => {
+                            // Skip numeric indices (array elements)
+                            if (/^\d+$/.test(participantId)) return;
+                            
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            const dataObj = data as Record<string, any>;
+                            if (!dataObj) return;
 
-                        const scoutName = String(data.scoutName || data.name || "Unknown");
-                        const key = scoutName.trim().toLowerCase();
-                        if (!key) return;
+                            const hasSubmission =
+                                dataObj.teamNumber != null ||
+                                dataObj.submittedAt != null ||
+                                dataObj.autonomous ||
+                                dataObj.teleop ||
+                                dataObj.endGame;
+                            if (!hasSubmission) return;
 
-                        const submittedAt =
-                            typeof data.submittedAt === "number"
-                                ? data.submittedAt
-                                : Number(data.submittedAt) || 0;
+                            const scoutName = String(dataObj.scoutName || dataObj.name || "").trim();
+                            if (!scoutName) return;
 
-                        const current = tally.get(key) || {
-                            scoutName,
-                            matches: 0,
-                            lastSubmitted: 0,
-                        };
-                        current.matches += 1;
-                        current.lastSubmitted = Math.max(current.lastSubmitted, submittedAt);
-                        if (current.scoutName === "Unknown" && scoutName !== "Unknown") {
-                            current.scoutName = scoutName;
-                        }
-                        tally.set(key, current);
+                            const key = scoutName.toLowerCase();
+
+                            const submittedAt =
+                                typeof dataObj.submittedAt === "number"
+                                    ? dataObj.submittedAt
+                                    : Number(dataObj.submittedAt) || 0;
+
+                            const current = tally.get(key) || {
+                                scoutName,
+                                matches: 0,
+                                lastSubmitted: 0,
+                            };
+                            current.matches += 1;
+                            current.lastSubmitted = Math.max(current.lastSubmitted, submittedAt);
+                            current.scoutName = scoutName; // Always use the found name
+                            tally.set(key, current);
+                        });
                     });
-                });
+                }
+
+                // Fetch subjective matches data
+                const subjectiveRef = ref(db, "subjectiveMatches");
+                const subjectiveSnap = await get(subjectiveRef);
+
+                if (subjectiveSnap.exists()) {
+                    const subjectiveData = subjectiveSnap.val();
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    Object.values(subjectiveData as Record<string, Record<string, any>>).forEach((matchValue) => {
+                        const participantsRoot = matchValue?.participants;
+                        if (!participantsRoot || typeof participantsRoot !== "object") return;
+
+                        Object.entries(participantsRoot).forEach(([participantId, data]) => {
+                            // Skip numeric indices (array elements)
+                            if (/^\d+$/.test(participantId)) return;
+                            
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            const dataObj = data as Record<string, any>;
+                            if (!dataObj) return;
+
+                            const scoutName = String(dataObj.scoutName || "").trim();
+                            if (!scoutName) return;
+
+                            const submittedAt =
+                                typeof dataObj.submittedAt === "number"
+                                    ? dataObj.submittedAt
+                                    : Number(dataObj.submittedAt) || 0;
+
+                            const key = scoutName.toLowerCase();
+
+                            const current = tally.get(key) || {
+                                scoutName,
+                                matches: 0,
+                                lastSubmitted: 0,
+                            };
+                            current.matches += 1;
+                            current.lastSubmitted = Math.max(current.lastSubmitted, submittedAt);
+                            current.scoutName = scoutName; // Always use the found name
+                            tally.set(key, current);
+                        });
+                    });
+                }
 
                 const nextRows: LeaderboardRow[] = Array.from(tally.entries()).map(
                     ([key, value]) => ({
@@ -122,10 +166,8 @@ const Leaderboard = () => {
     }, []);
 
     const filteredRows = useMemo(() => {
-        const q = query.trim().toLowerCase();
-        if (!q) return rows;
-        return rows.filter((row) => row.scoutName.toLowerCase().includes(q));
-    }, [rows, query]);
+        return rows;
+    }, [rows]);
 
     return (
         <div className="min-h-screen bg-background">
