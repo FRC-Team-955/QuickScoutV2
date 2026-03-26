@@ -290,6 +290,14 @@ const Analytics = () => {
 
                             if (!participantValue || typeof participantValue !== 'object') return;
 
+                            const teamNumber = (participantValue.teamNumber as string)?.trim();
+                            const scoutName = (participantValue.scoutName as string)?.trim();
+
+                            if (!teamNumber || !scoutName) {
+                                console.debug(`Skipping subjective entry ${matchId}_${userId}: missing team number or scout name`);
+                                return;
+                            }
+
                             const robotPerf = participantValue.robotPerformance as Record<string, unknown> || {};
                             const teamDyn = participantValue.teamDynamics as Record<string, unknown> || {};
                             const tactical = participantValue.tacticalInsights as Record<string, unknown> || {};
@@ -297,8 +305,8 @@ const Analytics = () => {
                             allSubjectiveEntries.push({
                                 id: `${matchId}_${userId}`,
                                 matchId,
-                                teamNumber: (participantValue.teamNumber as string) || "N/A",
-                                scoutName: (participantValue.scoutName as string) || "Unknown",
+                                teamNumber: teamNumber,
+                                scoutName: scoutName,
                                 userId,
                                 robotPerformance: {
                                     autonomousEffectiveness: (robotPerf.autonomousEffectiveness as string) || "",
