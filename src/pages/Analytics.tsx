@@ -93,7 +93,6 @@ const Analytics = () => {
     const [pitScoutingEntries, setPitScoutingEntries] = useState<PitScoutingEntry[]>([]);
     const [pitTeamNumberInput, setPitTeamNumberInput] = useState("");
     const [subjectiveScoutingEntries, setSubjectiveScoutingEntries] = useState<SubjectiveScoutingEntry[]>([]);
-    const [subjectiveTeamNumberInput, setSubjectiveTeamNumberInput] = useState("");
 
     const handleTabChange = (tab: string) => {
         setActiveTab(tab);
@@ -406,73 +405,117 @@ const Analytics = () => {
     }, [matchEntries]);
 
     const handleExportAllData = () => {
-        const csv: string[] = [];
+        // Helper: escape a single CSV field according to RFC4180 (double-quote, double internal quotes)
+        const escapeField = (v: unknown) => {
+            if (v === null || v === undefined) return "";
+            const s = String(v);
+            // keep line breaks (spreadsheet apps like Excel/Sheets will display multi-line cells)
+            return `"${s.replace(/"/g, '""')}"`;
+        };
 
-        // Export Match Scouting Data
-        csv.push("MATCH SCOUTING DATA");
-        csv.push("Match Key,Station,Team Number,Scout Name,Auto Score,Teleop Score,Total Score,Climb,Defense Rating,Robot Tipped,Submitted At");
-        matchEntries.forEach((entry) => {
-            const row = [
-                entry.matchKey,
-                entry.station,
-                entry.teamNumber,
-                entry.scoutName,
-                entry.score_auto,
-                entry.score_teleop,
-                entry.total_score,
-                entry.climb,
-                entry.defense_rating,
-                entry.robotTipped ? "Yes" : "No",
-                new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"})
-            ];
-            csv.push(row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
-        });
+        // Build a CSV section with a title, header row and rows (array of arrays)
+        const buildSection = (title: string, headers: string[], rows: Array<Array<unknown>>) => {
+            const out: string[] = [];
+            // section title in first column to make it obvious when opening raw CSV
+            out.push(escapeField(title));
+            out.push(headers.map(escapeField).join(","));
+            rows.forEach((r) => out.push(r.map(escapeField).join(",")));
+            out.push(""); // blank line after section
+            return out;
+        };
 
-        csv.push("");
-        csv.push("");
+        const lines: string[] = [];
 
-        // Export Pit Scouting Data
-        csv.push("PIT SCOUTING DATA");
-        csv.push("Team Number,Scout Name,Scout ID,Submitted At,Responses");
-        pitScoutingEntries.forEach((entry) => {
-            const responsesStr = JSON.stringify(entry.responses).replace(/"/g, '""');
-            const row = [
+        // Match Scouting
+        const matchHeaders = [
+            "Match Key",
+            "Station",
+            "Team Number",
+            "Scout Name",
+            "Auto Score",
+            "Teleop Score",
+            "Total Score",
+            "Climb",
+            "Defense Rating",
+            "Robot Tipped",
+            "Submitted At (PST)"
+        ];
+        const matchRows = matchEntries.map((entry) => [
+            entry.matchKey,
+            entry.station,
+            entry.teamNumber,
+            entry.scoutName,
+            entry.score_auto,
+            entry.score_teleop,
+            entry.total_score,
+            entry.climb,
+            entry.defense_rating,
+            entry.robotTipped ? "Yes" : "No",
+            new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"})
+        ] as Array<unknown>);
+
+        lines.push(...buildSection("MATCH SCOUTING DATA", matchHeaders, matchRows));
+
+        // Pit Scouting
+        const pitHeaders = ["Team Number", "Scout Name", "Scout ID", "Submitted At (PST)", "Responses (multi-line JSON) "];
+        const pitRows = pitScoutingEntries.map((entry) => {
+            // pretty-print responses JSON for readability (multi-line field)
+            let prettyResponses: string;
+            try {
+                prettyResponses = JSON.stringify(entry.responses || {}, null, 2);
+            } catch (e) {
+                prettyResponses = String(entry.responses || "");
+            }
+            return [
                 entry.teamNumber,
                 entry.scoutName,
                 entry.scoutId,
                 new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"}),
-                responsesStr
-            ];
-            csv.push(row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
+                prettyResponses
+            ] as Array<unknown>;
         });
+        lines.push(...buildSection("PIT SCOUTING DATA", pitHeaders, pitRows));
 
-        csv.push("");
-        csv.push("");
+        // Subjective Scouting
+        const subjHeaders = [
+            "Match ID",
+            "Team Number",
+            "Scout Name",
+            "Submitted At (PST)",
+            "Subjective Summary (multi-line)"
+        ];
+        const subjRows = subjectiveScoutingEntries.map((entry) => {
+            // build a readable multi-line summary per subjective entry
+            const parts: string[] = [];
+            parts.push("=== Section 1: Robot Performance & Strategy ===");
+            parts.push(`Autonomous Effectiveness: ${entry.robotPerformance.autonomousEffectiveness || ""}`);
+            parts.push(`Can Quickly Score: ${entry.robotPerformance.canQuicklyScore || ""}`);
+            parts.push(`Can Climb: ${entry.robotPerformance.canClimb || ""}`);
+            if (entry.robotPerformance.climbLevel) parts.push(`Climb Level: ${entry.robotPerformance.climbLevel}`);
+            parts.push("");
+            parts.push("=== Section 2: Team Dynamics ===");
+            parts.push(`Performance Under Pressure: ${entry.teamDynamics.performanceUnderPressure || ""}`);
+            parts.push(`Team Focus: ${entry.teamDynamics.teamFocus || ""}`);
+            parts.push(`Driver Synchronization: ${entry.teamDynamics.driverSynchronization || ""}`);
+            parts.push("");
+            parts.push("=== Section 3: Tactical Insights ===");
+            parts.push(`Defensive Strategy: ${entry.tacticalInsights.defensiveStrategy || ""}`);
+            parts.push(`Blocking Effectiveness: ${entry.tacticalInsights.blockingEffectiveness || ""}`);
+            parts.push(`Ally Cooperation: ${entry.tacticalInsights.allyCooperation || ""}`);
 
-        // Export Subjective Scouting Data
-        csv.push("SUBJECTIVE SCOUTING DATA");
-        csv.push("Match ID,Team Number,Scout Name,Autonomous Effectiveness,Can Quickly Score,Can Climb,Climb Level,Performance Under Pressure,Team Focus,Driver Synchronization,Defensive Strategy,Blocking Effectiveness,Ally Cooperation,Submitted At");
-        subjectiveScoutingEntries.forEach((entry) => {
-            const row = [
+            const summary = parts.join("\n");
+
+            return [
                 entry.matchId,
                 entry.teamNumber,
                 entry.scoutName,
-                entry.robotPerformance.autonomousEffectiveness,
-                entry.robotPerformance.canQuicklyScore,
-                entry.robotPerformance.canClimb,
-                entry.robotPerformance.climbLevel || "N/A",
-                entry.teamDynamics.performanceUnderPressure,
-                entry.teamDynamics.teamFocus,
-                entry.teamDynamics.driverSynchronization,
-                entry.tacticalInsights.defensiveStrategy,
-                entry.tacticalInsights.blockingEffectiveness,
-                entry.tacticalInsights.allyCooperation,
-                new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"})
-            ];
-            csv.push(row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
+                new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"}),
+                summary
+            ] as Array<unknown>;
         });
+        lines.push(...buildSection("SUBJECTIVE SCOUTING DATA", subjHeaders, subjRows));
 
-        const csvContent = csv.join("\n");
+        const csvContent = lines.join("\r\n");
         const blob = new Blob([csvContent], {type: "text/csv;charset=utf-8;"});
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
@@ -787,21 +830,18 @@ const Analytics = () => {
                                                 <XAxis type="number" dataKey="x" name="Teleop Points" unit=""/>
                                                 <YAxis type="number" dataKey="y" name="Auto Points" unit=""/>
                                                 <ZAxis dataKey="r" range={[50, 400]}/>
+                                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                                                 <ReTooltip cursor={{strokeDasharray: '3 3'}}
-                                                           formatter={(value: unknown, name: unknown) => [value, name]}/>
+                                                           formatter={((value: any, name: any) => [value, name]) as any} />
                                                 <Legend/>
                                                 <Scatter
                                                     name="Scouts"
                                                     data={bubbleData}
                                                     fill="#00C853"
-                                                    shape={(props: unknown) => {
-                                                        const {cx, cy, payload} = props as {
-                                                            cx: number;
-                                                            cy: number;
-                                                            payload: { robotTipped?: boolean; r?: number }
-                                                        };
-                                                        const color = payload.robotTipped ? '#FF5252' : '#2ECC71';
-                                                        const radius = payload.r || 6;
+                                                    shape={(props: any) => {
+                                                        const {cx, cy, payload} = props as any;
+                                                        const color = payload?.robotTipped ? '#FF5252' : '#2ECC71';
+                                                        const radius = (payload?.r as number) || 6;
                                                         return (
                                                             <g>
                                                                 <circle cx={cx} cy={cy} r={radius} fill={color}
@@ -809,7 +849,7 @@ const Analytics = () => {
                                                                         strokeWidth={1}/>
                                                                 <text x={cx} y={cy} textAnchor="middle"
                                                                       dominantBaseline="central" fontSize={10}
-                                                                      fill="#000">{payload.team}</text>
+                                                                      fill="#000">{payload?.team}</text>
                                                             </g>
                                                         );
                                                     }}
