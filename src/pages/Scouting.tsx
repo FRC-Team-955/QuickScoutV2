@@ -1159,11 +1159,13 @@ const Scouting = () => {
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    {subjectiveActiveMatch.participants && Object.keys(subjectiveActiveMatch.participants).length > 0 ? (
+                                    {subjectiveActiveMatch.participants && Object.keys(subjectiveActiveMatch.participants).filter(key => !/^\d+$/.test(key)).length > 0 ? (
                                         <ul className="space-y-2">
-                                            {Object.values(subjectiveActiveMatch.participants).map((participant: any, idx: number) => (
+                                            {Object.entries(subjectiveActiveMatch.participants)
+                                                .filter(([key]) => !/^\d+$/.test(key))
+                                                .map(([key, participant]: [string, any], idx: number) => (
                                                 <li
-                                                    key={participant.userId}
+                                                    key={key}
                                                     className="flex items-center justify-between p-2 rounded-md border bg-secondary/50"
                                                 >
                                                     <div className="flex items-center gap-3">
