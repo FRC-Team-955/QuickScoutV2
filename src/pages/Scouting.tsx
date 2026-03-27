@@ -124,6 +124,7 @@ const Scouting = () => {
 
             if (!match) {
                 toast("No upcoming matches found");
+                setTeamAssignments(["", "", "", "", "", ""]);
                 return;
             }
 
@@ -152,6 +153,7 @@ const Scouting = () => {
 
             if (teamNumbers.length === 0) {
                 toast("No valid team numbers found in next match");
+                setTeamAssignments(["", "", "", "", "", ""]);
                 return;
             }
 
@@ -162,7 +164,7 @@ const Scouting = () => {
             });
 
             setTeamAssignments(newAssignments);
-            toast(`Imported ${teamNumbers.length} teams from TBA for next match`);
+            toast(`Imported ${teamNumbers.length} teams from TBA for next match: ${match.match_number ? `Match ${match.match_number}` : ""}`);
         } catch (err) {
             console.error("Failed to import teams from TBA", err);
             toast("Failed to import teams from TBA. Check console for details.");
@@ -345,6 +347,7 @@ const Scouting = () => {
     const [autonomousNotes, setAutonomousNotes] = useState("");
     const [autonomousFuel, setAutonomousFuel] = useState(0);
     const [autoClimb, setAutoClimb] = useState<string>("");
+    const [teamNumberNotes, setTeamNumberNotes] = useState("");
 
     const [teleopNotes, setTeleopNotes] = useState("");
     const [teleopFuel, setTeleopFuel] = useState(0);
@@ -440,6 +443,7 @@ const Scouting = () => {
         setAutonomousNotes("");
         setAutonomousFuel(0);
         setAutoClimb("");
+        setTeamNumberNotes("");
         setTeleopNotes("");
         setTeleopFuel(0);
         setDefenseScore("");
@@ -597,6 +601,8 @@ const Scouting = () => {
 
                     submittedAt: serverTimestamp(),
 
+                    teamNumberNotes,
+
                     autonomous: {
                         fuel: autonomousFuel,
                         notes: autonomousNotes,
@@ -652,6 +658,7 @@ const Scouting = () => {
         // Clear all form state
         setTeamNumber("");
         setAutonomousNotes("");
+        setTeamNumberNotes("");
         setAutonomousFuel(0);
         setAutoClimb("");
         setTeleopFuel(0);
@@ -725,8 +732,9 @@ const Scouting = () => {
                                 <CardHeader>
                                     <CardTitle>Match Queue</CardTitle>
                                     <CardDescription>
-                                        First 6 in the queue will be selected to start scouting
-                                        (real-time)
+                                        First 6 in the queue will be selected to start scouting (real-time).
+                                        Use "Import Next Match Teams from TBA (Refresh)" to load team numbers
+                                        for the upcoming match.
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
@@ -799,7 +807,7 @@ const Scouting = () => {
                                             variant="outline"
                                             className="w-full"
                                         >
-                                            {importingTeams ? "Importing..." : "Import Teams from TBA"}
+                                            {importingTeams ? "Importing..." : "Import Next Match Teams from TBA (Refresh)"}
                                         </Button>
                                     )}
 
@@ -1169,6 +1177,30 @@ const Scouting = () => {
                                             team to you.
                                         </div>
                                     )}
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {activeMatch && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Team Number & Notes</CardTitle>
+                                    <CardDescription>
+                                        Document the team number you're scouting and any related notes
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    <div>
+                                        <Label className="text-base font-medium mb-2 block">
+                                            Team: {teamNumber}
+                                        </Label>
+                                    </div>
+                                    <Textarea
+                                        placeholder="Enter any notes about the team number (e.g., 'Team has two robots', 'Confirmed team number')"
+                                        value={teamNumberNotes}
+                                        onChange={(e) => setTeamNumberNotes(e.target.value)}
+                                        className="min-h-[80px]"
+                                    />
                                 </CardContent>
                             </Card>
                         )}
