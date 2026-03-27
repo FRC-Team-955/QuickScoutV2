@@ -17,6 +17,7 @@ import {get, getDatabase, ref, remove, serverTimestamp, set,} from "firebase/dat
 import successAudio from "/partyblower.mp3";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select.tsx";
 import {toast} from "sonner";
+import {getNextUnplayedMatch} from "@/lib/tba";
 
 const PHASE_DURATIONS = {
     AUTONOMOUS: 20,
@@ -117,6 +118,7 @@ const Scouting = () => {
         "",
         "",
     ]);
+    const [importingTeams, setImportingTeams] = useState(false);
 
     const setAssignment = (index: number, value: string) => {
         setTeamAssignments((prev) => {
@@ -124,6 +126,61 @@ const Scouting = () => {
             copy[index] = value.replace(/[^0-9]/g, "").slice(0, 5);
             return copy;
         });
+    };
+
+    const handleImportTeamsFromTBA = async () => {
+        try {
+            setImportingTeams(true);
+            const eventKey = "2026orore";
+            const match = await getNextUnplayedMatch(eventKey);
+            
+            if (!match) {
+                toast("No upcoming matches found");
+                return;
+            }
+            
+            // Extract team numbers from alliances
+            // Match structure: { alliances: { red: { team_keys: [...] }, blue: { team_keys: [...] } } }
+            const redTeams = match.alliances?.red?.team_keys || [];
+            const blueTeams = match.alliances?.blue?.team_keys || [];
+            
+            const teamNumbers: string[] = [];
+            
+            // Red teams (indices 0, 1, 2)
+            redTeams.forEach((key: string) => {
+                const num = key.replace(/^frc/, "");
+                if (/^\d+$/.test(num)) {
+                    teamNumbers.push(num);
+                }
+            });
+            
+            // Blue teams (indices 3, 4, 5)
+            blueTeams.forEach((key: string) => {
+                const num = key.replace(/^frc/, "");
+                if (/^\d+$/.test(num)) {
+                    teamNumbers.push(num);
+                }
+            });
+            
+            if (teamNumbers.length === 0) {
+                toast("No valid team numbers found in next match");
+                return;
+            }
+            
+            // Fill the team assignments with proper order: Red 1, Red 2, Red 3, Blue 1, Blue 2, Blue 3
+            const newAssignments = ["", "", "", "", "", ""];
+            teamNumbers.slice(0, 6).forEach((num, idx) => {
+                newAssignments[idx] = num;
+            });
+            
+            setTeamAssignments(newAssignments);
+            toast(`Imported ${teamNumbers.length} teams from TBA for next match`);
+        } catch (err) {
+            console.error("Failed to import teams from TBA", err);
+            toast("Failed to import teams from TBA. Check console for details.");
+        } finally {
+            setImportingTeams(false);
+        }
     };
 
 
@@ -898,6 +955,17 @@ const Scouting = () => {
                                             ))}
                                         </ul>
                                     </div>
+
+                                    {isLead && (
+                                        <Button
+                                            onClick={handleImportTeamsFromTBA}
+                                            disabled={importingTeams}
+                                            variant="outline"
+                                            className="w-full"
+                                        >
+                                            {importingTeams ? "Importing..." : "Import Teams from TBA"}
+                                        </Button>
+                                    )}
 
                                     {isLead && (
                                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
