@@ -12,8 +12,8 @@ import {useAuth} from "@/contexts/AuthContext";
 import {Minus, Play, Plus} from "lucide-react";
 import {useQueue} from "@/hooks/use-queue";
 import {useSubjectiveQueue} from "@/hooks/use-subjective-queue";
-import {subscribeToUserAssignment, subscribeToUserSubjectiveAssignment} from "@/lib/queue";
-import {get, getDatabase, ref, remove, serverTimestamp, set,} from "firebase/database";
+import {subscribeToUserAssignment, subscribeToUserSubjectiveAssignment, subscribeToActiveMatch} from "@/lib/queue";
+import {get, getDatabase, ref, remove, serverTimestamp, set, onValue,} from "firebase/database";
 import successAudio from "/partyblower.mp3";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select.tsx";
 import {toast} from "sonner";
@@ -50,6 +50,7 @@ const Scouting = () => {
         leave,
         start,
         endMatch,
+        signalMatchEnd,
         activeMatch,
         isInQueue,
         isInTopSix,
@@ -226,10 +227,11 @@ const Scouting = () => {
     const handleEndMatch = async () => {
         try {
             if (!activeMatch?.id) return toast("No active match to end");
-            await endMatch(activeMatch.id);
+            await signalMatchEnd(activeMatch.id);
+            toast("Match end signaled to all scouters");
         } catch (err) {
             console.error(err);
-            toast((err as Error)?.message || "Failed to end match");
+            toast((err as Error)?.message || "Failed to signal match end");
         }
     };
 
@@ -384,6 +386,7 @@ const Scouting = () => {
     const [autoClimb1, setAutoClimb1] = useState<string>("");
     const [teleopPassing, setTeleopPassing] = useState<string>("");
     const [gameSense, setGameSense] = useState<string>("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const currentMatchIdRef = useRef<string | null>(null);
     const assignedTeamRef = useRef<string | null>(null);
@@ -508,48 +511,59 @@ const Scouting = () => {
         }
     }, [isInSubjectiveScouting, isInQueue, isInSubjectiveQueue]);
 
+    const leadSignaledEndRef = useRef(false);
+    useEffect(() => {
+        if (!activeMatch?.id || !user?.id) return;
+        if (isManualSessionRef.current) return; // Don't show for manual scouting
+
+        // Watch for lead signaling match end
+        const unsubscribe = subscribeToActiveMatch((match) => {
+            if (match && match.leadSignaledEnd && !leadSignaledEndRef.current) {
+                leadSignaledEndRef.current = true;
+                toast("Lead has signaled the end of the match. Please finish your scouting and submit.");
+            }
+        });
+
+        return () => {
+            unsubscribe?.();
+            leadSignaledEndRef.current = false;
+        };
+    }, [activeMatch?.id, user?.id]);
+
     useEffect(() => {
         if (isManualSessionRef.current) return;
         if (!activeMatch?.id || !user?.id) return;
 
-        const checkIfLastScouter = async () => {
+        const db = getDatabase();
+        const participantsRef = ref(db, `matches/${activeMatch.id}/participants`);
+
+        // Set up real-time listener for participants changes
+        const unsubscribe = onValue(participantsRef, async (snapshot) => {
             try {
-                const db = getDatabase();
-
-                const matchRef = ref(db, `matches/${activeMatch.id}`);
-                const matchSnap = await get(matchRef);
-                if (!matchSnap.exists()) return;
-
-                const match = matchSnap.val();
-                if (match.status !== "active") {
+                if (!snapshot.exists()) {
+                    // No participants at all, force end the match
+                    console.log("No participants found → force ending match");
+                    await endMatch(activeMatch.id);
                     return;
                 }
 
-                const participantsRef = ref(
-                    db,
-                    `matches/${activeMatch.id}/participants`,
-                );
-                const snapshot = await get(participantsRef);
-                if (!snapshot.exists()) return;
-
                 const participants = snapshot.val();
-
-                const activeParticipants = Object.values(participants).filter(
-                    (p) => {
-                        const part = p as { submittedAt?: unknown };
-                        return !part.submittedAt;
-                    },
+                const activeParticipants = Object.values(participants as any).filter(
+                    (p: any) => !p.submittedAt
                 );
 
                 if (activeParticipants.length === 0) {
-                    console.log("This was the last scouter → ending match");
+                    console.log("No active scouters remaining → force ending match");
                     await endMatch(activeMatch.id);
                 }
             } catch (err) {
-                console.error("Failed to check if last scouter", err);
+                console.error("Failed to check active scouters", err);
             }
+        });
+
+        return () => {
+            unsubscribe();
         };
-        checkIfLastScouter();
     }, [activeMatch?.id, user?.id, endMatch]);
 
     const resetScouting = async () => {
@@ -557,64 +571,85 @@ const Scouting = () => {
             for (let i = 0; i < 5; i++) {
                 triggerConfetti();
             }
-        } else {
-            if (!isManualSessionRef.current) {
-                try {
-                    const matchId = currentMatchIdRef.current;
-                    const assignedTeam = assignedTeamRef.current;
+        }
+        
+        if (!isManualSessionRef.current) {
+            try {
+                const matchId = currentMatchIdRef.current;
+                const assignedTeam = assignedTeamRef.current;
 
-                    if (!matchId || !user?.id || !assignedTeam) {
-                        console.warn(
-                            "resetScouting: missing matchId, user, or assignedTeam",
-                        );
-                        return;
-                    }
-
-                    const db = getDatabase();
-
-                    const participantRef = ref(
-                        db,
-                        `matches/${matchId}/participants/${user.id}`,
-                    );
-
-                    await set(participantRef, {
-                        userId: user.id,
-                        scoutName: user.name || "Unknown",
-                        teamNumber: assignedTeam,
-                        matchId,
-
-                        submittedAt: serverTimestamp(),
-
-                        autonomous: {
-                            fuel: autonomousFuel,
-                            notes: autonomousNotes,
-                            autoClimb,
-                        },
-
-                        teleop: {
-                            fuel: teleopFuel,
-                            notes: teleopNotes,
-                            teleopClimb,
-                            climbLevel: teleopClimb === "yes" ? climbLevel : null,
-                            defenseScore,
-                        },
-
-                        endGame: {
-                            didClimb,
-                            climbLevel: didClimb ? climbLevel : null,
-                            notes: endGameNotes,
-                        },
-                        sotm,
-                        robotTipped,
-                    });
-                    await remove(ref(db, `users/${user.id}/currentAssignment`));
-                } catch (err) {
-                    console.error("Failed to submit scouting data:", err);
-                    toast("Failed to save scouting data. Please notify a lead.");
+                if (!matchId || !user?.id || !assignedTeam) {
+                    throw new Error("Missing match or team information");
                 }
+
+                const db = getDatabase();
+
+                const participantRef = ref(
+                    db,
+                    `matches/${matchId}/participants/${user.id}`,
+                );
+
+                await set(participantRef, {
+                    userId: user.id,
+                    scoutName: user.name || "Unknown",
+                    teamNumber: assignedTeam,
+                    matchId,
+
+                    submittedAt: serverTimestamp(),
+
+                    autonomous: {
+                        fuel: autonomousFuel,
+                        notes: autonomousNotes,
+                        autoClimb,
+                    },
+
+                    teleop: {
+                        fuel: teleopFuel,
+                        notes: teleopNotes,
+                        teleopClimb,
+                        climbLevel: teleopClimb === "yes" ? climbLevel : null,
+                        defenseScore,
+                    },
+
+                    endGame: {
+                        didClimb,
+                        climbLevel: didClimb ? climbLevel : null,
+                        notes: endGameNotes,
+                    },
+                    sotm,
+                    robotTipped,
+                });
+                await remove(ref(db, `users/${user.id}/currentAssignment`));
+
+                // Check if lead signaled end and all other scouters have submitted
+                const matchRef = ref(db, `matches/${matchId}`);
+                const matchSnap = await get(matchRef);
+                if (matchSnap.exists()) {
+                    const match = matchSnap.val();
+                    if (match.leadSignaledEnd) {
+                        // Check if all participants have submitted
+                        const participantsRef = ref(db, `matches/${matchId}/participants`);
+                        const participantsSnap = await get(participantsRef);
+                        if (participantsSnap.exists()) {
+                            const participants = participantsSnap.val();
+                            const allSubmitted = Object.values(participants as any).every(
+                                (p: any) => p.submittedAt
+                            );
+                            // Only call endMatch if ALL scouters have submitted
+                            if (allSubmitted && match.status === "active") {
+                                await endMatch(matchId);
+                                toast("All scouters submitted. Match ended.");
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to submit scouting data:", err);
+                throw err;
             }
         }
 
+        // Clear all form state
         setTeamNumber("");
         setAutonomousNotes("");
         setAutonomousFuel(0);
@@ -624,8 +659,29 @@ const Scouting = () => {
         setDefenseScore("");
         setEndGameNotes("");
         setDidClimb(false);
+        setClimbLevel("");
+        setTeleopClimb("");
         setSotm("");
         setRobotTipped("");
+        setIsInSubjectiveScouting(false);
+        setSubjectiveTeamNumber("");
+        setAutonomousEffectiveness("");
+        setCanQuicklyScore("");
+        setCanClimb("");
+        setClimbLevelSubjective("");
+        setPerformanceUnderPressure("");
+        setTeamFocus("");
+        setDriverSynchronization("");
+        setDefensiveStrategy("");
+        setBlockingEffectiveness("");
+        setAllyCooperation("");
+        setDefensiveSkill("");
+        setRobotReliability("");
+        setRobotPenalties("");
+        setAutoFuel("");
+        setAutoClimb1("");
+        setTeleopPassing("");
+        setGameSense("");
         isManualSessionRef.current = false;
     };
 
@@ -796,14 +852,33 @@ const Scouting = () => {
                                             )
                                         ) : activeMatch ? (
                                             activeMatch.startedBy === user?.id ? (
-                                                <Button
-                                                    onClick={handleEndMatch}
-                                                    variant="destructive"
-                                                    className="flex-1"
-                                                    disabled={queueLoading}
-                                                >
-                                                    End match
-                                                </Button>
+                                                <div className="flex gap-2 flex-1">
+                                                    <Button
+                                                        onClick={handleEndMatch}
+                                                        variant="destructive"
+                                                        className="flex-1"
+                                                        disabled={queueLoading}
+                                                    >
+                                                        Signal End Match
+                                                    </Button>
+                                                    <Button
+                                                        onClick={async () => {
+                                                            if (!activeMatch?.id) return toast("No active match to end");
+                                                            try {
+                                                                await endMatch(activeMatch.id);
+                                                                toast("Match force ended - all scouters cleared");
+                                                            } catch (err) {
+                                                                console.error(err);
+                                                                toast((err as Error)?.message || "Failed to force end match");
+                                                            }
+                                                        }}
+                                                        variant="destructive"
+                                                        className="flex-1"
+                                                        disabled={queueLoading}
+                                                    >
+                                                        Force End Match
+                                                    </Button>
+                                                </div>
                                             ) : (
                                                 <Button className="flex-1" disabled>
                                                     Match running elsewhere
@@ -879,7 +954,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {(isLead || !subjectiveActiveMatch) && !activeMatch && (
+                        {(isLead || (!subjectiveActiveMatch && !activeMatch)) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Subjective Queue</CardTitle>
@@ -1404,6 +1479,57 @@ const Scouting = () => {
                             </Card>
                         )}
 
+                        {activeMatch && (
+                            <Card>
+                                <CardContent className="pt-6">
+                                    <Button
+                                        onClick={async () => {
+                                            setIsSubmitting(true);
+                                            try {
+                                                const matchId = activeMatch.id;
+                                                await resetScouting();
+                                                
+                                                // Check if there are any active scouters left
+                                                const db = getDatabase();
+                                                const participantsRef = ref(db, `matches/${matchId}/participants`);
+                                                const participantsSnap = await get(participantsRef);
+                                                
+                                                let hasActiveScouters = false;
+                                                if (participantsSnap.exists()) {
+                                                    const participants = participantsSnap.val();
+                                                    const activeParticipants = Object.values(participants as any).filter(
+                                                        (p: any) => !p.submittedAt
+                                                    );
+                                                    hasActiveScouters = activeParticipants.length > 0;
+                                                }
+                                                
+                                                // If no active scouters, force end the match
+                                                if (!hasActiveScouters) {
+                                                    await endMatch(matchId);
+                                                    toast("No more active scouters. Match ended.");
+                                                } else {
+                                                    toast("Scouting data submitted successfully!");
+                                                }
+                                                
+                                                // Navigate to dashboard where queue logic handles leaving
+                                                navigate("/dashboard");
+                                            } catch (err) {
+                                                console.error("Submit error:", err);
+                                                toast("Failed to submit. Please try again.");
+                                            } finally {
+                                                setIsSubmitting(false);
+                                            }
+                                        }}
+                                        className="w-full"
+                                        size="lg"
+                                        disabled={isSubmitting}
+                                    >
+                                        {isSubmitting ? "Submitting..." : "Submit Scouting"}
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        )}
+
                         {isInSubjectiveScouting && subjectiveActiveMatch && (
                             <>
                                 <Card>
@@ -1651,6 +1777,15 @@ const Scouting = () => {
                                 </Card>
                             </>
                         )}
+                    </div>
+
+                    <div className="flex justify-center gap-4 py-6 px-6 border-t">
+                        <Button
+                            variant="outline"
+                            onClick={() => window.scrollTo(0, 0)}
+                        >
+                            Back to Top
+                        </Button>
                     </div>
                 </div>
             </main>
