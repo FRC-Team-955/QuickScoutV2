@@ -9,7 +9,7 @@ import {Textarea} from "@/components/ui/textarea";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle,} from "@/components/ui/card";
 import {Label} from "@/components/ui/label";
 import {useAuth} from "@/contexts/AuthContext";
-import {Minus, Pause, Play, Plus, X} from "lucide-react";
+import {Minus, Play, Plus} from "lucide-react";
 import {useQueue} from "@/hooks/use-queue";
 import {useSubjectiveQueue} from "@/hooks/use-subjective-queue";
 import {subscribeToUserAssignment, subscribeToUserSubjectiveAssignment} from "@/lib/queue";
@@ -19,19 +19,6 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/c
 import {toast} from "sonner";
 import {getNextUnplayedMatch} from "@/lib/tba";
 
-const PHASE_DURATIONS = {
-    AUTONOMOUS: 20,
-    TRANSITION: 10,
-    ALLIANCE_SHIFT: 25,
-    END_GAME: 30,
-};
-
-const TELEOP_REFERENCE_DURATION =
-    PHASE_DURATIONS.TRANSITION +
-    PHASE_DURATIONS.ALLIANCE_SHIFT * 4 +
-    PHASE_DURATIONS.END_GAME;
-
-type ScoutingPhase = "idle" | "autonomous" | "teleop" | "complete";
 
 const Scouting = () => {
     const {user} = useAuth();
@@ -351,9 +338,6 @@ const Scouting = () => {
         setGameSense("");
     };
 
-    const [phase, setPhase] = useState<ScoutingPhase>("idle");
-    const [timeRemaining, setTimeRemaining] = useState(0);
-    const [isTimerRunning, setIsTimerRunning] = useState(false);
     const [teamNumber, setTeamNumber] = useState("");
 
     const [autonomousNotes, setAutonomousNotes] = useState("");
@@ -401,18 +385,11 @@ const Scouting = () => {
     const [teleopPassing, setTeleopPassing] = useState<string>("");
     const [gameSense, setGameSense] = useState<string>("");
 
-    const [cancelConfirm, setCancelConfirm] = useState(false);
-    const cancelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-    const intervalRef = useRef<NodeJS.Timeout | null>(null);
-
     const currentMatchIdRef = useRef<string | null>(null);
     const assignedTeamRef = useRef<string | null>(null);
 
     const matchEndedHandledRef = useRef(false);
 
-    const timerCardRef = useRef<HTMLDivElement | null>(null);
-    const [showStickyTimer, setShowStickyTimer] = useState(false);
     const [showConfetti, setShowConfetti] = useState(false);
     const [confettiSize, setConfettiSize] = useState({width: 0, height: 0});
     const confettiTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -439,43 +416,6 @@ const Scouting = () => {
         }, 5000);
     }, []);
 
-    const getPhaseName = (currentPhase: ScoutingPhase): string => {
-        switch (currentPhase) {
-            case "autonomous":
-                return "Autonomous Period";
-            case "teleop":
-                return "Teleop Period";
-            default:
-                return "";
-        }
-    };
-
-    useEffect(() => {
-        if (isTimerRunning && timeRemaining > 0) {
-            intervalRef.current = setInterval(() => {
-                setTimeRemaining((prev) => {
-                    if (prev <= 1) {
-                        setIsTimerRunning(false);
-                        return 0;
-                    }
-                    return prev - 1;
-                });
-            }, 1000);
-        } else {
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
-        }
-
-        return () => {
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
-        };
-    }, [isTimerRunning, timeRemaining]);
-
     const startScouting = (teamNum?: string, opts?: { manual?: boolean }) => {
         const manual = opts?.manual === true;
         isManualSessionRef.current = manual;
@@ -494,9 +434,6 @@ const Scouting = () => {
 
         if (teamNum) setTeamNumber(String(teamNum));
 
-        setPhase("autonomous");
-        setTimeRemaining(PHASE_DURATIONS.AUTONOMOUS);
-        setIsTimerRunning(true);
         setAutonomousNotes("");
         setAutonomousFuel(0);
         setAutoClimb("");
@@ -516,7 +453,7 @@ const Scouting = () => {
                 return;
             }
             if (!assignment) {
-                if (!matchEndedHandledRef.current && phase !== "idle") {
+                if (!matchEndedHandledRef.current && !activeMatch) {
                     matchEndedHandledRef.current = true;
                 }
                 return;
@@ -527,13 +464,13 @@ const Scouting = () => {
 
             matchEndedHandledRef.current = false;
 
-            if (phase === "idle") {
+            if (!activeMatch) {
                 startScouting(String(assignment.teamNumber), {manual: false});
             }
         });
 
         return unsub;
-    }, [user?.id, phase]);
+    }, [user?.id, activeMatch]);
 
     useEffect(() => {
         if (!user?.id) return;
@@ -553,7 +490,7 @@ const Scouting = () => {
 
     // Add beforeunload event listener to prevent accidental reload during scouting
     useEffect(() => {
-        const isScoutingActive = phase !== "idle" || isInSubjectiveScouting || isInQueue || isInSubjectiveQueue;
+        const isScoutingActive = isInSubjectiveScouting || isInQueue || isInSubjectiveQueue;
 
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
             if (isScoutingActive) {
@@ -569,32 +506,11 @@ const Scouting = () => {
                 window.removeEventListener("beforeunload", handleBeforeUnload);
             };
         }
-    }, [phase, isInSubjectiveScouting]);
+    }, [isInSubjectiveScouting, isInQueue, isInSubjectiveQueue]);
 
-    const pauseTimer = () => {
-        setIsTimerRunning(false);
-    };
-
-    const resumeTimer = () => {
-        setIsTimerRunning(true);
-    };
-
-    const switchToTeleop = () => {
-        if (phase !== "autonomous") return;
-        setPhase("teleop");
-        setTimeRemaining(TELEOP_REFERENCE_DURATION);
-        setIsTimerRunning(true);
-    };
-
-    const endGame = () => {
-        if (phase !== "teleop") return;
-        setPhase("complete");
-        setIsTimerRunning(false);
-        setTimeRemaining(0);
-    };
     useEffect(() => {
         if (isManualSessionRef.current) return;
-        if (phase !== "complete" || !activeMatch?.id || !user?.id) return;
+        if (!activeMatch?.id || !user?.id) return;
 
         const checkIfLastScouter = async () => {
             try {
@@ -634,34 +550,7 @@ const Scouting = () => {
             }
         };
         checkIfLastScouter();
-    }, [phase, activeMatch?.id, user?.id, endMatch]);
-
-    const addFuelBy = (amount: number) => {
-        if (isAutonomousPhase) {
-            setAutonomousFuel((prev) => Math.max(0, prev + amount));
-        } else if (isTeleopPhase) {
-            setTeleopFuel((prev) => Math.max(0, prev + amount));
-        }
-    };
-
-    const handleCancelClick = () => {
-        if (!cancelConfirm) {
-            setCancelConfirm(true);
-            if (cancelTimeoutRef.current) {
-                clearTimeout(cancelTimeoutRef.current);
-            }
-            cancelTimeoutRef.current = setTimeout(() => {
-                setCancelConfirm(false);
-            }, 3000);
-        } else {
-            resetScouting();
-            setCancelConfirm(false);
-            if (cancelTimeoutRef.current) {
-                clearTimeout(cancelTimeoutRef.current);
-                cancelTimeoutRef.current = null;
-            }
-        }
-    };
+    }, [activeMatch?.id, user?.id, endMatch]);
 
     const resetScouting = async () => {
         if (Math.random() * 10 < 2) {
@@ -726,9 +615,6 @@ const Scouting = () => {
             }
         }
 
-        setPhase("idle");
-        setIsTimerRunning(false);
-        setTimeRemaining(0);
         setTeamNumber("");
         setAutonomousNotes("");
         setAutonomousFuel(0);
@@ -748,22 +634,6 @@ const Scouting = () => {
         }
     };
 
-    const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, "0")}`;
-    };
-
-    const isAutonomousPhase = phase === "autonomous";
-    const isTeleopPhase = phase === "teleop";
-    const isComplete = phase === "complete";
-    const isActivePhase = phase !== "idle" && phase !== "complete";
-
-    useEffect(() => {
-        if (!isComplete) return;
-        triggerConfetti();
-    }, [isComplete, triggerConfetti]);
-
     useEffect(() => {
         const updateSize = () => {
             setConfettiSize({width: window.innerWidth, height: window.innerHeight});
@@ -773,23 +643,6 @@ const Scouting = () => {
         return () => window.removeEventListener("resize", updateSize);
     }, []);
 
-    useEffect(() => {
-        if (!timerCardRef.current) return;
-
-        const observer = new IntersectionObserver(
-            ([entry]) => {
-                setShowStickyTimer(!entry.isIntersecting);
-            },
-            {
-                root: null,
-                threshold: 0.1,
-            },
-        );
-
-        observer.observe(timerCardRef.current);
-
-        return () => observer.disconnect();
-    }, [isActivePhase]);
 
     return (
         <div className="min-h-screen bg-background">
@@ -810,81 +663,13 @@ const Scouting = () => {
                 <TopBar
                     activeTab={activeTab}
                     onTabChange={handleTabChange}
-                    topContent={
-                        isActivePhase ? (
-                            <div
-                                className="sticky top-[72px] z-20 bg-background/95 backdrop-blur border-b border-border">
-                                <div className="px-6 py-3 grid grid-cols-[1fr_auto_1fr] items-center">
-                                    <div>
-                                        <div className="font-mono font-bold text-sm">
-                                            {getPhaseName(phase)}
-                                        </div>
-                                        {teamNumber && (
-                                            <div className="text-xs text-muted-foreground">
-                                                Team {teamNumber}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div
-                                        className={`text-3xl font-mono font-bold ${
-                                            isTimerRunning ? "text-primary" : "text-muted-foreground"
-                                        }`}
-                                    >
-                                        {formatTime(timeRemaining)}
-                                    </div>
-
-                                    <div
-                                        className="flex flex-col items-end gap-2 sm:flex-row sm:items-center justify-self-end">
-                                        {isAutonomousPhase && (
-                                            <Button
-                                                size="sm"
-                                                onClick={switchToTeleop}
-                                                className="min-w-[100px] justify-center"
-                                            >
-                                                Next Phase
-                                            </Button>
-                                        )}
-                                        {isTeleopPhase && (
-                                            <Button
-                                                size="sm"
-                                                onClick={endGame}
-                                                className="min-w-[100px] justify-center"
-                                            >
-                                                End Game
-                                            </Button>
-                                        )}
-                                        {isTimerRunning ? (
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={handleCancelClick}
-                                                className="min-w-[100px] justify-center"
-                                            >
-                                                Cancel
-                                            </Button>
-                                        ) : !isComplete ? (
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={resumeTimer}
-                                                className="min-w-[120px] justify-center"
-                                            >
-                                                Resume
-                                            </Button>
-                                        ) : null}
-                                    </div>
-                                </div>
-                            </div>
-                        ) : null
-                    }
                 />
 
                 <div className="p-6">
                     <div className="space-y-6">
                         <div className="flex items-center justify-between"></div>
 
-                        {(isLead || (phase === "idle" && !activeMatch)) && !isInSubjectiveScouting && (
+                        {(isLead || !activeMatch) && !isInSubjectiveScouting && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Match Queue</CardTitle>
@@ -996,7 +781,7 @@ const Scouting = () => {
 
                                     <div className="flex gap-3 items-center">
                                         {!isLead ? (
-                                            phase === "idle" && !activeMatch ? (
+                                            !activeMatch ? (
                                                 <Button
                                                     onClick={handleQueueToggle}
                                                     disabled={queueLoading}
@@ -1099,7 +884,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {(isLead || (phase === "idle" && !subjectiveActiveMatch)) && (
+                        {(isLead || !subjectiveActiveMatch) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Subjective Queue</CardTitle>
@@ -1173,7 +958,7 @@ const Scouting = () => {
 
                                     <div className="flex gap-3 items-center">
                                         {!isLead ? (
-                                            phase === "idle" && !subjectiveActiveMatch ? (
+                                            !subjectiveActiveMatch ? (
                                                 <Button
                                                     onClick={handleSubjectiveQueueToggle}
                                                     disabled={subjectiveQueueLoading}
@@ -1278,7 +1063,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {phase === "idle" && !isInSubjectiveScouting && (
+                        {!isInSubjectiveScouting && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Start Manual Scouting Session</CardTitle>
@@ -1318,134 +1103,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isActivePhase && showStickyTimer && (
-                            <Card ref={timerCardRef}>
-                                <CardHeader>
-                                    <div className="flex-1">
-                                        <CardTitle>
-                      <span
-                          className="text-2xl sm:text-[1.25rem] font-mono font-bold whitespace-normal leading-snug block"
-                          style={{
-                              display: "-webkit-box",
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: "vertical",
-                              overflow: "hidden",
-                          }}
-                      >
-                        {getPhaseName(phase)}
-                      </span>
-                                        </CardTitle>
-                                        <CardDescription className="mt-1">
-                                            {isTimerRunning
-                                                ? "Timer is running"
-                                                : isComplete
-                                                    ? "Scouting session complete"
-                                                    : "Timer paused - click resume to continue"}
-                                        </CardDescription>
-                                    </div>
-
-                                    <div className="ml-4 flex flex-col items-end justify-start shrink-0">
-                                        {teamNumber && (
-                                            <div
-                                                className="text-sm font-normal text-muted-foreground mb-2 whitespace-nowrap">
-                                                Team {teamNumber}
-                                            </div>
-                                        )}
-                                        {!isComplete && (
-                                            <div className="hidden sm:block">
-                                                <Button
-                                                    onClick={handleCancelClick}
-                                                    variant={cancelConfirm ? "destructive" : "outline"}
-                                                    size="sm"
-                                                    className={`${
-                                                        cancelConfirm
-                                                            ? "bg-destructive hover:bg-destructive/90"
-                                                            : ""
-                                                    } whitespace-normal text-left leading-tight flex items-center gap-2 h-auto py-2 max-w-[320px]`}
-                                                >
-                          <span className="flex-shrink-0">
-                            <X className="w-4 h-4"/>
-                          </span>
-                                                    <span className="flex-1 min-w-0">
-                            {cancelConfirm
-                                ? "Are you sure? Click again to cancel"
-                                : "Cancel Scouting"}
-                          </span>
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </CardHeader>
-                                <CardContent>
-                                    {/* Mobile: show cancel button below header so it doesn't overflow */}
-                                    {!isComplete && (
-                                        <div className="sm:hidden mb-4">
-                                            <Button
-                                                onClick={handleCancelClick}
-                                                variant={cancelConfirm ? "destructive" : "outline"}
-                                                size="sm"
-                                                className={`w-full ${cancelConfirm ? "bg-destructive hover:bg-destructive/90" : ""} whitespace-normal text-center leading-tight flex items-center justify-center gap-2 h-auto py-2`}
-                                            >
-                        <span className="flex-shrink-0">
-                          <X className="w-4 h-4"/>
-                        </span>
-                                                <span>
-                          {cancelConfirm
-                              ? "Are you sure? Click again to cancel"
-                              : "Cancel Scouting"}
-                        </span>
-                                            </Button>
-                                        </div>
-                                    )}
-                                    <div className="text-center py-4">
-                                        <div
-                                            className={`text-6xl font-mono font-bold ${
-                                                isTimerRunning
-                                                    ? "text-primary"
-                                                    : "text-muted-foreground"
-                                            }`}
-                                        >
-                                            {formatTime(timeRemaining)}
-                                        </div>
-                                        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                                            {isAutonomousPhase && (
-                                                <Button onClick={switchToTeleop} size="sm">
-                                                    Switch to Teleop
-                                                </Button>
-                                            )}
-                                            {isTeleopPhase && (
-                                                <Button onClick={endGame} size="sm">
-                                                    End Game
-                                                </Button>
-                                            )}
-                                            {isTimerRunning ? (
-                                                <Button
-                                                    onClick={pauseTimer}
-                                                    variant="outline"
-                                                    size="sm"
-                                                >
-                                                    <Pause className="w-4 h-4 mr-2"/>
-                                                    Pause Timer
-                                                </Button>
-                                            ) : (
-                                                !isComplete && (
-                                                    <Button
-                                                        onClick={resumeTimer}
-                                                        variant="outline"
-                                                        size="sm"
-                                                    >
-                                                        <Play className="w-4 h-4 mr-2"/>
-                                                        Resume Timer
-                                                    </Button>
-                                                )
-                                            )}
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {isActivePhase && (
+                        {activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Autonomous Notes</CardTitle>
@@ -1465,7 +1123,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isActivePhase && (
+                        {activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Autonomous Fuel</CardTitle>
@@ -1525,7 +1183,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isActivePhase && (
+                        {activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Auto Climb</CardTitle>
@@ -1550,7 +1208,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isTeleopPhase && (
+                        {activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Notes</CardTitle>
@@ -1569,7 +1227,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isTeleopPhase && (
+                        {activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Fuel</CardTitle>
@@ -1629,7 +1287,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isTeleopPhase && (
+                        {activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Climb</CardTitle>
@@ -1679,7 +1337,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isTeleopPhase && (
+                        {activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Defense Score</CardTitle>
@@ -1704,87 +1362,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isComplete && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Scouting Complete!</CardTitle>
-                                    <CardDescription>
-                                        All phases completed for Team {teamNumber}
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="p-4 border rounded-lg">
-                                            <p className="text-sm text-muted-foreground">
-                                                Autonomous Fuel
-                                            </p>
-                                            <p className="text-2xl font-bold">{autonomousFuel}</p>
-                                        </div>
-
-                                        <div className="p-4 border rounded-lg">
-                                            <p className="text-sm text-muted-foreground">
-                                                Auto Climb?
-                                            </p>
-                                            <p className="text-2xl font-bold">
-                                                {autoClimb === "yes" ? "Yes" : "No"}
-                                            </p>
-                                        </div>
-
-                                        <div className="p-4 border rounded-lg">
-                                            <p className="text-sm text-muted-foreground">
-                                                Teleop Fuel
-                                            </p>
-                                            <p className="text-2xl font-bold">{teleopFuel}</p>
-                                        </div>
-
-                                        <div className="p-4 border rounded-lg">
-                                            <p className="text-sm text-muted-foreground">
-                                                Teleop Climb?
-                                            </p>
-                                            <p className="text-2xl font-bold">
-                                                {teleopClimb === "yes" ? "Yes" : "No"}
-                                            </p>
-                                        </div>
-
-                                        <div className="p-4 border rounded-lg">
-                                            <p className="text-sm text-muted-foreground">
-                                                Total Fuel
-                                            </p>
-                                            <p className="text-2xl font-bold">
-                                                {autonomousFuel + teleopFuel}
-                                            </p>
-                                        </div>
-
-                                        <div className="p-4 border rounded-lg">
-                                            <p className="text-sm text-muted-foreground">
-                                                Climb Level
-                                            </p>
-                                            <p className="text-2xl font-bold">
-                                                {teleopClimb === "yes" ? climbLevel || "N/A" : "N/A"}
-                                            </p>
-                                        </div>
-
-                                        <div className="p-4 border rounded-lg">
-                                            <p className="text-sm text-muted-foreground">
-                                                Defense Score
-                                            </p>
-                                            <p className="text-2xl font-bold">
-                                                {defenseScore || "N/A"}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <Button
-                                        onClick={resetScouting}
-                                        variant="outline"
-                                        className="w-full"
-                                    >
-                                        Submit Scouting
-                                    </Button>
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {isActivePhase && (
+                        {activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Shooting on the Move & Robot Tipped</CardTitle>
