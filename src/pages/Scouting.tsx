@@ -1181,7 +1181,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && (
+                        {activeMatch && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Team Number & Notes</CardTitle>
@@ -1205,7 +1205,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && (
+                        {activeMatch && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Autonomous Notes</CardTitle>
@@ -1225,7 +1225,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && (
+                        {activeMatch && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Autonomous Fuel</CardTitle>
@@ -1285,7 +1285,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && (
+                        {activeMatch && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Auto Climb</CardTitle>
@@ -1310,7 +1310,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && (
+                        {activeMatch && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Notes</CardTitle>
@@ -1329,7 +1329,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && (
+                        {activeMatch && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Fuel</CardTitle>
@@ -1389,7 +1389,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && (
+                        {activeMatch && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Climb</CardTitle>
@@ -1439,7 +1439,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && (
+                        {activeMatch && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Defense Score</CardTitle>
@@ -1464,7 +1464,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && (
+                        {activeMatch && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Shooting on the Move & Robot Tipped</CardTitle>
@@ -1511,7 +1511,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && (
+                        {activeMatch && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardContent className="pt-6">
                                     <Button
@@ -1562,7 +1562,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isInSubjectiveScouting && subjectiveActiveMatch && (
+                        {isInSubjectiveScouting && subjectiveActiveMatch && !isLead && (
                             <>
                                 <Card>
                                     <CardHeader>
