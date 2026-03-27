@@ -927,37 +927,35 @@ const Scouting = () => {
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    {activeMatch.participants && Object.keys(activeMatch.participants).length > 0 ? (
+                                    {activeMatch.participants && activeMatch.participants.length > 0 ? (
                                         <ul className="space-y-2">
-                                            {Object.entries(activeMatch.participants)
-                                                .filter(([key]) => !/^\d+$/.test(key))
-                                                .map(([key, participant]: [string, any]) => (
-                                                    <li
-                                                        key={key}
-                                                        className="flex items-center justify-between p-2 rounded-md border bg-secondary/50"
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <div
-                                                                className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium">
-                                                                {participant.scoutName?.charAt(0)?.toUpperCase() || "?"}
+                                            {activeMatch.participants.map((participant: any, idx: number) => (
+                                                <li
+                                                    key={participant.userId}
+                                                    className="flex items-center justify-between p-2 rounded-md border bg-secondary/50"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div
+                                                            className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium">
+                                                            {participant.name?.charAt(0)?.toUpperCase() || "?"}
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-sm font-medium">
+                                                                {participant.name}
                                                             </div>
-                                                            <div>
-                                                                <div className="text-sm font-medium">
-                                                                    {participant.scoutName}
-                                                                </div>
-                                                                <div className="text-xs text-muted-foreground">
-                                                                    Team {participant.teamNumber || "—"}
-                                                                </div>
+                                                            <div className="text-xs text-muted-foreground">
+                                                                Team {participant.assignedTeam || "—"}
                                                             </div>
                                                         </div>
-                                                        {!participant.submittedAt && (
-                                                            <div
-                                                                className="text-xs px-2 py-1 rounded-md bg-green-50 text-green-700 font-medium">
-                                                                Scouting
-                                                            </div>
-                                                        )}
-                                                    </li>
-                                                ))}
+                                                    </div>
+                                                    {idx < 6 && (
+                                                        <div
+                                                            className="text-xs px-2 py-1 rounded-md bg-green-50 text-green-700 font-medium">
+                                                            Scouting
+                                                        </div>
+                                                    )}
+                                                </li>
+                                            ))}
                                         </ul>
                                     ) : (
                                         <p className="text-sm text-muted-foreground">
@@ -1525,7 +1523,7 @@ const Scouting = () => {
                                             setIsSubmitting(true);
                                             try {
                                                 await resetScouting();
-                                                
+
                                                 const matchId = activeMatch.id;
                                                 const db = getDatabase();
                                                 const participantsRef = ref(db, `matches/${matchId}/participants`);
