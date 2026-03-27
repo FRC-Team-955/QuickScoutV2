@@ -79,6 +79,15 @@ export type SubjectiveScoutingEntry = {
         blockingEffectiveness: string;
         allyCooperation: string;
     };
+    misc?: {
+        defensiveSkill?: string;
+        robotReliability?: string;
+        robotPenalties?: string;
+        autoFuel?: string;
+        autoClimb?: string;
+        teleopPassing?: string;
+        gameSense?: string;
+    };
     submittedAt: number;
 };
 
@@ -300,6 +309,7 @@ const Analytics = () => {
                             const robotPerf = participantValue.robotPerformance as Record<string, unknown> || {};
                             const teamDyn = participantValue.teamDynamics as Record<string, unknown> || {};
                             const tactical = participantValue.tacticalInsights as Record<string, unknown> || {};
+                            const misc = participantValue.misc as Record<string, unknown> || {};
 
                             allSubjectiveEntries.push({
                                 id: `${matchId}_${userId}`,
@@ -323,6 +333,15 @@ const Analytics = () => {
                                     blockingEffectiveness: (tactical.blockingEffectiveness as string) || "",
                                     allyCooperation: (tactical.allyCooperation as string) || "",
                                 },
+                                  misc: {
+                                      defensiveSkill: (misc.defensiveSkill as string) || "",
+                                      robotReliability: (misc.robotReliability as string) || (misc.robotReliablity as string) || "",
+                                      robotPenalties: (misc.robotPenalties as string) || "",
+                                      autoFuel: (misc.autoFuel as string) || "",
+                                      autoClimb: (misc.autoClimb as string) || (misc.autoClimb1 as string) || "",
+                                      teleopPassing: (misc.teleopPassing as string) || "",
+                                      gameSense: (misc.gameSense as string) || "",
+                                  },
                                 submittedAt: (participantValue.submittedAt as number) || 0,
                             });
                         });
@@ -594,6 +613,44 @@ const Analytics = () => {
                                                     <span className="text-muted-foreground">Scout:</span>
                                                     <span className="font-medium">{entry.scoutName}</span>
                                                 </div>
+                                                {/* Section 4: Misc */}
+                                                {entry.misc && (
+                                                    <div className="pt-4">
+                                                        <h4 className="font-semibold text-sm mb-3 text-primary">Section 4: Misc</h4>
+                                                        <div className="space-y-2 text-sm">
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Defensive Skill</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.defensiveSkill || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Robot Reliability</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.robotReliability || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Robot Penalties</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.robotPenalties || "N/A"}</p>
+                                                            </div>
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                <div className="p-3 bg-muted rounded border border-border">
+                                                                    <p className="font-semibold">Auto Fuel</p>
+                                                                    <p className="text-foreground mt-1">{entry.misc.autoFuel || "N/A"}</p>
+                                                                </div>
+                                                                <div className="p-3 bg-muted rounded border border-border">
+                                                                    <p className="font-semibold">Auto Climb</p>
+                                                                    <p className="text-foreground mt-1">{entry.misc.autoClimb || "N/A"}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Teleop Passing</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.teleopPassing || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Game Sense</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.gameSense || "N/A"}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
                                                 <div className="grid grid-cols-2 gap-2 pt-1">
                                                     <div className="bg-primary/5 p-2 rounded">
                                                         <p className="text-[10px] uppercase text-muted-foreground">Auto</p>
@@ -1153,6 +1210,44 @@ const Analytics = () => {
                                                         </div>
                                                     </div>
                                                 </div>
+                                                {/* Section 4: Misc (new subjective prompts) */}
+                                                {entry.misc && (
+                                                    <div className="pt-4 border-t border-border">
+                                                        <h4 className="font-semibold text-sm mb-3 text-primary">Section 4: Misc</h4>
+                                                        <div className="space-y-2 text-sm">
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Defensive Skill</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.defensiveSkill || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Robot Reliability</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.robotReliability || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Robot Penalties</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.robotPenalties || "N/A"}</p>
+                                                            </div>
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                <div className="p-3 bg-muted rounded border border-border">
+                                                                    <p className="font-semibold">Auto Fuel</p>
+                                                                    <p className="text-foreground mt-1">{entry.misc.autoFuel || "N/A"}</p>
+                                                                </div>
+                                                                <div className="p-3 bg-muted rounded border border-border">
+                                                                    <p className="font-semibold">Auto Climb</p>
+                                                                    <p className="text-foreground mt-1">{entry.misc.autoClimb || "N/A"}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Teleop Passing</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.teleopPassing || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Game Sense</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.gameSense || "N/A"}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </CardContent>
                                         </Card>
                                     ))}

@@ -254,6 +254,16 @@ const Scouting = () => {
                         blockingEffectiveness,
                         allyCooperation,
                     },
+                    // misc fields added for analytics
+                    misc: {
+                        defensiveSkill,
+                        robotReliability: robotReliablity,
+                        robotPenalties,
+                        autoFuel,
+                        autoClimb: autoClimb1,
+                        teleopPassing,
+                        gameSense,
+                    },
                 });
                 await remove(ref(db, `users/${user.id}/currentSubjectiveAssignment`));
                 toast("Subjective scouting submitted!");
