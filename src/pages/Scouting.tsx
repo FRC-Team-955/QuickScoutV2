@@ -193,7 +193,8 @@ const Scouting = () => {
             }
 
             const matchId = await start(assigned);
-            toast(`Match started — id: ${matchId}`);
+            const teamList = assigned.filter(t => t).join(", ");
+            toast(`Match started — Teams: ${teamList}`);
             setTeamAssignments(["", "", "", "", "", ""]);
         } catch (err) {
             console.error(err);
@@ -449,6 +450,9 @@ const Scouting = () => {
         setDefenseScore("");
         setEndGameNotes("");
         setDidClimb(false);
+
+        // Show scouter which team they're scouting
+        toast(`Scouting Team ${effectiveTeam}`);
     };
 
     const lastProcessedAssignmentRef = useRef<string | null>(null);
@@ -923,35 +927,37 @@ const Scouting = () => {
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    {activeMatch.participants && activeMatch.participants.length > 0 ? (
+                                    {activeMatch.participants && Object.keys(activeMatch.participants).length > 0 ? (
                                         <ul className="space-y-2">
-                                            {activeMatch.participants.map((participant: any, idx: number) => (
-                                                <li
-                                                    key={participant.userId}
-                                                    className="flex items-center justify-between p-2 rounded-md border bg-secondary/50"
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div
-                                                            className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium">
-                                                            {participant.name?.charAt(0)?.toUpperCase() || "?"}
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-sm font-medium">
-                                                                {participant.name}
+                                            {Object.entries(activeMatch.participants)
+                                                .filter(([key]) => !/^\d+$/.test(key))
+                                                .map(([key, participant]: [string, any]) => (
+                                                    <li
+                                                        key={key}
+                                                        className="flex items-center justify-between p-2 rounded-md border bg-secondary/50"
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <div
+                                                                className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium">
+                                                                {participant.scoutName?.charAt(0)?.toUpperCase() || "?"}
                                                             </div>
-                                                            <div className="text-xs text-muted-foreground">
-                                                                Team {participant.assignedTeam || "—"}
+                                                            <div>
+                                                                <div className="text-sm font-medium">
+                                                                    {participant.scoutName}
+                                                                </div>
+                                                                <div className="text-xs text-muted-foreground">
+                                                                    Team {participant.teamNumber || "—"}
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                    {idx < 6 && (
-                                                        <div
-                                                            className="text-xs px-2 py-1 rounded-md bg-green-50 text-green-700 font-medium">
-                                                            Scouting
-                                                        </div>
-                                                    )}
-                                                </li>
-                                            ))}
+                                                        {!participant.submittedAt && (
+                                                            <div
+                                                                className="text-xs px-2 py-1 rounded-md bg-green-50 text-green-700 font-medium">
+                                                                Scouting
+                                                            </div>
+                                                        )}
+                                                    </li>
+                                                ))}
                                         </ul>
                                     ) : (
                                         <p className="text-sm text-muted-foreground">
@@ -1518,10 +1524,9 @@ const Scouting = () => {
                                         onClick={async () => {
                                             setIsSubmitting(true);
                                             try {
-                                                const matchId = activeMatch.id;
                                                 await resetScouting();
-
-                                                // Check if there are any active scouters left
+                                                
+                                                const matchId = activeMatch.id;
                                                 const db = getDatabase();
                                                 const participantsRef = ref(db, `matches/${matchId}/participants`);
                                                 const participantsSnap = await get(participantsRef);
@@ -1542,15 +1547,17 @@ const Scouting = () => {
                                                 } else {
                                                     toast("Scouting data submitted successfully!");
                                                 }
-
-                                                // Navigate to dashboard where queue logic handles leaving
-                                                navigate("/dashboard");
                                             } catch (err) {
                                                 console.error("Submit error:", err);
                                                 toast("Failed to submit. Please try again.");
-                                            } finally {
                                                 setIsSubmitting(false);
+                                                return;
                                             }
+
+                                            // Navigate to dashboard after successful submission
+                                            setTimeout(() => {
+                                                navigate("/dashboard");
+                                            }, 500);
                                         }}
                                         className="w-full"
                                         size="lg"
@@ -1765,10 +1772,26 @@ const Scouting = () => {
                                     </CardHeader>
                                     <CardContent>
                                         <Button
-                                            onClick={resetSubjectiveScouting}
+                                            onClick={async () => {
+                                                setIsSubmitting(true);
+                                                try {
+                                                    await resetSubjectiveScouting();
+                                                    toast("Subjective scouting data submitted successfully!");
+                                                    // Navigate to dashboard after successful submission
+                                                    setTimeout(() => {
+                                                        navigate("/dashboard");
+                                                    }, 500);
+                                                } catch (err) {
+                                                    console.error("Submit error:", err);
+                                                    toast("Failed to submit. Please try again.");
+                                                    setIsSubmitting(false);
+                                                }
+                                            }}
                                             className="w-full"
+                                            size="lg"
+                                            disabled={isSubmitting}
                                         >
-                                            Submit Subjective Scouting
+                                            {isSubmitting ? "Submitting..." : "Submit Subjective Scouting"}
                                         </Button>
                                     </CardContent>
                                 </Card>
