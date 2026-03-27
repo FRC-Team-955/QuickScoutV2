@@ -193,7 +193,8 @@ const Scouting = () => {
             }
 
             const matchId = await start(assigned);
-            toast(`Match started — id: ${matchId}`);
+            const teamList = assigned.filter(t => t).join(", ");
+            toast(`Match started — Teams: ${teamList}`);
             setTeamAssignments(["", "", "", "", "", ""]);
         } catch (err) {
             console.error(err);
@@ -449,6 +450,9 @@ const Scouting = () => {
         setDefenseScore("");
         setEndGameNotes("");
         setDidClimb(false);
+
+        // Show scouter which team they're scouting
+        toast(`Scouting Team ${effectiveTeam}`);
     };
 
     const lastProcessedAssignmentRef = useRef<string | null>(null);
