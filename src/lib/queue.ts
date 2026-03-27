@@ -476,6 +476,28 @@ export const endMatch = async (
     }
 };
 
+export const signalMatchEnd = async (
+    matchId: string,
+    signalledBy?: { id: string; name?: string },
+) => {
+    if (!matchId) throw new Error("matchId required");
+    try {
+        const matchSnap = await get(ref(db, `matches/${matchId}`));
+        if (!matchSnap.exists()) throw new Error("Match not found");
+        const match = matchSnap.val();
+        if (match.status !== "active") return;
+
+        // Mark that lead has signaled end (but don't actually end the match)
+        await set(ref(db, `matches/${matchId}/leadSignaledEnd`), true);
+        await set(ref(db, `matches/${matchId}/leadSignaledAt`), serverTimestamp());
+        if (signalledBy?.id)
+            await set(ref(db, `matches/${matchId}/leadSignaledBy`), signalledBy.id);
+    } catch (err) {
+        console.error("signalMatchEnd error", err);
+        throw err;
+    }
+};
+
 /**
  * Remove any queue entries that match `name` but belong to other userIds.
  * Useful when a user logs in and we want to avoid duplicate-name entries.

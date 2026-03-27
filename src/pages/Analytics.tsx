@@ -9,6 +9,7 @@ import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
 import {Button} from "@/components/ui/button";
 import {get, ref} from "firebase/database";
 import {db} from "@/lib/firebase";
+import {isOSFData, OSF_DATE_RANGE} from "@/lib/dateUtils";
 import {
     CartesianGrid,
     Legend,
@@ -79,6 +80,15 @@ export type SubjectiveScoutingEntry = {
         blockingEffectiveness: string;
         allyCooperation: string;
     };
+    misc?: {
+        defensiveSkill?: string;
+        robotReliability?: string;
+        robotPenalties?: string;
+        autoFuel?: string;
+        autoClimb?: string;
+        teleopPassing?: string;
+        gameSense?: string;
+    };
     submittedAt: number;
 };
 
@@ -93,7 +103,7 @@ const Analytics = () => {
     const [pitScoutingEntries, setPitScoutingEntries] = useState<PitScoutingEntry[]>([]);
     const [pitTeamNumberInput, setPitTeamNumberInput] = useState("");
     const [subjectiveScoutingEntries, setSubjectiveScoutingEntries] = useState<SubjectiveScoutingEntry[]>([]);
-    const [subjectiveTeamNumberInput, setSubjectiveTeamNumberInput] = useState("");
+    const [eventType, setEventType] = useState<"all" | "osf" | "current">("all");
 
     const handleTabChange = (tab: string) => {
         setActiveTab(tab);
@@ -290,15 +300,24 @@ const Analytics = () => {
 
                             if (!participantValue || typeof participantValue !== 'object') return;
 
+                            const teamNumber = (participantValue.teamNumber as string)?.trim();
+                            const scoutName = (participantValue.scoutName as string)?.trim();
+
+                            if (!teamNumber || !scoutName) {
+                                console.debug(`Skipping subjective entry ${matchId}_${userId}: missing team number or scout name`);
+                                return;
+                            }
+
                             const robotPerf = participantValue.robotPerformance as Record<string, unknown> || {};
                             const teamDyn = participantValue.teamDynamics as Record<string, unknown> || {};
                             const tactical = participantValue.tacticalInsights as Record<string, unknown> || {};
+                            const misc = participantValue.misc as Record<string, unknown> || {};
 
                             allSubjectiveEntries.push({
                                 id: `${matchId}_${userId}`,
                                 matchId,
-                                teamNumber: (participantValue.teamNumber as string) || "N/A",
-                                scoutName: (participantValue.scoutName as string) || "Unknown",
+                                teamNumber: teamNumber,
+                                scoutName: scoutName,
                                 userId,
                                 robotPerformance: {
                                     autonomousEffectiveness: (robotPerf.autonomousEffectiveness as string) || "",
@@ -316,6 +335,15 @@ const Analytics = () => {
                                     blockingEffectiveness: (tactical.blockingEffectiveness as string) || "",
                                     allyCooperation: (tactical.allyCooperation as string) || "",
                                 },
+                                  misc: {
+                                      defensiveSkill: (misc.defensiveSkill as string) || "",
+                                      robotReliability: (misc.robotReliability as string) || (misc.robotReliablity as string) || "",
+                                      robotPenalties: (misc.robotPenalties as string) || "",
+                                      autoFuel: (misc.autoFuel as string) || "",
+                                      autoClimb: (misc.autoClimb as string) || (misc.autoClimb1 as string) || "",
+                                      teleopPassing: (misc.teleopPassing as string) || "",
+                                      gameSense: (misc.gameSense as string) || "",
+                                  },
                                 submittedAt: (participantValue.submittedAt as number) || 0,
                             });
                         });
@@ -335,7 +363,16 @@ const Analytics = () => {
     }, []);
 
     const sortedAndFiltered = useMemo(() => {
-        return matchEntries.sort((a, b) => {
+        let filtered = matchEntries;
+        
+        // Filter by event type
+        if (eventType === "osf") {
+            filtered = filtered.filter(e => isOSFData(e.submittedAt));
+        } else if (eventType === "current") {
+            filtered = filtered.filter(e => !isOSFData(e.submittedAt));
+        }
+        
+        return filtered.sort((a, b) => {
             switch (sortBy) {
                 case "newest":
                     return b.submittedAt - a.submittedAt;
@@ -353,13 +390,20 @@ const Analytics = () => {
                     return 0;
             }
         });
-    }, [matchEntries, sortBy]);
+    }, [matchEntries, sortBy, eventType]);
 
     const teamSpecificData = useMemo(() => {
         const teamNum = parseInt(teamNumberInput);
         if (isNaN(teamNum)) return null;
 
-        const teamMatches = matchEntries.filter(entry => entry.teamNumber === teamNum);
+        let teamMatches = matchEntries.filter(entry => entry.teamNumber === teamNum);
+        
+        // Filter by event type
+        if (eventType === "osf") {
+            teamMatches = teamMatches.filter(e => isOSFData(e.submittedAt));
+        } else if (eventType === "current") {
+            teamMatches = teamMatches.filter(e => !isOSFData(e.submittedAt));
+        }
 
         if (teamMatches.length === 0) return null;
 
@@ -384,10 +428,36 @@ const Analytics = () => {
                 defense: {avg: avg(defenseRatings), max: max(defenseRatings), min: min(defenseRatings)},
             }
         };
-    }, [matchEntries, teamNumberInput]);
+    }, [matchEntries, teamNumberInput, eventType]);
+
+    const filteredPitScoutingEntries = useMemo(() => {
+        let filtered = pitScoutingEntries;
+        
+        // Filter by event type
+        if (eventType === "osf") {
+            filtered = filtered.filter(e => isOSFData(e.submittedAt));
+        } else if (eventType === "current") {
+            filtered = filtered.filter(e => !isOSFData(e.submittedAt));
+        }
+        
+        return filtered;
+    }, [pitScoutingEntries, eventType]);
+
+    const filteredSubjectiveScoutingEntries = useMemo(() => {
+        let filtered = subjectiveScoutingEntries;
+        
+        // Filter by event type
+        if (eventType === "osf") {
+            filtered = filtered.filter(e => isOSFData(e.submittedAt));
+        } else if (eventType === "current") {
+            filtered = filtered.filter(e => !isOSFData(e.submittedAt));
+        }
+        
+        return filtered;
+    }, [subjectiveScoutingEntries, eventType]);
 
     const bubbleData = useMemo(() => {
-        return matchEntries.map((m) => ({
+        return sortedAndFiltered.map((m) => ({
             x: m.score_teleop,
             y: m.score_auto,
             r: Math.max(3, (m.climbValue || 0) * 6),
@@ -395,76 +465,120 @@ const Analytics = () => {
             team: m.teamNumber,
             id: m.id,
         }));
-    }, [matchEntries]);
+    }, [sortedAndFiltered]);
 
     const handleExportAllData = () => {
-        const csv: string[] = [];
+        // Helper: escape a single CSV field according to RFC4180 (double-quote, double internal quotes)
+        const escapeField = (v: unknown) => {
+            if (v === null || v === undefined) return "";
+            const s = String(v);
+            // keep line breaks (spreadsheet apps like Excel/Sheets will display multi-line cells)
+            return `"${s.replace(/"/g, '""')}"`;
+        };
 
-        // Export Match Scouting Data
-        csv.push("MATCH SCOUTING DATA");
-        csv.push("Match Key,Station,Team Number,Scout Name,Auto Score,Teleop Score,Total Score,Climb,Defense Rating,Robot Tipped,Submitted At");
-        matchEntries.forEach((entry) => {
-            const row = [
-                entry.matchKey,
-                entry.station,
-                entry.teamNumber,
-                entry.scoutName,
-                entry.score_auto,
-                entry.score_teleop,
-                entry.total_score,
-                entry.climb,
-                entry.defense_rating,
-                entry.robotTipped ? "Yes" : "No",
-                new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"})
-            ];
-            csv.push(row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
-        });
+        // Build a CSV section with a title, header row and rows (array of arrays)
+        const buildSection = (title: string, headers: string[], rows: Array<Array<unknown>>) => {
+            const out: string[] = [];
+            // section title in first column to make it obvious when opening raw CSV
+            out.push(escapeField(title));
+            out.push(headers.map(escapeField).join(","));
+            rows.forEach((r) => out.push(r.map(escapeField).join(",")));
+            out.push(""); // blank line after section
+            return out;
+        };
 
-        csv.push("");
-        csv.push("");
+        const lines: string[] = [];
 
-        // Export Pit Scouting Data
-        csv.push("PIT SCOUTING DATA");
-        csv.push("Team Number,Scout Name,Scout ID,Submitted At,Responses");
-        pitScoutingEntries.forEach((entry) => {
-            const responsesStr = JSON.stringify(entry.responses).replace(/"/g, '""');
-            const row = [
+        // Match Scouting
+        const matchHeaders = [
+            "Match Key",
+            "Station",
+            "Team Number",
+            "Scout Name",
+            "Auto Score",
+            "Teleop Score",
+            "Total Score",
+            "Climb",
+            "Defense Rating",
+            "Robot Tipped",
+            "Submitted At (PST)"
+        ];
+        const matchRows = matchEntries.map((entry) => [
+            entry.matchKey,
+            entry.station,
+            entry.teamNumber,
+            entry.scoutName,
+            entry.score_auto,
+            entry.score_teleop,
+            entry.total_score,
+            entry.climb,
+            entry.defense_rating,
+            entry.robotTipped ? "Yes" : "No",
+            new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"})
+        ] as Array<unknown>);
+
+        lines.push(...buildSection("MATCH SCOUTING DATA", matchHeaders, matchRows));
+
+        // Pit Scouting
+        const pitHeaders = ["Team Number", "Scout Name", "Scout ID", "Submitted At (PST)", "Responses (multi-line JSON) "];
+        const pitRows = pitScoutingEntries.map((entry) => {
+            // pretty-print responses JSON for readability (multi-line field)
+            let prettyResponses: string;
+            try {
+                prettyResponses = JSON.stringify(entry.responses || {}, null, 2);
+            } catch (e) {
+                prettyResponses = String(entry.responses || "");
+            }
+            return [
                 entry.teamNumber,
                 entry.scoutName,
                 entry.scoutId,
                 new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"}),
-                responsesStr
-            ];
-            csv.push(row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
+                prettyResponses
+            ] as Array<unknown>;
         });
+        lines.push(...buildSection("PIT SCOUTING DATA", pitHeaders, pitRows));
 
-        csv.push("");
-        csv.push("");
+        // Subjective Scouting
+        const subjHeaders = [
+            "Match ID",
+            "Team Number",
+            "Scout Name",
+            "Submitted At (PST)",
+            "Subjective Summary (multi-line)"
+        ];
+        const subjRows = subjectiveScoutingEntries.map((entry) => {
+            // build a readable multi-line summary per subjective entry
+            const parts: string[] = [];
+            parts.push("=== Section 1: Robot Performance & Strategy ===");
+            parts.push(`Autonomous Effectiveness: ${entry.robotPerformance.autonomousEffectiveness || ""}`);
+            parts.push(`Can Quickly Score: ${entry.robotPerformance.canQuicklyScore || ""}`);
+            parts.push(`Can Climb: ${entry.robotPerformance.canClimb || ""}`);
+            if (entry.robotPerformance.climbLevel) parts.push(`Climb Level: ${entry.robotPerformance.climbLevel}`);
+            parts.push("");
+            parts.push("=== Section 2: Team Dynamics ===");
+            parts.push(`Performance Under Pressure: ${entry.teamDynamics.performanceUnderPressure || ""}`);
+            parts.push(`Team Focus: ${entry.teamDynamics.teamFocus || ""}`);
+            parts.push(`Driver Synchronization: ${entry.teamDynamics.driverSynchronization || ""}`);
+            parts.push("");
+            parts.push("=== Section 3: Tactical Insights ===");
+            parts.push(`Defensive Strategy: ${entry.tacticalInsights.defensiveStrategy || ""}`);
+            parts.push(`Blocking Effectiveness: ${entry.tacticalInsights.blockingEffectiveness || ""}`);
+            parts.push(`Ally Cooperation: ${entry.tacticalInsights.allyCooperation || ""}`);
 
-        // Export Subjective Scouting Data
-        csv.push("SUBJECTIVE SCOUTING DATA");
-        csv.push("Match ID,Team Number,Scout Name,Autonomous Effectiveness,Can Quickly Score,Can Climb,Climb Level,Performance Under Pressure,Team Focus,Driver Synchronization,Defensive Strategy,Blocking Effectiveness,Ally Cooperation,Submitted At");
-        subjectiveScoutingEntries.forEach((entry) => {
-            const row = [
+            const summary = parts.join("\n");
+
+            return [
                 entry.matchId,
                 entry.teamNumber,
                 entry.scoutName,
-                entry.robotPerformance.autonomousEffectiveness,
-                entry.robotPerformance.canQuicklyScore,
-                entry.robotPerformance.canClimb,
-                entry.robotPerformance.climbLevel || "N/A",
-                entry.teamDynamics.performanceUnderPressure,
-                entry.teamDynamics.teamFocus,
-                entry.teamDynamics.driverSynchronization,
-                entry.tacticalInsights.defensiveStrategy,
-                entry.tacticalInsights.blockingEffectiveness,
-                entry.tacticalInsights.allyCooperation,
-                new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"})
-            ];
-            csv.push(row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
+                new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"}),
+                summary
+            ] as Array<unknown>;
         });
+        lines.push(...buildSection("SUBJECTIVE SCOUTING DATA", subjHeaders, subjRows));
 
-        const csvContent = csv.join("\n");
+        const csvContent = lines.join("\r\n");
         const blob = new Blob([csvContent], {type: "text/csv;charset=utf-8;"});
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
@@ -497,6 +611,20 @@ const Analytics = () => {
                             <TabsTrigger value="pit-scouting">Pit Scouting</TabsTrigger>
                             <TabsTrigger value="subjective">Subjective Scouting</TabsTrigger>
                         </TabsList>
+
+                        <div className="flex items-center gap-3 py-4">
+                            <span className="text-sm font-medium">Event Type:</span>
+                            <Select value={eventType} onValueChange={(v: any) => setEventType(v)}>
+                                <SelectTrigger className="w-[200px]">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Events</SelectItem>
+                                    <SelectItem value="osf">OSF ({OSF_DATE_RANGE})</SelectItem>
+                                    <SelectItem value="current">Current Event</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
 
                         <TabsContent value="all" className="space-y-4">
                             <div className="flex items-center justify-between">
@@ -543,6 +671,44 @@ const Analytics = () => {
                                                     <span className="text-muted-foreground">Scout:</span>
                                                     <span className="font-medium">{entry.scoutName}</span>
                                                 </div>
+                                                {/* Section 4: Misc */}
+                                                {entry.misc && (
+                                                    <div className="pt-4">
+                                                        <h4 className="font-semibold text-sm mb-3 text-primary">Section 4: Misc</h4>
+                                                        <div className="space-y-2 text-sm">
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Defensive Skill</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.defensiveSkill || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Robot Reliability</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.robotReliability || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Robot Penalties</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.robotPenalties || "N/A"}</p>
+                                                            </div>
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                <div className="p-3 bg-muted rounded border border-border">
+                                                                    <p className="font-semibold">Auto Fuel</p>
+                                                                    <p className="text-foreground mt-1">{entry.misc.autoFuel || "N/A"}</p>
+                                                                </div>
+                                                                <div className="p-3 bg-muted rounded border border-border">
+                                                                    <p className="font-semibold">Auto Climb</p>
+                                                                    <p className="text-foreground mt-1">{entry.misc.autoClimb || "N/A"}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Teleop Passing</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.teleopPassing || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Game Sense</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.gameSense || "N/A"}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
                                                 <div className="grid grid-cols-2 gap-2 pt-1">
                                                     <div className="bg-primary/5 p-2 rounded">
                                                         <p className="text-[10px] uppercase text-muted-foreground">Auto</p>
@@ -779,21 +945,18 @@ const Analytics = () => {
                                                 <XAxis type="number" dataKey="x" name="Teleop Points" unit=""/>
                                                 <YAxis type="number" dataKey="y" name="Auto Points" unit=""/>
                                                 <ZAxis dataKey="r" range={[50, 400]}/>
+                                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                                                 <ReTooltip cursor={{strokeDasharray: '3 3'}}
-                                                           formatter={(value: unknown, name: unknown) => [value, name]}/>
+                                                           formatter={((value: any, name: any) => [value, name]) as any} />
                                                 <Legend/>
                                                 <Scatter
                                                     name="Scouts"
                                                     data={bubbleData}
                                                     fill="#00C853"
-                                                    shape={(props: unknown) => {
-                                                        const {cx, cy, payload} = props as {
-                                                            cx: number;
-                                                            cy: number;
-                                                            payload: { robotTipped?: boolean; r?: number }
-                                                        };
-                                                        const color = payload.robotTipped ? '#FF5252' : '#2ECC71';
-                                                        const radius = payload.r || 6;
+                                                    shape={(props: any) => {
+                                                        const {cx, cy, payload} = props as any;
+                                                        const color = payload?.robotTipped ? '#FF5252' : '#2ECC71';
+                                                        const radius = (payload?.r as number) || 6;
                                                         return (
                                                             <g>
                                                                 <circle cx={cx} cy={cy} r={radius} fill={color}
@@ -801,7 +964,7 @@ const Analytics = () => {
                                                                         strokeWidth={1}/>
                                                                 <text x={cx} y={cy} textAnchor="middle"
                                                                       dominantBaseline="central" fontSize={10}
-                                                                      fill="#000">{payload.team}</text>
+                                                                      fill="#000">{payload?.team}</text>
                                                             </g>
                                                         );
                                                     }}
@@ -839,7 +1002,7 @@ const Analytics = () => {
                                             data...</p>
                                     </CardContent>
                                 </Card>
-                            ) : pitScoutingEntries.length === 0 ? (
+                            ) : filteredPitScoutingEntries.length === 0 ? (
                                 <Card>
                                     <CardContent className="py-8">
                                         <p className="text-center text-muted-foreground">No pit scouting data
@@ -851,15 +1014,15 @@ const Analytics = () => {
                                     <div className="flex items-center justify-between">
                                         <p className="text-muted-foreground">
                                             Viewing {pitTeamNumberInput
-                                            ? pitScoutingEntries.filter(e => e.teamNumber === parseInt(pitTeamNumberInput)).length
-                                            : pitScoutingEntries.length} pit scouting entries
+                                            ? filteredPitScoutingEntries.filter(e => e.teamNumber === parseInt(pitTeamNumberInput)).length
+                                            : filteredPitScoutingEntries.length} pit scouting entries
                                         </p>
                                     </div>
 
                                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                         {(pitTeamNumberInput
-                                                ? pitScoutingEntries.filter(e => e.teamNumber === parseInt(pitTeamNumberInput))
-                                                : pitScoutingEntries
+                                                ? filteredPitScoutingEntries.filter(e => e.teamNumber === parseInt(pitTeamNumberInput))
+                                                : filteredPitScoutingEntries
                                         ).map((entry) => {
                                             const formatKey = (key: string) => {
                                                 return key
@@ -1015,17 +1178,17 @@ const Analytics = () => {
 
                         <TabsContent value="subjective" className="space-y-4">
                             <div>
-                                <p className="text-muted-foreground">Viewing {subjectiveScoutingEntries.length} subjective
+                                <p className="text-muted-foreground">Viewing {filteredSubjectiveScoutingEntries.length} subjective
                                     scouting entries</p>
                             </div>
 
                             {loading ? (
                                 <p>Loading subjective scouting data...</p>
-                            ) : subjectiveScoutingEntries.length === 0 ? (
+                            ) : filteredSubjectiveScoutingEntries.length === 0 ? (
                                 <p className="text-muted-foreground">No subjective scouting data found</p>
                             ) : (
                                 <div className="grid grid-cols-1 gap-4">
-                                    {subjectiveScoutingEntries.map((entry) => (
+                                    {filteredSubjectiveScoutingEntries.map((entry) => (
                                         <Card key={entry.id} className="overflow-hidden border-l-4 border-l-accent">
                                             <CardHeader className="bg-gradient-to-r from-accent/10 to-accent/5 pb-3">
                                                 <CardTitle className="flex justify-between items-start">
@@ -1105,6 +1268,44 @@ const Analytics = () => {
                                                         </div>
                                                     </div>
                                                 </div>
+                                                {/* Section 4: Misc (new subjective prompts) */}
+                                                {entry.misc && (
+                                                    <div className="pt-4 border-t border-border">
+                                                        <h4 className="font-semibold text-sm mb-3 text-primary">Section 4: Misc</h4>
+                                                        <div className="space-y-2 text-sm">
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Defensive Skill</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.defensiveSkill || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Robot Reliability</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.robotReliability || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Robot Penalties</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.robotPenalties || "N/A"}</p>
+                                                            </div>
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                <div className="p-3 bg-muted rounded border border-border">
+                                                                    <p className="font-semibold">Auto Fuel</p>
+                                                                    <p className="text-foreground mt-1">{entry.misc.autoFuel || "N/A"}</p>
+                                                                </div>
+                                                                <div className="p-3 bg-muted rounded border border-border">
+                                                                    <p className="font-semibold">Auto Climb</p>
+                                                                    <p className="text-foreground mt-1">{entry.misc.autoClimb || "N/A"}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Teleop Passing</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.teleopPassing || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Game Sense</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.gameSense || "N/A"}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </CardContent>
                                         </Card>
                                     ))}

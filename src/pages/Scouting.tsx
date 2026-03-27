@@ -9,28 +9,16 @@ import {Textarea} from "@/components/ui/textarea";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle,} from "@/components/ui/card";
 import {Label} from "@/components/ui/label";
 import {useAuth} from "@/contexts/AuthContext";
-import {Minus, Pause, Play, Plus, X} from "lucide-react";
+import {Minus, Play, Plus} from "lucide-react";
 import {useQueue} from "@/hooks/use-queue";
 import {useSubjectiveQueue} from "@/hooks/use-subjective-queue";
-import {subscribeToUserAssignment, subscribeToUserSubjectiveAssignment} from "@/lib/queue";
-import {get, getDatabase, ref, remove, serverTimestamp, set,} from "firebase/database";
+import {subscribeToUserAssignment, subscribeToUserSubjectiveAssignment, subscribeToActiveMatch} from "@/lib/queue";
+import {get, getDatabase, ref, remove, serverTimestamp, set, onValue,} from "firebase/database";
 import successAudio from "/partyblower.mp3";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select.tsx";
 import {toast} from "sonner";
+import {getNextUnplayedMatch} from "@/lib/tba";
 
-const PHASE_DURATIONS = {
-    AUTONOMOUS: 20,
-    TRANSITION: 10,
-    ALLIANCE_SHIFT: 25,
-    END_GAME: 30,
-};
-
-const TELEOP_REFERENCE_DURATION =
-    PHASE_DURATIONS.TRANSITION +
-    PHASE_DURATIONS.ALLIANCE_SHIFT * 4 +
-    PHASE_DURATIONS.END_GAME;
-
-type ScoutingPhase = "idle" | "autonomous" | "teleop" | "complete";
 
 const Scouting = () => {
     const {user} = useAuth();
@@ -62,6 +50,7 @@ const Scouting = () => {
         leave,
         start,
         endMatch,
+        signalMatchEnd,
         activeMatch,
         isInQueue,
         isInTopSix,
@@ -117,6 +106,7 @@ const Scouting = () => {
         "",
         "",
     ]);
+    const [importingTeams, setImportingTeams] = useState(false);
 
     const setAssignment = (index: number, value: string) => {
         setTeamAssignments((prev) => {
@@ -124,6 +114,61 @@ const Scouting = () => {
             copy[index] = value.replace(/[^0-9]/g, "").slice(0, 5);
             return copy;
         });
+    };
+
+    const handleImportTeamsFromTBA = async () => {
+        try {
+            setImportingTeams(true);
+            const eventKey = "2026orore";
+            const match = await getNextUnplayedMatch(eventKey);
+            
+            if (!match) {
+                toast("No upcoming matches found");
+                return;
+            }
+            
+            // Extract team numbers from alliances
+            // Match structure: { alliances: { red: { team_keys: [...] }, blue: { team_keys: [...] } } }
+            const redTeams = match.alliances?.red?.team_keys || [];
+            const blueTeams = match.alliances?.blue?.team_keys || [];
+            
+            const teamNumbers: string[] = [];
+            
+            // Red teams (indices 0, 1, 2)
+            redTeams.forEach((key: string) => {
+                const num = key.replace(/^frc/, "");
+                if (/^\d+$/.test(num)) {
+                    teamNumbers.push(num);
+                }
+            });
+            
+            // Blue teams (indices 3, 4, 5)
+            blueTeams.forEach((key: string) => {
+                const num = key.replace(/^frc/, "");
+                if (/^\d+$/.test(num)) {
+                    teamNumbers.push(num);
+                }
+            });
+            
+            if (teamNumbers.length === 0) {
+                toast("No valid team numbers found in next match");
+                return;
+            }
+            
+            // Fill the team assignments with proper order: Red 1, Red 2, Red 3, Blue 1, Blue 2, Blue 3
+            const newAssignments = ["", "", "", "", "", ""];
+            teamNumbers.slice(0, 6).forEach((num, idx) => {
+                newAssignments[idx] = num;
+            });
+            
+            setTeamAssignments(newAssignments);
+            toast(`Imported ${teamNumbers.length} teams from TBA for next match`);
+        } catch (err) {
+            console.error("Failed to import teams from TBA", err);
+            toast("Failed to import teams from TBA. Check console for details.");
+        } finally {
+            setImportingTeams(false);
+        }
     };
 
 
@@ -182,10 +227,11 @@ const Scouting = () => {
     const handleEndMatch = async () => {
         try {
             if (!activeMatch?.id) return toast("No active match to end");
-            await endMatch(activeMatch.id);
+            await signalMatchEnd(activeMatch.id);
+            toast("Match end signaled to all scouters");
         } catch (err) {
             console.error(err);
-            toast((err as Error)?.message || "Failed to end match");
+            toast((err as Error)?.message || "Failed to signal match end");
         }
     };
 
@@ -254,6 +300,16 @@ const Scouting = () => {
                         blockingEffectiveness,
                         allyCooperation,
                     },
+                    // misc fields added for analytics
+                    misc: {
+                        defensiveSkill,
+                        robotReliability: robotReliablity,
+                        robotPenalties,
+                        autoFuel,
+                        autoClimb: autoClimb1,
+                        teleopPassing,
+                        gameSense,
+                    },
                 });
                 await remove(ref(db, `users/${user.id}/currentSubjectiveAssignment`));
                 toast("Subjective scouting submitted!");
@@ -284,9 +340,6 @@ const Scouting = () => {
         setGameSense("");
     };
 
-    const [phase, setPhase] = useState<ScoutingPhase>("idle");
-    const [timeRemaining, setTimeRemaining] = useState(0);
-    const [isTimerRunning, setIsTimerRunning] = useState(false);
     const [teamNumber, setTeamNumber] = useState("");
 
     const [autonomousNotes, setAutonomousNotes] = useState("");
@@ -333,19 +386,13 @@ const Scouting = () => {
     const [autoClimb1, setAutoClimb1] = useState<string>("");
     const [teleopPassing, setTeleopPassing] = useState<string>("");
     const [gameSense, setGameSense] = useState<string>("");
-
-    const [cancelConfirm, setCancelConfirm] = useState(false);
-    const cancelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-    const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const currentMatchIdRef = useRef<string | null>(null);
     const assignedTeamRef = useRef<string | null>(null);
 
     const matchEndedHandledRef = useRef(false);
 
-    const timerCardRef = useRef<HTMLDivElement | null>(null);
-    const [showStickyTimer, setShowStickyTimer] = useState(false);
     const [showConfetti, setShowConfetti] = useState(false);
     const [confettiSize, setConfettiSize] = useState({width: 0, height: 0});
     const confettiTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -372,43 +419,6 @@ const Scouting = () => {
         }, 5000);
     }, []);
 
-    const getPhaseName = (currentPhase: ScoutingPhase): string => {
-        switch (currentPhase) {
-            case "autonomous":
-                return "Autonomous Period";
-            case "teleop":
-                return "Teleop Period";
-            default:
-                return "";
-        }
-    };
-
-    useEffect(() => {
-        if (isTimerRunning && timeRemaining > 0) {
-            intervalRef.current = setInterval(() => {
-                setTimeRemaining((prev) => {
-                    if (prev <= 1) {
-                        setIsTimerRunning(false);
-                        return 0;
-                    }
-                    return prev - 1;
-                });
-            }, 1000);
-        } else {
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
-        }
-
-        return () => {
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
-        };
-    }, [isTimerRunning, timeRemaining]);
-
     const startScouting = (teamNum?: string, opts?: { manual?: boolean }) => {
         const manual = opts?.manual === true;
         isManualSessionRef.current = manual;
@@ -427,9 +437,6 @@ const Scouting = () => {
 
         if (teamNum) setTeamNumber(String(teamNum));
 
-        setPhase("autonomous");
-        setTimeRemaining(PHASE_DURATIONS.AUTONOMOUS);
-        setIsTimerRunning(true);
         setAutonomousNotes("");
         setAutonomousFuel(0);
         setAutoClimb("");
@@ -449,7 +456,7 @@ const Scouting = () => {
                 return;
             }
             if (!assignment) {
-                if (!matchEndedHandledRef.current && phase !== "idle") {
+                if (!matchEndedHandledRef.current && !activeMatch) {
                     matchEndedHandledRef.current = true;
                 }
                 return;
@@ -460,13 +467,13 @@ const Scouting = () => {
 
             matchEndedHandledRef.current = false;
 
-            if (phase === "idle") {
+            if (!activeMatch) {
                 startScouting(String(assignment.teamNumber), {manual: false});
             }
         });
 
         return unsub;
-    }, [user?.id, phase]);
+    }, [user?.id, activeMatch]);
 
     useEffect(() => {
         if (!user?.id) return;
@@ -486,7 +493,7 @@ const Scouting = () => {
 
     // Add beforeunload event listener to prevent accidental reload during scouting
     useEffect(() => {
-        const isScoutingActive = phase !== "idle" || isInSubjectiveScouting || isInQueue || isInSubjectiveQueue;
+        const isScoutingActive = isInSubjectiveScouting || isInQueue || isInSubjectiveQueue;
 
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
             if (isScoutingActive) {
@@ -502,166 +509,147 @@ const Scouting = () => {
                 window.removeEventListener("beforeunload", handleBeforeUnload);
             };
         }
-    }, [phase, isInSubjectiveScouting]);
+    }, [isInSubjectiveScouting, isInQueue, isInSubjectiveQueue]);
 
-    const pauseTimer = () => {
-        setIsTimerRunning(false);
-    };
+    const leadSignaledEndRef = useRef(false);
+    useEffect(() => {
+        if (!activeMatch?.id || !user?.id) return;
+        if (isManualSessionRef.current) return; // Don't show for manual scouting
 
-    const resumeTimer = () => {
-        setIsTimerRunning(true);
-    };
+        // Watch for lead signaling match end
+        const unsubscribe = subscribeToActiveMatch((match) => {
+            if (match && match.leadSignaledEnd && !leadSignaledEndRef.current) {
+                leadSignaledEndRef.current = true;
+                toast("Lead has signaled the end of the match. Please finish your scouting and submit.");
+            }
+        });
 
-    const switchToTeleop = () => {
-        if (phase !== "autonomous") return;
-        setPhase("teleop");
-        setTimeRemaining(TELEOP_REFERENCE_DURATION);
-        setIsTimerRunning(true);
-    };
+        return () => {
+            unsubscribe?.();
+            leadSignaledEndRef.current = false;
+        };
+    }, [activeMatch?.id, user?.id]);
 
-    const endGame = () => {
-        if (phase !== "teleop") return;
-        setPhase("complete");
-        setIsTimerRunning(false);
-        setTimeRemaining(0);
-    };
     useEffect(() => {
         if (isManualSessionRef.current) return;
-        if (phase !== "complete" || !activeMatch?.id || !user?.id) return;
+        if (!activeMatch?.id || !user?.id) return;
 
-        const checkIfLastScouter = async () => {
+        const db = getDatabase();
+        const participantsRef = ref(db, `matches/${activeMatch.id}/participants`);
+
+        // Set up real-time listener for participants changes
+        const unsubscribe = onValue(participantsRef, async (snapshot) => {
             try {
-                const db = getDatabase();
-
-                const matchRef = ref(db, `matches/${activeMatch.id}`);
-                const matchSnap = await get(matchRef);
-                if (!matchSnap.exists()) return;
-
-                const match = matchSnap.val();
-                if (match.status !== "active") {
+                if (!snapshot.exists()) {
+                    // No participants at all, force end the match
+                    console.log("No participants found → force ending match");
+                    await endMatch(activeMatch.id);
                     return;
                 }
 
-                const participantsRef = ref(
-                    db,
-                    `matches/${activeMatch.id}/participants`,
-                );
-                const snapshot = await get(participantsRef);
-                if (!snapshot.exists()) return;
-
                 const participants = snapshot.val();
-
-                const activeParticipants = Object.values(participants).filter(
-                    (p) => {
-                        const part = p as { submittedAt?: unknown };
-                        return !part.submittedAt;
-                    },
+                const activeParticipants = Object.values(participants as any).filter(
+                    (p: any) => !p.submittedAt
                 );
 
                 if (activeParticipants.length === 0) {
-                    console.log("This was the last scouter → ending match");
+                    console.log("No active scouters remaining → force ending match");
                     await endMatch(activeMatch.id);
                 }
             } catch (err) {
-                console.error("Failed to check if last scouter", err);
+                console.error("Failed to check active scouters", err);
             }
+        });
+
+        return () => {
+            unsubscribe();
         };
-        checkIfLastScouter();
-    }, [phase, activeMatch?.id, user?.id, endMatch]);
-
-    const addFuelBy = (amount: number) => {
-        if (isAutonomousPhase) {
-            setAutonomousFuel((prev) => Math.max(0, prev + amount));
-        } else if (isTeleopPhase) {
-            setTeleopFuel((prev) => Math.max(0, prev + amount));
-        }
-    };
-
-    const handleCancelClick = () => {
-        if (!cancelConfirm) {
-            setCancelConfirm(true);
-            if (cancelTimeoutRef.current) {
-                clearTimeout(cancelTimeoutRef.current);
-            }
-            cancelTimeoutRef.current = setTimeout(() => {
-                setCancelConfirm(false);
-            }, 3000);
-        } else {
-            resetScouting();
-            setCancelConfirm(false);
-            if (cancelTimeoutRef.current) {
-                clearTimeout(cancelTimeoutRef.current);
-                cancelTimeoutRef.current = null;
-            }
-        }
-    };
+    }, [activeMatch?.id, user?.id, endMatch]);
 
     const resetScouting = async () => {
         if (Math.random() * 10 < 2) {
             for (let i = 0; i < 5; i++) {
                 triggerConfetti();
             }
-        } else {
-            if (!isManualSessionRef.current) {
-                try {
-                    const matchId = currentMatchIdRef.current;
-                    const assignedTeam = assignedTeamRef.current;
+        }
+        
+        if (!isManualSessionRef.current) {
+            try {
+                const matchId = currentMatchIdRef.current;
+                const assignedTeam = assignedTeamRef.current;
 
-                    if (!matchId || !user?.id || !assignedTeam) {
-                        console.warn(
-                            "resetScouting: missing matchId, user, or assignedTeam",
-                        );
-                        return;
-                    }
-
-                    const db = getDatabase();
-
-                    const participantRef = ref(
-                        db,
-                        `matches/${matchId}/participants/${user.id}`,
-                    );
-
-                    await set(participantRef, {
-                        userId: user.id,
-                        scoutName: user.name || "Unknown",
-                        teamNumber: assignedTeam,
-                        matchId,
-
-                        submittedAt: serverTimestamp(),
-
-                        autonomous: {
-                            fuel: autonomousFuel,
-                            notes: autonomousNotes,
-                            autoClimb,
-                        },
-
-                        teleop: {
-                            fuel: teleopFuel,
-                            notes: teleopNotes,
-                            teleopClimb,
-                            climbLevel: teleopClimb === "yes" ? climbLevel : null,
-                            defenseScore,
-                        },
-
-                        endGame: {
-                            didClimb,
-                            climbLevel: didClimb ? climbLevel : null,
-                            notes: endGameNotes,
-                        },
-                        sotm,
-                        robotTipped,
-                    });
-                    await remove(ref(db, `users/${user.id}/currentAssignment`));
-                } catch (err) {
-                    console.error("Failed to submit scouting data:", err);
-                    toast("Failed to save scouting data. Please notify a lead.");
+                if (!matchId || !user?.id || !assignedTeam) {
+                    throw new Error("Missing match or team information");
                 }
+
+                const db = getDatabase();
+
+                const participantRef = ref(
+                    db,
+                    `matches/${matchId}/participants/${user.id}`,
+                );
+
+                await set(participantRef, {
+                    userId: user.id,
+                    scoutName: user.name || "Unknown",
+                    teamNumber: assignedTeam,
+                    matchId,
+
+                    submittedAt: serverTimestamp(),
+
+                    autonomous: {
+                        fuel: autonomousFuel,
+                        notes: autonomousNotes,
+                        autoClimb,
+                    },
+
+                    teleop: {
+                        fuel: teleopFuel,
+                        notes: teleopNotes,
+                        teleopClimb,
+                        climbLevel: teleopClimb === "yes" ? climbLevel : null,
+                        defenseScore,
+                    },
+
+                    endGame: {
+                        didClimb,
+                        climbLevel: didClimb ? climbLevel : null,
+                        notes: endGameNotes,
+                    },
+                    sotm,
+                    robotTipped,
+                });
+                await remove(ref(db, `users/${user.id}/currentAssignment`));
+
+                // Check if lead signaled end and all other scouters have submitted
+                const matchRef = ref(db, `matches/${matchId}`);
+                const matchSnap = await get(matchRef);
+                if (matchSnap.exists()) {
+                    const match = matchSnap.val();
+                    if (match.leadSignaledEnd) {
+                        // Check if all participants have submitted
+                        const participantsRef = ref(db, `matches/${matchId}/participants`);
+                        const participantsSnap = await get(participantsRef);
+                        if (participantsSnap.exists()) {
+                            const participants = participantsSnap.val();
+                            const allSubmitted = Object.values(participants as any).every(
+                                (p: any) => p.submittedAt
+                            );
+                            // Only call endMatch if ALL scouters have submitted
+                            if (allSubmitted && match.status === "active") {
+                                await endMatch(matchId);
+                                toast("All scouters submitted. Match ended.");
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to submit scouting data:", err);
+                throw err;
             }
         }
 
-        setPhase("idle");
-        setIsTimerRunning(false);
-        setTimeRemaining(0);
+        // Clear all form state
         setTeamNumber("");
         setAutonomousNotes("");
         setAutonomousFuel(0);
@@ -671,31 +659,31 @@ const Scouting = () => {
         setDefenseScore("");
         setEndGameNotes("");
         setDidClimb(false);
-        setCancelConfirm(false);
+        setClimbLevel("");
+        setTeleopClimb("");
         setSotm("");
         setRobotTipped("");
+        setIsInSubjectiveScouting(false);
+        setSubjectiveTeamNumber("");
+        setAutonomousEffectiveness("");
+        setCanQuicklyScore("");
+        setCanClimb("");
+        setClimbLevelSubjective("");
+        setPerformanceUnderPressure("");
+        setTeamFocus("");
+        setDriverSynchronization("");
+        setDefensiveStrategy("");
+        setBlockingEffectiveness("");
+        setAllyCooperation("");
+        setDefensiveSkill("");
+        setRobotReliability("");
+        setRobotPenalties("");
+        setAutoFuel("");
+        setAutoClimb1("");
+        setTeleopPassing("");
+        setGameSense("");
         isManualSessionRef.current = false;
-        if (cancelTimeoutRef.current) {
-            clearTimeout(cancelTimeoutRef.current);
-            cancelTimeoutRef.current = null;
-        }
     };
-
-    const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, "0")}`;
-    };
-
-    const isAutonomousPhase = phase === "autonomous";
-    const isTeleopPhase = phase === "teleop";
-    const isComplete = phase === "complete";
-    const isActivePhase = phase !== "idle" && phase !== "complete";
-
-    useEffect(() => {
-        if (!isComplete) return;
-        triggerConfetti();
-    }, [isComplete, triggerConfetti]);
 
     useEffect(() => {
         const updateSize = () => {
@@ -706,23 +694,6 @@ const Scouting = () => {
         return () => window.removeEventListener("resize", updateSize);
     }, []);
 
-    useEffect(() => {
-        if (!timerCardRef.current) return;
-
-        const observer = new IntersectionObserver(
-            ([entry]) => {
-                setShowStickyTimer(!entry.isIntersecting);
-            },
-            {
-                root: null,
-                threshold: 0.1,
-            },
-        );
-
-        observer.observe(timerCardRef.current);
-
-        return () => observer.disconnect();
-    }, [isActivePhase]);
 
     return (
         <div className="min-h-screen bg-background">
@@ -743,81 +714,13 @@ const Scouting = () => {
                 <TopBar
                     activeTab={activeTab}
                     onTabChange={handleTabChange}
-                    topContent={
-                        isActivePhase ? (
-                            <div
-                                className="sticky top-[72px] z-20 bg-background/95 backdrop-blur border-b border-border">
-                                <div className="px-6 py-3 grid grid-cols-[1fr_auto_1fr] items-center">
-                                    <div>
-                                        <div className="font-mono font-bold text-sm">
-                                            {getPhaseName(phase)}
-                                        </div>
-                                        {teamNumber && (
-                                            <div className="text-xs text-muted-foreground">
-                                                Team {teamNumber}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div
-                                        className={`text-3xl font-mono font-bold ${
-                                            isTimerRunning ? "text-primary" : "text-muted-foreground"
-                                        }`}
-                                    >
-                                        {formatTime(timeRemaining)}
-                                    </div>
-
-                                    <div
-                                        className="flex flex-col items-end gap-2 sm:flex-row sm:items-center justify-self-end">
-                                        {isAutonomousPhase && (
-                                            <Button
-                                                size="sm"
-                                                onClick={switchToTeleop}
-                                                className="min-w-[100px] justify-center"
-                                            >
-                                                Next Phase
-                                            </Button>
-                                        )}
-                                        {isTeleopPhase && (
-                                            <Button
-                                                size="sm"
-                                                onClick={endGame}
-                                                className="min-w-[100px] justify-center"
-                                            >
-                                                End Game
-                                            </Button>
-                                        )}
-                                        {isTimerRunning ? (
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={handleCancelClick}
-                                                className="min-w-[100px] justify-center"
-                                            >
-                                                Cancel
-                                            </Button>
-                                        ) : !isComplete ? (
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={resumeTimer}
-                                                className="min-w-[120px] justify-center"
-                                            >
-                                                Resume
-                                            </Button>
-                                        ) : null}
-                                    </div>
-                                </div>
-                            </div>
-                        ) : null
-                    }
                 />
 
                 <div className="p-6">
                     <div className="space-y-6">
                         <div className="flex items-center justify-between"></div>
 
-                        {(isLead || (phase === "idle" && !activeMatch)) && !isInSubjectiveScouting && (
+                        {(isLead || !activeMatch) && !isInSubjectiveScouting && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Match Queue</CardTitle>
@@ -890,6 +793,17 @@ const Scouting = () => {
                                     </div>
 
                                     {isLead && (
+                                        <Button
+                                            onClick={handleImportTeamsFromTBA}
+                                            disabled={importingTeams}
+                                            variant="outline"
+                                            className="w-full"
+                                        >
+                                            {importingTeams ? "Importing..." : "Import Teams from TBA"}
+                                        </Button>
+                                    )}
+
+                                    {isLead && (
                                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                                             {[0, 3, 1, 4, 2, 5].map((i) => {
                                                 const placeholders = [
@@ -918,7 +832,7 @@ const Scouting = () => {
 
                                     <div className="flex gap-3 items-center">
                                         {!isLead ? (
-                                            phase === "idle" && !activeMatch ? (
+                                            !activeMatch ? (
                                                 <Button
                                                     onClick={handleQueueToggle}
                                                     disabled={queueLoading}
@@ -938,14 +852,33 @@ const Scouting = () => {
                                             )
                                         ) : activeMatch ? (
                                             activeMatch.startedBy === user?.id ? (
-                                                <Button
-                                                    onClick={handleEndMatch}
-                                                    variant="destructive"
-                                                    className="flex-1"
-                                                    disabled={queueLoading}
-                                                >
-                                                    End match
-                                                </Button>
+                                                <div className="flex gap-2 flex-1">
+                                                    <Button
+                                                        onClick={handleEndMatch}
+                                                        variant="destructive"
+                                                        className="flex-1"
+                                                        disabled={queueLoading}
+                                                    >
+                                                        Signal End Match
+                                                    </Button>
+                                                    <Button
+                                                        onClick={async () => {
+                                                            if (!activeMatch?.id) return toast("No active match to end");
+                                                            try {
+                                                                await endMatch(activeMatch.id);
+                                                                toast("Match force ended - all scouters cleared");
+                                                            } catch (err) {
+                                                                console.error(err);
+                                                                toast((err as Error)?.message || "Failed to force end match");
+                                                            }
+                                                        }}
+                                                        variant="destructive"
+                                                        className="flex-1"
+                                                        disabled={queueLoading}
+                                                    >
+                                                        Force End Match
+                                                    </Button>
+                                                </div>
                                             ) : (
                                                 <Button className="flex-1" disabled>
                                                     Match running elsewhere
@@ -1021,7 +954,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {(isLead || (phase === "idle" && !subjectiveActiveMatch)) && (
+                        {(isLead || (!subjectiveActiveMatch && !activeMatch)) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Subjective Queue</CardTitle>
@@ -1095,7 +1028,7 @@ const Scouting = () => {
 
                                     <div className="flex gap-3 items-center">
                                         {!isLead ? (
-                                            phase === "idle" && !subjectiveActiveMatch ? (
+                                            !subjectiveActiveMatch ? (
                                                 <Button
                                                     onClick={handleSubjectiveQueueToggle}
                                                     disabled={subjectiveQueueLoading}
@@ -1159,11 +1092,13 @@ const Scouting = () => {
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    {subjectiveActiveMatch.participants && Object.keys(subjectiveActiveMatch.participants).length > 0 ? (
+                                    {subjectiveActiveMatch.participants && Object.keys(subjectiveActiveMatch.participants).filter(key => !/^\d+$/.test(key)).length > 0 ? (
                                         <ul className="space-y-2">
-                                            {Object.values(subjectiveActiveMatch.participants).map((participant: any, idx: number) => (
+                                            {Object.entries(subjectiveActiveMatch.participants)
+                                                .filter(([key]) => !/^\d+$/.test(key))
+                                                .map(([key, participant]: [string, any], idx: number) => (
                                                 <li
-                                                    key={participant.userId}
+                                                    key={key}
                                                     className="flex items-center justify-between p-2 rounded-md border bg-secondary/50"
                                                 >
                                                     <div className="flex items-center gap-3">
@@ -1198,7 +1133,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {phase === "idle" && !isInSubjectiveScouting && (
+                        {!isInSubjectiveScouting && !activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Start Manual Scouting Session</CardTitle>
@@ -1238,134 +1173,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isActivePhase && showStickyTimer && (
-                            <Card ref={timerCardRef}>
-                                <CardHeader>
-                                    <div className="flex-1">
-                                        <CardTitle>
-                      <span
-                          className="text-2xl sm:text-[1.25rem] font-mono font-bold whitespace-normal leading-snug block"
-                          style={{
-                              display: "-webkit-box",
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: "vertical",
-                              overflow: "hidden",
-                          }}
-                      >
-                        {getPhaseName(phase)}
-                      </span>
-                                        </CardTitle>
-                                        <CardDescription className="mt-1">
-                                            {isTimerRunning
-                                                ? "Timer is running"
-                                                : isComplete
-                                                    ? "Scouting session complete"
-                                                    : "Timer paused - click resume to continue"}
-                                        </CardDescription>
-                                    </div>
-
-                                    <div className="ml-4 flex flex-col items-end justify-start shrink-0">
-                                        {teamNumber && (
-                                            <div
-                                                className="text-sm font-normal text-muted-foreground mb-2 whitespace-nowrap">
-                                                Team {teamNumber}
-                                            </div>
-                                        )}
-                                        {!isComplete && (
-                                            <div className="hidden sm:block">
-                                                <Button
-                                                    onClick={handleCancelClick}
-                                                    variant={cancelConfirm ? "destructive" : "outline"}
-                                                    size="sm"
-                                                    className={`${
-                                                        cancelConfirm
-                                                            ? "bg-destructive hover:bg-destructive/90"
-                                                            : ""
-                                                    } whitespace-normal text-left leading-tight flex items-center gap-2 h-auto py-2 max-w-[320px]`}
-                                                >
-                          <span className="flex-shrink-0">
-                            <X className="w-4 h-4"/>
-                          </span>
-                                                    <span className="flex-1 min-w-0">
-                            {cancelConfirm
-                                ? "Are you sure? Click again to cancel"
-                                : "Cancel Scouting"}
-                          </span>
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </CardHeader>
-                                <CardContent>
-                                    {/* Mobile: show cancel button below header so it doesn't overflow */}
-                                    {!isComplete && (
-                                        <div className="sm:hidden mb-4">
-                                            <Button
-                                                onClick={handleCancelClick}
-                                                variant={cancelConfirm ? "destructive" : "outline"}
-                                                size="sm"
-                                                className={`w-full ${cancelConfirm ? "bg-destructive hover:bg-destructive/90" : ""} whitespace-normal text-center leading-tight flex items-center justify-center gap-2 h-auto py-2`}
-                                            >
-                        <span className="flex-shrink-0">
-                          <X className="w-4 h-4"/>
-                        </span>
-                                                <span>
-                          {cancelConfirm
-                              ? "Are you sure? Click again to cancel"
-                              : "Cancel Scouting"}
-                        </span>
-                                            </Button>
-                                        </div>
-                                    )}
-                                    <div className="text-center py-4">
-                                        <div
-                                            className={`text-6xl font-mono font-bold ${
-                                                isTimerRunning
-                                                    ? "text-primary"
-                                                    : "text-muted-foreground"
-                                            }`}
-                                        >
-                                            {formatTime(timeRemaining)}
-                                        </div>
-                                        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                                            {isAutonomousPhase && (
-                                                <Button onClick={switchToTeleop} size="sm">
-                                                    Switch to Teleop
-                                                </Button>
-                                            )}
-                                            {isTeleopPhase && (
-                                                <Button onClick={endGame} size="sm">
-                                                    End Game
-                                                </Button>
-                                            )}
-                                            {isTimerRunning ? (
-                                                <Button
-                                                    onClick={pauseTimer}
-                                                    variant="outline"
-                                                    size="sm"
-                                                >
-                                                    <Pause className="w-4 h-4 mr-2"/>
-                                                    Pause Timer
-                                                </Button>
-                                            ) : (
-                                                !isComplete && (
-                                                    <Button
-                                                        onClick={resumeTimer}
-                                                        variant="outline"
-                                                        size="sm"
-                                                    >
-                                                        <Play className="w-4 h-4 mr-2"/>
-                                                        Resume Timer
-                                                    </Button>
-                                                )
-                                            )}
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {isActivePhase && (
+                        {activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Autonomous Notes</CardTitle>
@@ -1385,7 +1193,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isActivePhase && (
+                        {activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Autonomous Fuel</CardTitle>
@@ -1445,7 +1253,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isActivePhase && (
+                        {activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Auto Climb</CardTitle>
@@ -1470,7 +1278,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isTeleopPhase && (
+                        {activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Notes</CardTitle>
@@ -1489,7 +1297,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isTeleopPhase && (
+                        {activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Fuel</CardTitle>
@@ -1549,7 +1357,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isTeleopPhase && (
+                        {activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Climb</CardTitle>
@@ -1599,7 +1407,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isTeleopPhase && (
+                        {activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Defense Score</CardTitle>
@@ -1624,87 +1432,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isComplete && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Scouting Complete!</CardTitle>
-                                    <CardDescription>
-                                        All phases completed for Team {teamNumber}
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="p-4 border rounded-lg">
-                                            <p className="text-sm text-muted-foreground">
-                                                Autonomous Fuel
-                                            </p>
-                                            <p className="text-2xl font-bold">{autonomousFuel}</p>
-                                        </div>
-
-                                        <div className="p-4 border rounded-lg">
-                                            <p className="text-sm text-muted-foreground">
-                                                Auto Climb?
-                                            </p>
-                                            <p className="text-2xl font-bold">
-                                                {autoClimb === "yes" ? "Yes" : "No"}
-                                            </p>
-                                        </div>
-
-                                        <div className="p-4 border rounded-lg">
-                                            <p className="text-sm text-muted-foreground">
-                                                Teleop Fuel
-                                            </p>
-                                            <p className="text-2xl font-bold">{teleopFuel}</p>
-                                        </div>
-
-                                        <div className="p-4 border rounded-lg">
-                                            <p className="text-sm text-muted-foreground">
-                                                Teleop Climb?
-                                            </p>
-                                            <p className="text-2xl font-bold">
-                                                {teleopClimb === "yes" ? "Yes" : "No"}
-                                            </p>
-                                        </div>
-
-                                        <div className="p-4 border rounded-lg">
-                                            <p className="text-sm text-muted-foreground">
-                                                Total Fuel
-                                            </p>
-                                            <p className="text-2xl font-bold">
-                                                {autonomousFuel + teleopFuel}
-                                            </p>
-                                        </div>
-
-                                        <div className="p-4 border rounded-lg">
-                                            <p className="text-sm text-muted-foreground">
-                                                Climb Level
-                                            </p>
-                                            <p className="text-2xl font-bold">
-                                                {teleopClimb === "yes" ? climbLevel || "N/A" : "N/A"}
-                                            </p>
-                                        </div>
-
-                                        <div className="p-4 border rounded-lg">
-                                            <p className="text-sm text-muted-foreground">
-                                                Defense Score
-                                            </p>
-                                            <p className="text-2xl font-bold">
-                                                {defenseScore || "N/A"}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <Button
-                                        onClick={resetScouting}
-                                        variant="outline"
-                                        className="w-full"
-                                    >
-                                        Submit Scouting
-                                    </Button>
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {isActivePhase && (
+                        {activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Shooting on the Move & Robot Tipped</CardTitle>
@@ -1747,6 +1475,57 @@ const Scouting = () => {
                                             </Button>
                                         </div>
                                     </div>
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {activeMatch && (
+                            <Card>
+                                <CardContent className="pt-6">
+                                    <Button
+                                        onClick={async () => {
+                                            setIsSubmitting(true);
+                                            try {
+                                                const matchId = activeMatch.id;
+                                                await resetScouting();
+                                                
+                                                // Check if there are any active scouters left
+                                                const db = getDatabase();
+                                                const participantsRef = ref(db, `matches/${matchId}/participants`);
+                                                const participantsSnap = await get(participantsRef);
+                                                
+                                                let hasActiveScouters = false;
+                                                if (participantsSnap.exists()) {
+                                                    const participants = participantsSnap.val();
+                                                    const activeParticipants = Object.values(participants as any).filter(
+                                                        (p: any) => !p.submittedAt
+                                                    );
+                                                    hasActiveScouters = activeParticipants.length > 0;
+                                                }
+                                                
+                                                // If no active scouters, force end the match
+                                                if (!hasActiveScouters) {
+                                                    await endMatch(matchId);
+                                                    toast("No more active scouters. Match ended.");
+                                                } else {
+                                                    toast("Scouting data submitted successfully!");
+                                                }
+                                                
+                                                // Navigate to dashboard where queue logic handles leaving
+                                                navigate("/dashboard");
+                                            } catch (err) {
+                                                console.error("Submit error:", err);
+                                                toast("Failed to submit. Please try again.");
+                                            } finally {
+                                                setIsSubmitting(false);
+                                            }
+                                        }}
+                                        className="w-full"
+                                        size="lg"
+                                        disabled={isSubmitting}
+                                    >
+                                        {isSubmitting ? "Submitting..." : "Submit Scouting"}
+                                    </Button>
                                 </CardContent>
                             </Card>
                         )}
@@ -1998,6 +1777,15 @@ const Scouting = () => {
                                 </Card>
                             </>
                         )}
+                    </div>
+
+                    <div className="flex justify-center gap-4 py-6 px-6 border-t">
+                        <Button
+                            variant="outline"
+                            onClick={() => window.scrollTo(0, 0)}
+                        >
+                            Back to Top
+                        </Button>
                     </div>
                 </div>
             </main>

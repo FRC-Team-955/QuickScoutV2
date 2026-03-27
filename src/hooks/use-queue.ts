@@ -8,6 +8,7 @@ import {
   startMatch as apiStartMatch,
   subscribeToActiveMatch as apiSubscribeToActiveMatch,
   endMatch as apiEndMatch,
+  signalMatchEnd as apiSignalMatchEnd,
 } from "@/lib/queue";
 
 export const useQueue = (currentUser: { id: string; name: string } | null) => {
@@ -76,6 +77,17 @@ export const useQueue = (currentUser: { id: string; name: string } | null) => {
     }
   }, [currentUser]);
 
+  const signalMatchEnd = useCallback(async (matchId: string) => {
+    if (!currentUser) throw new Error("Not authenticated");
+    if (!matchId) throw new Error("matchId required");
+    setLoading(true);
+    try {
+      return await apiSignalMatchEnd(matchId, { id: currentUser.id, name: currentUser.name });
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser]);
+
   return {
     queue,
     loading,
@@ -83,6 +95,7 @@ export const useQueue = (currentUser: { id: string; name: string } | null) => {
     leave,
     start,
     endMatch,
+    signalMatchEnd,
     activeMatch,
     isInQueue,
     isInTopSix,
