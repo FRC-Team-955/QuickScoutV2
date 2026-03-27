@@ -355,6 +355,14 @@ const Scouting = () => {
     const [climbLevel, setClimbLevel] = useState("");
     const [defenseScore, setDefenseScore] = useState("");
 
+    // Hold system state for fuel
+    const [isHoldingAutoFuel, setIsHoldingAutoFuel] = useState(false);
+    const [isHoldingTeleopFuel, setIsHoldingTeleopFuel] = useState(false);
+    const [holdStartTimeAuto, setHoldStartTimeAuto] = useState<number | null>(null);
+    const [holdStartTimeTeleop, setHoldStartTimeTeleop] = useState<number | null>(null);
+    const [teamBps, setTeamBps] = useState<number>(0);
+    const [manualBpsEntry, setManualBpsEntry] = useState<string>("");
+
     const [sotm, setSotm] = useState<string>("");
     const [robotTipped, setRobotTipped] = useState<string>("");
 
@@ -419,6 +427,38 @@ const Scouting = () => {
         }, 5000);
     }, []);
 
+    const handleHoldAutoFuelStart = () => {
+        setIsHoldingAutoFuel(true);
+        setHoldStartTimeAuto(Date.now());
+    };
+
+    const handleHoldAutoFuelEnd = () => {
+        setIsHoldingAutoFuel(false);
+        const bpsToUse = teamBps > 0 ? teamBps : parseFloat(manualBpsEntry) || 0;
+        if (holdStartTimeAuto !== null && bpsToUse > 0) {
+            const holdDuration = (Date.now() - holdStartTimeAuto) / 1000; // Convert to seconds
+            const fuelAdded = Math.round(holdDuration * bpsToUse);
+            setAutonomousFuel((prev) => prev + fuelAdded);
+        }
+        setHoldStartTimeAuto(null);
+    };
+
+    const handleHoldTeleopFuelStart = () => {
+        setIsHoldingTeleopFuel(true);
+        setHoldStartTimeTeleop(Date.now());
+    };
+
+    const handleHoldTeleopFuelEnd = () => {
+        setIsHoldingTeleopFuel(false);
+        const bpsToUse = teamBps > 0 ? teamBps : parseFloat(manualBpsEntry) || 0;
+        if (holdStartTimeTeleop !== null && bpsToUse > 0) {
+            const holdDuration = (Date.now() - holdStartTimeTeleop) / 1000; // Convert to seconds
+            const fuelAdded = Math.round(holdDuration * bpsToUse);
+            setTeleopFuel((prev) => prev + fuelAdded);
+        }
+        setHoldStartTimeTeleop(null);
+    };
+
     const startScouting = (teamNum?: string, opts?: { manual?: boolean }) => {
         const manual = opts?.manual === true;
         isManualSessionRef.current = manual;
@@ -445,6 +485,56 @@ const Scouting = () => {
         setDefenseScore("");
         setEndGameNotes("");
         setDidClimb(false);
+        setManualBpsEntry("");
+
+        // Fetch BPS from pit scouting data
+        const fetchTeamBps = async () => {
+            try {
+                const db = getDatabase();
+                // Pit scouting data is stored at: pitScouting/${dateStr}/${teamNumber}/${userId}
+                // We need to query all dates to find the most recent entry for this team
+                const pitScoutingRef = ref(db, `pitScouting`);
+                const snapshot = await get(pitScoutingRef);
+                
+                if (snapshot.exists()) {
+                    let latestBps = 0;
+                    const allData = snapshot.val();
+                    
+                    // Iterate through all dates
+                    Object.values(allData as any).forEach((dateData: any) => {
+                        if (!dateData) return;
+                        
+                        // Look for this team's data on this date
+                        // Check both the team number as string and as number
+                        const teamDataByString = dateData[effectiveTeam];
+                        const teamDataByNumber = dateData[parseInt(effectiveTeam, 10).toString()];
+                        const teamData = teamDataByString || teamDataByNumber;
+                        
+                        if (teamData) {
+                            // Get the first (or latest) user's entry for this team
+                            const userEntry = Object.values(teamData)[0] as any;
+                            if (userEntry?.responses?.bps) {
+                                const bpsValue = parseFloat(userEntry.responses.bps);
+                                if (!isNaN(bpsValue) && bpsValue > latestBps) {
+                                    latestBps = bpsValue;
+                                }
+                            }
+                        }
+                    });
+                    
+                    console.log(`Fetched BPS for team ${effectiveTeam}: ${latestBps}`);
+                    setTeamBps(latestBps);
+                } else {
+                    console.log(`No pit scouting data found for team ${effectiveTeam}`);
+                    setTeamBps(0);
+                }
+            } catch (err) {
+                console.error("Failed to fetch team BPS:", err);
+                setTeamBps(0);
+            }
+        };
+
+        fetchTeamBps();
     };
 
     const lastProcessedAssignmentRef = useRef<string | null>(null);
@@ -1133,7 +1223,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {!isInSubjectiveScouting && !activeMatch && (
+                        {!isInSubjectiveScouting && !activeMatch && !teamNumber.trim() && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Start Manual Scouting Session</CardTitle>
@@ -1173,7 +1263,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && (
+                        {(activeMatch || teamNumber.trim()) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Autonomous Notes</CardTitle>
@@ -1193,7 +1283,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && (
+                        {(activeMatch || teamNumber.trim()) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Autonomous Fuel</CardTitle>
@@ -1203,15 +1293,48 @@ const Scouting = () => {
                                 </CardHeader>
                                 <CardContent>
                                     <div className="flex items-center justify-between p-4 border rounded-lg">
-                                        <div>
+                                        <div className="flex-1">
                                             <Label className="text-base font-medium">
                                                 Autonomous Fuel
                                             </Label>
                                             <p className="text-sm text-muted-foreground">
                                                 Current: {autonomousFuel}
                                             </p>
+                                            {teamBps > 0 ? (
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    BPS: {teamBps.toFixed(2)} (from pit scouting)
+                                                </p>
+                                            ) : (
+                                                <div className="mt-2 space-y-1">
+                                                    <Label htmlFor="auto-bps-manual" className="text-xs">
+                                                        BPS not found - enter manually:
+                                                    </Label>
+                                                    <Input
+                                                        id="auto-bps-manual"
+                                                        type="number"
+                                                        step="0.1"
+                                                        placeholder="Enter BPS"
+                                                        value={manualBpsEntry}
+                                                        onChange={(e) => setManualBpsEntry(e.target.value)}
+                                                        className="h-8 text-xs"
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
-                                        <div className="grid grid-cols-3 gap-2">
+                                        <div className="flex flex-col gap-2 ml-4">
+                                            <Button
+                                                variant={(isHoldingAutoFuel || (teamBps > 0 || parseFloat(manualBpsEntry) > 0)) ? "default" : "outline"}
+                                                size="sm"
+                                                onMouseDown={handleHoldAutoFuelStart}
+                                                onMouseUp={handleHoldAutoFuelEnd}
+                                                onMouseLeave={handleHoldAutoFuelEnd}
+                                                onTouchStart={handleHoldAutoFuelStart}
+                                                onTouchEnd={handleHoldAutoFuelEnd}
+                                                disabled={teamBps === 0 && (!manualBpsEntry || parseFloat(manualBpsEntry) === 0)}
+                                                className={isHoldingAutoFuel ? "bg-green-600 hover:bg-green-700" : ""}
+                                            >
+                                                {isHoldingAutoFuel ? "Shooting..." : "Hold to Shoot"}
+                                            </Button>
                                             <Button
                                                 variant="outline"
                                                 size="sm"
@@ -1219,41 +1342,13 @@ const Scouting = () => {
                                             >
                                                 -1
                                             </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setAutonomousFuel((prev) => prev + 1)}
-                                            >
-                                                +1
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setAutonomousFuel((prev) => prev + 3)}
-                                            >
-                                                +3
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setAutonomousFuel((prev) => prev + 5)}
-                                            >
-                                                +5
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setAutonomousFuel((prev) => prev + 10)}
-                                            >
-                                                +10
-                                            </Button>
                                         </div>
                                     </div>
                                 </CardContent>
                             </Card>
                         )}
 
-                        {activeMatch && (
+                        {(activeMatch || teamNumber.trim()) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Auto Climb</CardTitle>
@@ -1278,7 +1373,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && (
+                        {(activeMatch || teamNumber.trim()) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Notes</CardTitle>
@@ -1297,7 +1392,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && (
+                        {(activeMatch || teamNumber.trim()) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Fuel</CardTitle>
@@ -1307,15 +1402,48 @@ const Scouting = () => {
                                 </CardHeader>
                                 <CardContent>
                                     <div className="flex items-center justify-between p-4 border rounded-lg">
-                                        <div>
+                                        <div className="flex-1">
                                             <Label className="text-base font-medium">
                                                 Teleop Fuel
                                             </Label>
                                             <p className="text-sm text-muted-foreground">
                                                 Current: {teleopFuel}
                                             </p>
+                                            {teamBps > 0 ? (
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    BPS: {teamBps.toFixed(2)} (from pit scouting)
+                                                </p>
+                                            ) : (
+                                                <div className="mt-2 space-y-1">
+                                                    <Label htmlFor="teleop-bps-manual" className="text-xs">
+                                                        BPS not found - enter manually:
+                                                    </Label>
+                                                    <Input
+                                                        id="teleop-bps-manual"
+                                                        type="number"
+                                                        step="0.1"
+                                                        placeholder="Enter BPS"
+                                                        value={manualBpsEntry}
+                                                        onChange={(e) => setManualBpsEntry(e.target.value)}
+                                                        className="h-8 text-xs"
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
-                                        <div className="grid grid-cols-3 gap-2">
+                                        <div className="flex flex-col gap-2 ml-4">
+                                            <Button
+                                                variant={(isHoldingTeleopFuel || (teamBps > 0 || parseFloat(manualBpsEntry) > 0)) ? "default" : "outline"}
+                                                size="sm"
+                                                onMouseDown={handleHoldTeleopFuelStart}
+                                                onMouseUp={handleHoldTeleopFuelEnd}
+                                                onMouseLeave={handleHoldTeleopFuelEnd}
+                                                onTouchStart={handleHoldTeleopFuelStart}
+                                                onTouchEnd={handleHoldTeleopFuelEnd}
+                                                disabled={teamBps === 0 && (!manualBpsEntry || parseFloat(manualBpsEntry) === 0)}
+                                                className={isHoldingTeleopFuel ? "bg-green-600 hover:bg-green-700" : ""}
+                                            >
+                                                {isHoldingTeleopFuel ? "Shooting..." : "Hold to Shoot"}
+                                            </Button>
                                             <Button
                                                 variant="outline"
                                                 size="sm"
@@ -1323,41 +1451,13 @@ const Scouting = () => {
                                             >
                                                 -1
                                             </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setTeleopFuel((prev) => prev + 1)}
-                                            >
-                                                +1
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setTeleopFuel((prev) => prev + 3)}
-                                            >
-                                                +3
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setTeleopFuel((prev) => prev + 5)}
-                                            >
-                                                +5
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setTeleopFuel((prev) => prev + 10)}
-                                            >
-                                                +10
-                                            </Button>
                                         </div>
                                     </div>
                                 </CardContent>
                             </Card>
                         )}
 
-                        {activeMatch && (
+                        {(activeMatch || teamNumber.trim()) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Climb</CardTitle>
@@ -1407,7 +1507,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && (
+                        {(activeMatch || teamNumber.trim()) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Defense Score</CardTitle>
@@ -1432,7 +1532,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && (
+                        {(activeMatch || teamNumber.trim()) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Shooting on the Move & Robot Tipped</CardTitle>
@@ -1479,7 +1579,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && (
+                        {(activeMatch || teamNumber.trim()) && (
                             <Card>
                                 <CardContent className="pt-6">
                                     <Button
