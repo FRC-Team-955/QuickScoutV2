@@ -9,6 +9,7 @@ import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
 import {Button} from "@/components/ui/button";
 import {get, ref} from "firebase/database";
 import {db} from "@/lib/firebase";
+import {isOSFData, OSF_DATE_RANGE} from "@/lib/dateUtils";
 import {
     CartesianGrid,
     Legend,
@@ -102,6 +103,7 @@ const Analytics = () => {
     const [pitScoutingEntries, setPitScoutingEntries] = useState<PitScoutingEntry[]>([]);
     const [pitTeamNumberInput, setPitTeamNumberInput] = useState("");
     const [subjectiveScoutingEntries, setSubjectiveScoutingEntries] = useState<SubjectiveScoutingEntry[]>([]);
+    const [eventType, setEventType] = useState<"all" | "osf" | "current">("all");
 
     const handleTabChange = (tab: string) => {
         setActiveTab(tab);
@@ -361,7 +363,16 @@ const Analytics = () => {
     }, []);
 
     const sortedAndFiltered = useMemo(() => {
-        return matchEntries.sort((a, b) => {
+        let filtered = matchEntries;
+        
+        // Filter by event type
+        if (eventType === "osf") {
+            filtered = filtered.filter(e => isOSFData(e.submittedAt));
+        } else if (eventType === "current") {
+            filtered = filtered.filter(e => !isOSFData(e.submittedAt));
+        }
+        
+        return filtered.sort((a, b) => {
             switch (sortBy) {
                 case "newest":
                     return b.submittedAt - a.submittedAt;
@@ -379,13 +390,20 @@ const Analytics = () => {
                     return 0;
             }
         });
-    }, [matchEntries, sortBy]);
+    }, [matchEntries, sortBy, eventType]);
 
     const teamSpecificData = useMemo(() => {
         const teamNum = parseInt(teamNumberInput);
         if (isNaN(teamNum)) return null;
 
-        const teamMatches = matchEntries.filter(entry => entry.teamNumber === teamNum);
+        let teamMatches = matchEntries.filter(entry => entry.teamNumber === teamNum);
+        
+        // Filter by event type
+        if (eventType === "osf") {
+            teamMatches = teamMatches.filter(e => isOSFData(e.submittedAt));
+        } else if (eventType === "current") {
+            teamMatches = teamMatches.filter(e => !isOSFData(e.submittedAt));
+        }
 
         if (teamMatches.length === 0) return null;
 
@@ -410,10 +428,36 @@ const Analytics = () => {
                 defense: {avg: avg(defenseRatings), max: max(defenseRatings), min: min(defenseRatings)},
             }
         };
-    }, [matchEntries, teamNumberInput]);
+    }, [matchEntries, teamNumberInput, eventType]);
+
+    const filteredPitScoutingEntries = useMemo(() => {
+        let filtered = pitScoutingEntries;
+        
+        // Filter by event type
+        if (eventType === "osf") {
+            filtered = filtered.filter(e => isOSFData(e.submittedAt));
+        } else if (eventType === "current") {
+            filtered = filtered.filter(e => !isOSFData(e.submittedAt));
+        }
+        
+        return filtered;
+    }, [pitScoutingEntries, eventType]);
+
+    const filteredSubjectiveScoutingEntries = useMemo(() => {
+        let filtered = subjectiveScoutingEntries;
+        
+        // Filter by event type
+        if (eventType === "osf") {
+            filtered = filtered.filter(e => isOSFData(e.submittedAt));
+        } else if (eventType === "current") {
+            filtered = filtered.filter(e => !isOSFData(e.submittedAt));
+        }
+        
+        return filtered;
+    }, [subjectiveScoutingEntries, eventType]);
 
     const bubbleData = useMemo(() => {
-        return matchEntries.map((m) => ({
+        return sortedAndFiltered.map((m) => ({
             x: m.score_teleop,
             y: m.score_auto,
             r: Math.max(3, (m.climbValue || 0) * 6),
@@ -421,7 +465,7 @@ const Analytics = () => {
             team: m.teamNumber,
             id: m.id,
         }));
-    }, [matchEntries]);
+    }, [sortedAndFiltered]);
 
     const handleExportAllData = () => {
         // Helper: escape a single CSV field according to RFC4180 (double-quote, double internal quotes)
@@ -567,6 +611,20 @@ const Analytics = () => {
                             <TabsTrigger value="pit-scouting">Pit Scouting</TabsTrigger>
                             <TabsTrigger value="subjective">Subjective Scouting</TabsTrigger>
                         </TabsList>
+
+                        <div className="flex items-center gap-3 py-4">
+                            <span className="text-sm font-medium">Event Type:</span>
+                            <Select value={eventType} onValueChange={(v: any) => setEventType(v)}>
+                                <SelectTrigger className="w-[200px]">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Events</SelectItem>
+                                    <SelectItem value="osf">OSF ({OSF_DATE_RANGE})</SelectItem>
+                                    <SelectItem value="current">Current Event</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
 
                         <TabsContent value="all" className="space-y-4">
                             <div className="flex items-center justify-between">
@@ -944,7 +1002,7 @@ const Analytics = () => {
                                             data...</p>
                                     </CardContent>
                                 </Card>
-                            ) : pitScoutingEntries.length === 0 ? (
+                            ) : filteredPitScoutingEntries.length === 0 ? (
                                 <Card>
                                     <CardContent className="py-8">
                                         <p className="text-center text-muted-foreground">No pit scouting data
@@ -956,15 +1014,15 @@ const Analytics = () => {
                                     <div className="flex items-center justify-between">
                                         <p className="text-muted-foreground">
                                             Viewing {pitTeamNumberInput
-                                            ? pitScoutingEntries.filter(e => e.teamNumber === parseInt(pitTeamNumberInput)).length
-                                            : pitScoutingEntries.length} pit scouting entries
+                                            ? filteredPitScoutingEntries.filter(e => e.teamNumber === parseInt(pitTeamNumberInput)).length
+                                            : filteredPitScoutingEntries.length} pit scouting entries
                                         </p>
                                     </div>
 
                                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                         {(pitTeamNumberInput
-                                                ? pitScoutingEntries.filter(e => e.teamNumber === parseInt(pitTeamNumberInput))
-                                                : pitScoutingEntries
+                                                ? filteredPitScoutingEntries.filter(e => e.teamNumber === parseInt(pitTeamNumberInput))
+                                                : filteredPitScoutingEntries
                                         ).map((entry) => {
                                             const formatKey = (key: string) => {
                                                 return key
@@ -1120,17 +1178,17 @@ const Analytics = () => {
 
                         <TabsContent value="subjective" className="space-y-4">
                             <div>
-                                <p className="text-muted-foreground">Viewing {subjectiveScoutingEntries.length} subjective
+                                <p className="text-muted-foreground">Viewing {filteredSubjectiveScoutingEntries.length} subjective
                                     scouting entries</p>
                             </div>
 
                             {loading ? (
                                 <p>Loading subjective scouting data...</p>
-                            ) : subjectiveScoutingEntries.length === 0 ? (
+                            ) : filteredSubjectiveScoutingEntries.length === 0 ? (
                                 <p className="text-muted-foreground">No subjective scouting data found</p>
                             ) : (
                                 <div className="grid grid-cols-1 gap-4">
-                                    {subjectiveScoutingEntries.map((entry) => (
+                                    {filteredSubjectiveScoutingEntries.map((entry) => (
                                         <Card key={entry.id} className="overflow-hidden border-l-4 border-l-accent">
                                             <CardHeader className="bg-gradient-to-r from-accent/10 to-accent/5 pb-3">
                                                 <CardTitle className="flex justify-between items-start">
