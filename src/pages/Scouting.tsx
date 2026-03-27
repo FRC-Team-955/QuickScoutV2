@@ -624,14 +624,9 @@ const Scouting = () => {
         setDefenseScore("");
         setEndGameNotes("");
         setDidClimb(false);
-        setCancelConfirm(false);
         setSotm("");
         setRobotTipped("");
         isManualSessionRef.current = false;
-        if (cancelTimeoutRef.current) {
-            clearTimeout(cancelTimeoutRef.current);
-            cancelTimeoutRef.current = null;
-        }
     };
 
     useEffect(() => {
@@ -884,7 +879,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {(isLead || !subjectiveActiveMatch) && (
+                        {(isLead || !subjectiveActiveMatch) && !activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Subjective Queue</CardTitle>
@@ -1063,7 +1058,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {!isInSubjectiveScouting && (
+                        {!isInSubjectiveScouting && !activeMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Start Manual Scouting Session</CardTitle>
