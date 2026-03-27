@@ -12,8 +12,8 @@ import {useAuth} from "@/contexts/AuthContext";
 import {Minus, Play, Plus} from "lucide-react";
 import {useQueue} from "@/hooks/use-queue";
 import {useSubjectiveQueue} from "@/hooks/use-subjective-queue";
-import {subscribeToUserAssignment, subscribeToUserSubjectiveAssignment, subscribeToActiveMatch} from "@/lib/queue";
-import {get, getDatabase, ref, remove, serverTimestamp, set, onValue,} from "firebase/database";
+import {subscribeToActiveMatch, subscribeToUserAssignment, subscribeToUserSubjectiveAssignment} from "@/lib/queue";
+import {get, getDatabase, onValue, ref, remove, serverTimestamp, set,} from "firebase/database";
 import successAudio from "/partyblower.mp3";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select.tsx";
 import {toast} from "sonner";
@@ -121,19 +121,19 @@ const Scouting = () => {
             setImportingTeams(true);
             const eventKey = "2026orore";
             const match = await getNextUnplayedMatch(eventKey);
-            
+
             if (!match) {
                 toast("No upcoming matches found");
                 return;
             }
-            
+
             // Extract team numbers from alliances
             // Match structure: { alliances: { red: { team_keys: [...] }, blue: { team_keys: [...] } } }
             const redTeams = match.alliances?.red?.team_keys || [];
             const blueTeams = match.alliances?.blue?.team_keys || [];
-            
+
             const teamNumbers: string[] = [];
-            
+
             // Red teams (indices 0, 1, 2)
             redTeams.forEach((key: string) => {
                 const num = key.replace(/^frc/, "");
@@ -141,7 +141,7 @@ const Scouting = () => {
                     teamNumbers.push(num);
                 }
             });
-            
+
             // Blue teams (indices 3, 4, 5)
             blueTeams.forEach((key: string) => {
                 const num = key.replace(/^frc/, "");
@@ -149,18 +149,18 @@ const Scouting = () => {
                     teamNumbers.push(num);
                 }
             });
-            
+
             if (teamNumbers.length === 0) {
                 toast("No valid team numbers found in next match");
                 return;
             }
-            
+
             // Fill the team assignments with proper order: Red 1, Red 2, Red 3, Blue 1, Blue 2, Blue 3
             const newAssignments = ["", "", "", "", "", ""];
             teamNumbers.slice(0, 6).forEach((num, idx) => {
                 newAssignments[idx] = num;
             });
-            
+
             setTeamAssignments(newAssignments);
             toast(`Imported ${teamNumbers.length} teams from TBA for next match`);
         } catch (err) {
@@ -572,7 +572,7 @@ const Scouting = () => {
                 triggerConfetti();
             }
         }
-        
+
         if (!isManualSessionRef.current) {
             try {
                 const matchId = currentMatchIdRef.current;
@@ -1097,32 +1097,32 @@ const Scouting = () => {
                                             {Object.entries(subjectiveActiveMatch.participants)
                                                 .filter(([key]) => !/^\d+$/.test(key))
                                                 .map(([key, participant]: [string, any], idx: number) => (
-                                                <li
-                                                    key={key}
-                                                    className="flex items-center justify-between p-2 rounded-md border bg-secondary/50"
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div
-                                                            className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium">
-                                                            {participant.name?.charAt(0)?.toUpperCase() || "?"}
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-sm font-medium">
-                                                                {participant.name}
+                                                    <li
+                                                        key={key}
+                                                        className="flex items-center justify-between p-2 rounded-md border bg-secondary/50"
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <div
+                                                                className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium">
+                                                                {participant.name?.charAt(0)?.toUpperCase() || "?"}
                                                             </div>
-                                                            <div className="text-xs text-muted-foreground">
-                                                                Team {participant.assignedTeam || "—"}
+                                                            <div>
+                                                                <div className="text-sm font-medium">
+                                                                    {participant.name}
+                                                                </div>
+                                                                <div className="text-xs text-muted-foreground">
+                                                                    Team {participant.assignedTeam || "—"}
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                    {idx < 6 && (
-                                                        <div
-                                                            className="text-xs px-2 py-1 rounded-md bg-green-50 text-green-700 font-medium">
-                                                            Scouting
-                                                        </div>
-                                                    )}
-                                                </li>
-                                            ))}
+                                                        {idx < 6 && (
+                                                            <div
+                                                                className="text-xs px-2 py-1 rounded-md bg-green-50 text-green-700 font-medium">
+                                                                Scouting
+                                                            </div>
+                                                        )}
+                                                    </li>
+                                                ))}
                                         </ul>
                                     ) : (
                                         <p className="text-sm text-muted-foreground">
@@ -1488,12 +1488,12 @@ const Scouting = () => {
                                             try {
                                                 const matchId = activeMatch.id;
                                                 await resetScouting();
-                                                
+
                                                 // Check if there are any active scouters left
                                                 const db = getDatabase();
                                                 const participantsRef = ref(db, `matches/${matchId}/participants`);
                                                 const participantsSnap = await get(participantsRef);
-                                                
+
                                                 let hasActiveScouters = false;
                                                 if (participantsSnap.exists()) {
                                                     const participants = participantsSnap.val();
@@ -1502,7 +1502,7 @@ const Scouting = () => {
                                                     );
                                                     hasActiveScouters = activeParticipants.length > 0;
                                                 }
-                                                
+
                                                 // If no active scouters, force end the match
                                                 if (!hasActiveScouters) {
                                                     await endMatch(matchId);
@@ -1510,7 +1510,7 @@ const Scouting = () => {
                                                 } else {
                                                     toast("Scouting data submitted successfully!");
                                                 }
-                                                
+
                                                 // Navigate to dashboard where queue logic handles leaving
                                                 navigate("/dashboard");
                                             } catch (err) {
@@ -1590,18 +1590,6 @@ const Scouting = () => {
                                     </CardHeader>
                                     <CardContent className="space-y-6">
                                         <div className="space-y-3">
-                                            <Label htmlFor="pressure-performance" className="text-base font-medium">
-                                                Do they perform well under pressure and falter?
-                                            </Label>
-                                            <Input
-                                                id="pressure-performance"
-                                                placeholder="e.g., Perform well under pressure, Falter under pressure, Neutral"
-                                                value={performanceUnderPressure}
-                                                onChange={(e) => setPerformanceUnderPressure(e.target.value)}
-                                            />
-                                        </div>
-
-                                        <div className="space-y-3">
                                             <Label htmlFor="team-focus" className="text-base font-medium">
                                                 Do they focus on scoring, passing, defense, or a mix?
                                             </Label>
@@ -1612,18 +1600,6 @@ const Scouting = () => {
                                                 onChange={(e) => setTeamFocus(e.target.value)}
                                             />
                                         </div>
-
-                                        <div className="space-y-3">
-                                            <Label htmlFor="driver-sync" className="text-base font-medium">
-                                                How synchronized are their drivers and human players?
-                                            </Label>
-                                            <Input
-                                                id="driver-sync"
-                                                placeholder="e.g., Highly synchronized, Room for improvement, Needs work"
-                                                value={driverSynchronization}
-                                                onChange={(e) => setDriverSynchronization(e.target.value)}
-                                            />
-                                        </div>
                                     </CardContent>
                                 </Card>
 
@@ -1632,17 +1608,6 @@ const Scouting = () => {
                                         <CardTitle>Tactical Insights</CardTitle>
                                     </CardHeader>
                                     <CardContent className="space-y-6">
-                                        <div className="space-y-3">
-                                            <Label htmlFor="defensive-strategy" className="text-base font-medium">
-                                                How do they defend against scoring attempts (if they defend)?
-                                            </Label>
-                                            <Input
-                                                id="defensive-strategy"
-                                                placeholder="e.g., Aggressive pushing, Blocking strategy, Minimal defense"
-                                                value={defensiveStrategy}
-                                                onChange={(e) => setDefensiveStrategy(e.target.value)}
-                                            />
-                                        </div>
 
                                         <div className="space-y-3">
                                             <Label htmlFor="blocking-effectiveness" className="text-base font-medium">
