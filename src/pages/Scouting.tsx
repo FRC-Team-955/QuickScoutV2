@@ -386,6 +386,7 @@ const Scouting = () => {
 
     const [sotm, setSotm] = useState<string>("");
     const [robotTipped, setRobotTipped] = useState<string>("");
+    const [robotDead, setRobotDead] = useState<string>("");
 
     // Subjective Scouting State
     const [subjectiveTeamNumber, setSubjectiveTeamNumber] = useState("");
@@ -652,6 +653,7 @@ const Scouting = () => {
                     },
                     sotm,
                     robotTipped,
+                    robotDead,
                 });
                 await remove(ref(db, `users/${user.id}/currentAssignment`));
 
@@ -698,6 +700,7 @@ const Scouting = () => {
         setTeleopClimb("");
         setSotm("");
         setRobotTipped("");
+        setRobotDead("");
         setIsInSubjectiveScouting(false);
         setSubjectiveTeamNumber("");
         setAutonomousEffectiveness("");
@@ -742,6 +745,7 @@ const Scouting = () => {
             setTeleopClimb("");
             setSotm("");
             setRobotTipped("");
+            setRobotDead("");
             setCancelConfirm(false);
             
             // Leave the match
@@ -1533,7 +1537,7 @@ const Scouting = () => {
                         {activeMatch && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Shooting on the Move & Robot Tipped</CardTitle>
+                                    <CardTitle>Misc</CardTitle>
                                     <CardDescription>
                                         Select Yes or No for each
                                     </CardDescription>
@@ -1556,7 +1560,7 @@ const Scouting = () => {
                                             </Button>
                                         </div>
                                     </div>
-                                    <div>
+                                    <div className="mb-4">
                                         <div className="font-medium mb-2">Robot Tipped</div>
                                         <div className="flex gap-2">
                                             <Button
@@ -1568,6 +1572,23 @@ const Scouting = () => {
                                             <Button
                                                 variant={robotTipped === "no" ? "default" : "outline"}
                                                 onClick={() => setRobotTipped("no")}
+                                            >
+                                                No
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="font-medium mb-2">Robot Dead</div>
+                                        <div className="flex gap-2">
+                                            <Button
+                                                variant={robotDead === "yes" ? "default" : "outline"}
+                                                onClick={() => setRobotDead("yes")}
+                                            >
+                                                Yes
+                                            </Button>
+                                            <Button
+                                                variant={robotDead === "no" ? "default" : "outline"}
+                                                onClick={() => setRobotDead("no")}
                                             >
                                                 No
                                             </Button>

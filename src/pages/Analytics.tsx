@@ -46,6 +46,7 @@ export type MatchEntry = {
     defense_rating: string;
     defense_rating_value: number;
     robotTipped?: boolean;
+    robotDead?: boolean;
     submittedAt: number;
 };
 
@@ -216,6 +217,9 @@ const Analytics = () => {
                             const robotTippedRaw = (data as Record<string, unknown>)?.robotTipped ?? false;
                             const robotTipped = robotTippedRaw === true || String(robotTippedRaw).toLowerCase() === "yes";
 
+                            const robotDeadRaw = (data as Record<string, unknown>)?.robotDead ?? false;
+                            const robotDead = robotDeadRaw === true || String(robotDeadRaw).toLowerCase() === "yes";
+
                             allEntries.push({
                                 id: `${matchKey}_${stationId}_${(data.submittedAt as number) || Math.random()}`,
                                 matchKey: matchKey,
@@ -230,6 +234,7 @@ const Analytics = () => {
                                 defense_rating: defenseDisplay,
                                 defense_rating_value: defenseValue,
                                 robotTipped,
+                                robotDead,
                                 submittedAt: (data.submittedAt as number) || 0
                             });
                         });
@@ -462,6 +467,7 @@ const Analytics = () => {
             y: m.score_auto,
             r: Math.max(3, (m.climbValue || 0) * 6),
             robotTipped: !!m.robotTipped,
+            robotDead: !!m.robotDead,
             team: m.teamNumber,
             id: m.id,
         }));
@@ -501,6 +507,7 @@ const Analytics = () => {
             "Climb",
             "Defense Rating",
             "Robot Tipped",
+            "Robot Dead",
             "Submitted At (PST)"
         ];
         const matchRows = matchEntries.map((entry) => [
@@ -514,6 +521,7 @@ const Analytics = () => {
             entry.climb,
             entry.defense_rating,
             entry.robotTipped ? "Yes" : "No",
+            entry.robotDead ? "Yes" : "No",
             new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"})
         ] as Array<unknown>);
 
@@ -955,7 +963,12 @@ const Analytics = () => {
                                                     fill="#00C853"
                                                     shape={(props: any) => {
                                                         const {cx, cy, payload} = props as any;
-                                                        const color = payload?.robotTipped ? '#FF5252' : '#2ECC71';
+                                                        let color = '#2ECC71'; // Green for normal
+                                                        if (payload?.robotDead) {
+                                                            color = '#000000'; // Black for dead robot
+                                                        } else if (payload?.robotTipped) {
+                                                            color = '#FF5252'; // Red for tipped
+                                                        }
                                                         const radius = (payload?.r as number) || 6;
                                                         return (
                                                             <g>
