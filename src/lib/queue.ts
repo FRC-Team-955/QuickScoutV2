@@ -331,12 +331,12 @@ export const startMatch = async (
         const active = await getActiveMatch();
         if (active) throw new Error("Another match is already running");
 
-        // include the entire queue when starting a match
-        const all = await getAllQueue();
-        if (all.length === 0) throw new Error("No users in queue");
+        // Get top 6 from queue (only those who should be scouting)
+        const topSix = await getTopN(6);
+        if (topSix.length === 0) throw new Error("No users in queue");
 
-        // build participants — attach assignedTeam for the first up-to-6 entries when provided
-        const participants = all.map((t, idx) => {
+        // build participants — attach assignedTeam for the entries when provided
+        const participants = topSix.map((t, idx) => {
             const assigned =
                 Array.isArray(teamAssignments) && idx < (teamAssignments || []).length
                     ? teamAssignments![idx]
@@ -358,16 +358,11 @@ export const startMatch = async (
             status: "active",
         });
 
-        // persist per-user currentAssignment for those assigned (first 6)
+        // persist per-user currentAssignment for those assigned
         const ops: Promise<any>[] = [];
-        const maxAssign = Math.min(
-            6,
-            all.length,
-            Array.isArray(teamAssignments) ? teamAssignments.length : 0,
-        );
-        for (let i = 0; i < maxAssign; i++) {
-            const user = all[i];
-            const team = teamAssignments![i];
+        for (let i = 0; i < topSix.length; i++) {
+            const user = topSix[i];
+            const team = Array.isArray(teamAssignments) ? teamAssignments[i] : null;
             if (team != null) {
                 ops.push(
                     set(ref(db, `users/${user.userId}/currentAssignment`), {
@@ -382,8 +377,8 @@ export const startMatch = async (
         // apply per-user assignment writes (fire-and-forget but await to fail early)
         if (ops.length) await Promise.all(ops);
 
-        // remove all participants from queue
-        await Promise.all(all.map((t) => leaveQueue(t.userId)));
+        // remove only the top 6 participants from queue (not everyone)
+        await Promise.all(topSix.map((t) => leaveQueue(t.userId)));
 
         return matchRef.key;
     } catch (err) {
