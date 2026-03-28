@@ -17,7 +17,7 @@ import {get, getDatabase, onValue, ref, remove, serverTimestamp, set,} from "fir
 import successAudio from "/partyblower.mp3";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select.tsx";
 import {toast} from "sonner";
-import {getNextUnplayedMatch} from "@/lib/tba";
+import {getEventMatches} from "@/lib/tba";
 
 
 const Scouting = () => {
@@ -107,6 +107,7 @@ const Scouting = () => {
         "",
     ]);
     const [importingTeams, setImportingTeams] = useState(false);
+    const [qualificationNumber, setQualificationNumber] = useState("");
 
     const setAssignment = (index: number, value: string) => {
         setTeamAssignments((prev) => {
@@ -116,14 +117,38 @@ const Scouting = () => {
         });
     };
 
-    const handleImportTeamsFromTBA = async () => {
+    const handleImportTeamsByQualNumber = async () => {
+        if (!qualificationNumber.trim()) {
+            toast("Please enter a qualification match number");
+            return;
+        }
+
         try {
             setImportingTeams(true);
             const eventKey = "2026orore";
-            const match = await getNextUnplayedMatch(eventKey);
+            const qualNum = parseInt(qualificationNumber, 10);
+
+            const matches = await getEventMatches(eventKey);
+
+            if (!matches || matches.length === 0) {
+                toast("No matches found");
+                setTeamAssignments(["", "", "", "", "", ""]);
+                return;
+            }
+
+            // Find match with matching qualification number
+            const match = matches.find((m: any) => {
+                const matchKey = m.key || "";
+                // Match key format: "2026orore_qm1", "2026orore_qm2", etc
+                const qmMatch = matchKey.match(/_qm(\d+)/);
+                if (qmMatch) {
+                    return parseInt(qmMatch[1], 10) === qualNum;
+                }
+                return false;
+            });
 
             if (!match) {
-                toast("No upcoming matches found");
+                toast(`Qualification match ${qualNum} not found`);
                 setTeamAssignments(["", "", "", "", "", ""]);
                 return;
             }
@@ -152,7 +177,7 @@ const Scouting = () => {
             });
 
             if (teamNumbers.length === 0) {
-                toast("No valid team numbers found in next match");
+                toast("No valid team numbers found in qualification match");
                 setTeamAssignments(["", "", "", "", "", ""]);
                 return;
             }
@@ -164,7 +189,8 @@ const Scouting = () => {
             });
 
             setTeamAssignments(newAssignments);
-            toast(`Imported ${teamNumbers.length} teams from TBA for next match: ${match.match_number ? `Match ${match.match_number}` : ""}`);
+            toast(`Imported ${teamNumbers.length} teams from Qualification Match ${qualNum}`);
+            setQualificationNumber("");
         } catch (err) {
             console.error("Failed to import teams from TBA", err);
             toast("Failed to import teams from TBA. Check console for details.");
@@ -737,8 +763,8 @@ const Scouting = () => {
                                     <CardTitle>Match Queue</CardTitle>
                                     <CardDescription>
                                         First 6 in the queue will be selected to start scouting (real-time).
-                                        Use "Import Next Match Teams from TBA (Refresh)" to load team numbers
-                                        for the upcoming match.
+                                        Use the qualification number input below to load team numbers
+                                        for a specific qualification match from TBA.
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
@@ -805,14 +831,31 @@ const Scouting = () => {
                                     </div>
 
                                     {isLead && (
-                                        <Button
-                                            onClick={handleImportTeamsFromTBA}
-                                            disabled={importingTeams}
-                                            variant="outline"
-                                            className="w-full"
-                                        >
-                                            {importingTeams ? "Importing..." : "Import Next Match Teams from TBA (Refresh)"}
-                                        </Button>
+                                        <div className="space-y-3">
+                                            <Label htmlFor="qual-number">Qualification Match Number</Label>
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    id="qual-number"
+                                                    type="number"
+                                                    min="1"
+                                                    placeholder="Enter match number (e.g., 1, 2, 3)"
+                                                    value={qualificationNumber}
+                                                    onChange={(e) => setQualificationNumber(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            handleImportTeamsByQualNumber();
+                                                        }
+                                                    }}
+                                                />
+                                                <Button
+                                                    onClick={handleImportTeamsByQualNumber}
+                                                    disabled={importingTeams || !qualificationNumber.trim()}
+                                                    variant="outline"
+                                                >
+                                                    {importingTeams ? "Importing..." : "Import"}
+                                                </Button>
+                                            </div>
+                                        </div>
                                     )}
 
                                     {isLead && (
