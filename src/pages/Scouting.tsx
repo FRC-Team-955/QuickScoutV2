@@ -374,7 +374,6 @@ const Scouting = () => {
     const [autonomousNotes, setAutonomousNotes] = useState("");
     const [autonomousFuel, setAutonomousFuel] = useState(0);
     const [autoClimb, setAutoClimb] = useState<string>("");
-    const [teamNumberNotes, setTeamNumberNotes] = useState("");
 
     const [teleopNotes, setTeleopNotes] = useState("");
     const [teleopFuel, setTeleopFuel] = useState(0);
@@ -387,10 +386,12 @@ const Scouting = () => {
 
     const [sotm, setSotm] = useState<string>("");
     const [robotTipped, setRobotTipped] = useState<string>("");
+    const [robotDead, setRobotDead] = useState<string>("");
 
     // Subjective Scouting State
     const [subjectiveTeamNumber, setSubjectiveTeamNumber] = useState("");
     const [isInSubjectiveScouting, setIsInSubjectiveScouting] = useState(false);
+    const [cancelConfirm, setCancelConfirm] = useState(false);
 
     // Section 1: Robot Performance and Strategy
     const [autonomousEffectiveness, setAutonomousEffectiveness] = useState<string>("");
@@ -631,8 +632,6 @@ const Scouting = () => {
 
                     submittedAt: serverTimestamp(),
 
-                    teamNumberNotes,
-
                     autonomous: {
                         fuel: autonomousFuel,
                         notes: autonomousNotes,
@@ -654,6 +653,7 @@ const Scouting = () => {
                     },
                     sotm,
                     robotTipped,
+                    robotDead,
                 });
                 await remove(ref(db, `users/${user.id}/currentAssignment`));
 
@@ -700,6 +700,7 @@ const Scouting = () => {
         setTeleopClimb("");
         setSotm("");
         setRobotTipped("");
+        setRobotDead("");
         setIsInSubjectiveScouting(false);
         setSubjectiveTeamNumber("");
         setAutonomousEffectiveness("");
@@ -720,6 +721,36 @@ const Scouting = () => {
         setTeleopPassing("");
         setGameSense("");
         isManualSessionRef.current = false;
+    };
+
+    const handleCancel = () => {
+        if (!cancelConfirm) {
+            setCancelConfirm(true);
+            // Auto-reset after 3 seconds
+            setTimeout(() => {
+                setCancelConfirm(false);
+            }, 3000);
+        } else {
+            // Reset all scouting state
+            setTeamNumber("");
+            setAutonomousNotes("");
+            setAutonomousFuel(0);
+            setAutoClimb("");
+            setTeleopFuel(0);
+            setTeleopNotes("");
+            setDefenseScore("");
+            setEndGameNotes("");
+            setDidClimb(false);
+            setClimbLevel("");
+            setTeleopClimb("");
+            setSotm("");
+            setRobotTipped("");
+            setRobotDead("");
+            setCancelConfirm(false);
+            
+            // Leave the match
+            leave();
+        }
     };
 
     useEffect(() => {
@@ -1229,27 +1260,19 @@ const Scouting = () => {
                         )}
 
                         {activeMatch && !isInSubjectiveScouting && !isLead && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Team Number & Notes</CardTitle>
-                                    <CardDescription>
-                                        Document the team number you're scouting and any related notes
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-3">
-                                    <div>
-                                        <Label className="text-base font-medium mb-2 block">
-                                            Team: {teamNumber}
-                                        </Label>
-                                    </div>
-                                    <Textarea
-                                        placeholder="Enter any notes about the team number (e.g., 'Team has two robots', 'Confirmed team number')"
-                                        value={teamNumberNotes}
-                                        onChange={(e) => setTeamNumberNotes(e.target.value)}
-                                        className="min-h-[80px]"
-                                    />
-                                </CardContent>
-                            </Card>
+                            <div className="pt-4 space-y-4">
+                                <h2 className="text-2xl font-mono font-bold mb-4">
+                                    Match Scouting - Team {teamNumber}
+                                </h2>
+                                <div className="flex justify-center">
+                                    <Button
+                                        variant={cancelConfirm ? "destructive" : "outline"}
+                                        onClick={handleCancel}
+                                    >
+                                        {cancelConfirm ? "Click again to confirm" : "Cancel"}
+                                    </Button>
+                                </div>
+                            </div>
                         )}
 
                         {activeMatch && !isInSubjectiveScouting && !isLead && (
@@ -1514,7 +1537,7 @@ const Scouting = () => {
                         {activeMatch && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Shooting on the Move & Robot Tipped</CardTitle>
+                                    <CardTitle>Misc</CardTitle>
                                     <CardDescription>
                                         Select Yes or No for each
                                     </CardDescription>
@@ -1537,7 +1560,7 @@ const Scouting = () => {
                                             </Button>
                                         </div>
                                     </div>
-                                    <div>
+                                    <div className="mb-4">
                                         <div className="font-medium mb-2">Robot Tipped</div>
                                         <div className="flex gap-2">
                                             <Button
@@ -1549,6 +1572,23 @@ const Scouting = () => {
                                             <Button
                                                 variant={robotTipped === "no" ? "default" : "outline"}
                                                 onClick={() => setRobotTipped("no")}
+                                            >
+                                                No
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="font-medium mb-2">Robot Dead</div>
+                                        <div className="flex gap-2">
+                                            <Button
+                                                variant={robotDead === "yes" ? "default" : "outline"}
+                                                onClick={() => setRobotDead("yes")}
+                                            >
+                                                Yes
+                                            </Button>
+                                            <Button
+                                                variant={robotDead === "no" ? "default" : "outline"}
+                                                onClick={() => setRobotDead("no")}
                                             >
                                                 No
                                             </Button>
