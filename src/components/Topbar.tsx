@@ -29,7 +29,7 @@ const TopBar = ({ activeTab, onTabChange, topContent, leftContent }: TopBarProps
         <div className="flex items-center gap-3">
           <div className="md:hidden">
             <Drawer>
-              <DrawerTrigger>
+              <DrawerTrigger asChild>
                 <button className="p-2" aria-label="Open navigation">
                   <Menu className="w-5 h-5" />
                 </button>
