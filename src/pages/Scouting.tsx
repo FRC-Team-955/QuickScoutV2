@@ -9,7 +9,7 @@ import {Textarea} from "@/components/ui/textarea";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle,} from "@/components/ui/card";
 import {Label} from "@/components/ui/label";
 import {useAuth} from "@/contexts/AuthContext";
-import {Minus, Play, Plus} from "lucide-react";
+import {Minus, Play, Plus, X} from "lucide-react";
 import {useQueue} from "@/hooks/use-queue";
 import {useSubjectiveQueue} from "@/hooks/use-subjective-queue";
 import {subscribeToActiveMatch, subscribeToUserAssignment, subscribeToUserSubjectiveAssignment} from "@/lib/queue";
@@ -71,6 +71,27 @@ const Scouting = () => {
     } = useSubjectiveQueue(user ? {id: user.id, name: user.name} : null);
 
     const isLead = !!user?.isLead;
+
+    // Subjective Scouting State - moved here to be before startSubjectiveScouting function
+    const [subjectiveTeamNumber, setSubjectiveTeamNumber] = useState("");
+    const [isInSubjectiveScouting, setIsInSubjectiveScouting] = useState(false);
+    const [autonomousEffectiveness, setAutonomousEffectiveness] = useState<string>("");
+    const [canQuicklyScore, setCanQuicklyScore] = useState<string>("");
+    const [canClimb, setCanClimb] = useState<string>("");
+    const [climbLevelSubjective, setClimbLevelSubjective] = useState<string>("");
+    const [performanceUnderPressure, setPerformanceUnderPressure] = useState<string>("");
+    const [teamFocus, setTeamFocus] = useState<string>("");
+    const [driverSynchronization, setDriverSynchronization] = useState<string>("");
+    const [defensiveStrategy, setDefensiveStrategy] = useState<string>("");
+    const [blockingEffectiveness, setBlockingEffectiveness] = useState<string>("");
+    const [allyCooperation, setAllyCooperation] = useState<string>("");
+    const [defensiveSkill, setDefensiveSkill] = useState<string>("");
+    const [robotReliablity, setRobotReliability] = useState<string>("");
+    const [robotPenalties, setRobotPenalties] = useState<string>("");
+    const [autoFuel, setAutoFuel] = useState<string>("");
+    const [autoClimb1, setAutoClimb1] = useState<string>("");
+    const [teleopPassing, setTeleopPassing] = useState<string>("");
+    const [gameSense, setGameSense] = useState<string>("");
 
     const handleQueueToggle = async () => {
         try {
@@ -274,7 +295,7 @@ const Scouting = () => {
         }
     };
 
-    const startSubjectiveScouting = (teamNum?: string) => {
+    const startSubjectiveScouting = useCallback((teamNum?: string) => {
         const effectiveTeam = (
             typeof teamNum === "string" ? teamNum : subjectiveTeamNumber
         ).trim();
@@ -296,7 +317,7 @@ const Scouting = () => {
         setDefensiveStrategy("");
         setBlockingEffectiveness("");
         setAllyCooperation("");
-    };
+    }, []);
 
     const resetSubjectiveScouting = async () => {
         if (isInSubjectiveScouting && user?.id && subjectiveActiveMatch?.id) {
@@ -370,6 +391,9 @@ const Scouting = () => {
     };
 
     const [teamNumber, setTeamNumber] = useState("");
+    const [isScoutingActive, setIsScoutingActive] = useState(false);
+    const [cancelConfirm, setCancelConfirm] = useState(false);
+    const cancelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const [autonomousNotes, setAutonomousNotes] = useState("");
     const [autonomousFuel, setAutonomousFuel] = useState(0);
@@ -386,37 +410,6 @@ const Scouting = () => {
 
     const [sotm, setSotm] = useState<string>("");
     const [robotTipped, setRobotTipped] = useState<string>("");
-    const [robotDead, setRobotDead] = useState<string>("");
-
-    // Subjective Scouting State
-    const [subjectiveTeamNumber, setSubjectiveTeamNumber] = useState("");
-    const [isInSubjectiveScouting, setIsInSubjectiveScouting] = useState(false);
-    const [cancelConfirm, setCancelConfirm] = useState(false);
-
-    // Section 1: Robot Performance and Strategy
-    const [autonomousEffectiveness, setAutonomousEffectiveness] = useState<string>("");
-    const [canQuicklyScore, setCanQuicklyScore] = useState<string>("");
-    const [canClimb, setCanClimb] = useState<string>("");
-    const [climbLevelSubjective, setClimbLevelSubjective] = useState<string>("");
-
-    // Section 2: Team Dynamics
-    const [performanceUnderPressure, setPerformanceUnderPressure] = useState<string>("");
-    const [teamFocus, setTeamFocus] = useState<string>("");
-    const [driverSynchronization, setDriverSynchronization] = useState<string>("");
-
-    // Section 3: Tactical Insights
-    const [defensiveStrategy, setDefensiveStrategy] = useState<string>("");
-    const [blockingEffectiveness, setBlockingEffectiveness] = useState<string>("");
-    const [allyCooperation, setAllyCooperation] = useState<string>("");
-
-    // Section 4: Misc
-    const [defensiveSkill, setDefensiveSkill] = useState<string>("");
-    const [robotReliablity, setRobotReliability] = useState<string>("");
-    const [robotPenalties, setRobotPenalties] = useState<string>("");
-    const [autoFuel, setAutoFuel] = useState<string>("");
-    const [autoClimb1, setAutoClimb1] = useState<string>("");
-    const [teleopPassing, setTeleopPassing] = useState<string>("");
-    const [gameSense, setGameSense] = useState<string>("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const currentMatchIdRef = useRef<string | null>(null);
@@ -450,7 +443,7 @@ const Scouting = () => {
         }, 5000);
     }, []);
 
-    const startScouting = (teamNum?: string, opts?: { manual?: boolean }) => {
+    const startScouting = useCallback((teamNum?: string, opts?: { manual?: boolean }) => {
         const manual = opts?.manual === true;
         isManualSessionRef.current = manual;
         const effectiveTeam = (
@@ -466,12 +459,13 @@ const Scouting = () => {
             assignedTeamRef.current = null;
         }
 
-        if (teamNum) setTeamNumber(String(teamNum));
+        // Always set the team number to the effective team
+        setTeamNumber(effectiveTeam);
 
+        setIsScoutingActive(true);
         setAutonomousNotes("");
         setAutonomousFuel(0);
         setAutoClimb("");
-        setTeamNumberNotes("");
         setTeleopNotes("");
         setTeleopFuel(0);
         setDefenseScore("");
@@ -480,6 +474,25 @@ const Scouting = () => {
 
         // Show scouter which team they're scouting
         toast(`Scouting Team ${effectiveTeam}`);
+    }, []);
+
+    const handleCancelClick = () => {
+        if (!cancelConfirm) {
+            setCancelConfirm(true);
+            if (cancelTimeoutRef.current) {
+                clearTimeout(cancelTimeoutRef.current);
+            }
+            cancelTimeoutRef.current = setTimeout(() => {
+                setCancelConfirm(false);
+            }, 3000);
+        } else {
+            resetScouting();
+            setCancelConfirm(false);
+            if (cancelTimeoutRef.current) {
+                clearTimeout(cancelTimeoutRef.current);
+                cancelTimeoutRef.current = null;
+            }
+        }
     };
 
     const lastProcessedAssignmentRef = useRef<string | null>(null);
@@ -502,13 +515,16 @@ const Scouting = () => {
 
             matchEndedHandledRef.current = false;
 
-            if (!activeMatch) {
+            // Only start scouting once per assignment
+            const assignmentKey = `${assignment.matchId}-${assignment.teamNumber}`;
+            if (lastProcessedAssignmentRef.current !== assignmentKey) {
+                lastProcessedAssignmentRef.current = assignmentKey;
                 startScouting(String(assignment.teamNumber), {manual: false});
             }
         });
 
         return unsub;
-    }, [user?.id, activeMatch]);
+    }, [user?.id, activeMatch, startScouting]);
 
     useEffect(() => {
         if (!user?.id) return;
@@ -524,7 +540,7 @@ const Scouting = () => {
         });
 
         return unsub;
-    }, [user?.id, isInSubjectiveScouting]);
+    }, [user?.id, isInSubjectiveScouting, startSubjectiveScouting]);
 
     // Add beforeunload event listener to prevent accidental reload during scouting
     useEffect(() => {
@@ -602,6 +618,8 @@ const Scouting = () => {
     }, [activeMatch?.id, user?.id, endMatch]);
 
     const resetScouting = async () => {
+        const wasManualSession = isManualSessionRef.current;
+
         if (Math.random() * 10 < 2) {
             for (let i = 0; i < 5; i++) {
                 triggerConfetti();
@@ -721,6 +739,14 @@ const Scouting = () => {
         setTeleopPassing("");
         setGameSense("");
         isManualSessionRef.current = false;
+        setIsScoutingActive(false);
+        setCancelConfirm(false);
+        if (cancelTimeoutRef.current) {
+            clearTimeout(cancelTimeoutRef.current);
+            cancelTimeoutRef.current = null;
+        }
+        // Always navigate back to dashboard after cancel/reset
+        navigate("/dashboard");
     };
 
     const handleCancel = () => {
@@ -747,7 +773,7 @@ const Scouting = () => {
             setRobotTipped("");
             setRobotDead("");
             setCancelConfirm(false);
-            
+
             // Leave the match
             leave();
         }
@@ -1259,23 +1285,28 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
-                            <div className="pt-4 space-y-4">
-                                <h2 className="text-2xl font-mono font-bold mb-4">
-                                    Match Scouting - Team {teamNumber}
-                                </h2>
-                                <div className="flex justify-center">
+                        {(activeMatch || isScoutingActive) && !isInSubjectiveScouting && !isLead && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Match Scouting - Team {teamNumber}</CardTitle>
+                                    <CardDescription>
+                                        Scout this team across all match phases
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="flex justify-center gap-3">
                                     <Button
+                                        onClick={handleCancelClick}
                                         variant={cancelConfirm ? "destructive" : "outline"}
-                                        onClick={handleCancel}
+                                        size="sm"
                                     >
-                                        {cancelConfirm ? "Click again to confirm" : "Cancel"}
+                                        <X className="w-4 h-4 mr-2"/>
+                                        {cancelConfirm ? "Click again to cancel" : "Cancel"}
                                     </Button>
-                                </div>
-                            </div>
+                                </CardContent>
+                            </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {(activeMatch || isScoutingActive) && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Autonomous Notes</CardTitle>
@@ -1295,7 +1326,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {(activeMatch || isScoutingActive) && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Autonomous Fuel</CardTitle>
@@ -1355,7 +1386,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {(activeMatch || isScoutingActive) && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Auto Climb</CardTitle>
@@ -1380,7 +1411,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {(activeMatch || isScoutingActive) && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Notes</CardTitle>
@@ -1399,7 +1430,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {(activeMatch || isScoutingActive) && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Fuel</CardTitle>
@@ -1459,7 +1490,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {(activeMatch || isScoutingActive) && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Climb</CardTitle>
@@ -1509,7 +1540,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {(activeMatch || isScoutingActive) && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Defense Score</CardTitle>
@@ -1534,7 +1565,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {(activeMatch || isScoutingActive) && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Misc</CardTitle>
@@ -1598,7 +1629,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {(activeMatch || isScoutingActive) && !isInSubjectiveScouting && !isLead && (
                             <Card>
                                 <CardContent className="pt-6">
                                     <Button
@@ -1606,39 +1637,13 @@ const Scouting = () => {
                                             setIsSubmitting(true);
                                             try {
                                                 await resetScouting();
-
-                                                const matchId = activeMatch.id;
-                                                const db = getDatabase();
-                                                const participantsRef = ref(db, `matches/${matchId}/participants`);
-                                                const participantsSnap = await get(participantsRef);
-
-                                                let hasActiveScouters = false;
-                                                if (participantsSnap.exists()) {
-                                                    const participants = participantsSnap.val();
-                                                    const activeParticipants = Object.values(participants as any).filter(
-                                                        (p: any) => !p.submittedAt
-                                                    );
-                                                    hasActiveScouters = activeParticipants.length > 0;
-                                                }
-
-                                                // If no active scouters, force end the match
-                                                if (!hasActiveScouters) {
-                                                    await endMatch(matchId);
-                                                    toast("No more active scouters. Match ended.");
-                                                } else {
-                                                    toast("Scouting data submitted successfully!");
-                                                }
+                                                toast("Scouting data submitted successfully!");
                                             } catch (err) {
                                                 console.error("Submit error:", err);
                                                 toast("Failed to submit. Please try again.");
                                                 setIsSubmitting(false);
                                                 return;
                                             }
-
-                                            // Navigate to dashboard after successful submission
-                                            setTimeout(() => {
-                                                navigate("/dashboard");
-                                            }, 500);
                                         }}
                                         className="w-full"
                                         size="lg"
