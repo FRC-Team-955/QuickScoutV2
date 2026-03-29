@@ -105,6 +105,7 @@ const Analytics = () => {
     const [pitTeamNumberInput, setPitTeamNumberInput] = useState("");
     const [subjectiveScoutingEntries, setSubjectiveScoutingEntries] = useState<SubjectiveScoutingEntry[]>([]);
     const [eventType, setEventType] = useState<"all" | "osf" | "current">("all");
+    const [scouterSearchInput, setScouterSearchInput] = useState("");
 
     const handleTabChange = (tab: string) => {
         setActiveTab(tab);
@@ -461,6 +462,44 @@ const Analytics = () => {
         return filtered;
     }, [subjectiveScoutingEntries, eventType]);
 
+    const scouterData = useMemo(() => {
+        const searchTerm = scouterSearchInput.trim().toLowerCase();
+        if (!searchTerm) return null;
+
+        let scouterMatches = matchEntries.filter((entry) => entry.scoutName.toLowerCase().includes(searchTerm));
+
+        if (eventType === "osf") scouterMatches = scouterMatches.filter((e) => isOSFData(e.submittedAt));
+        else if (eventType === "current") scouterMatches = scouterMatches.filter((e) => !isOSFData(e.submittedAt));
+
+        if (scouterMatches.length === 0) return null;
+
+        const nums = <T extends number[]>(arr: T) => arr;
+        const autoScores = nums(scouterMatches.map((m) => m.score_auto));
+        const teleopScores = nums(scouterMatches.map((m) => m.score_teleop));
+        const totalScores = nums(scouterMatches.map((m) => m.total_score));
+        const climbScores = nums(scouterMatches.map((m) => m.climbValue || 0));
+        const defenseRatings = nums(scouterMatches.map((m) => m.defense_rating_value || 0));
+
+        const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / (arr.length || 1);
+        const max = (arr: number[]) => Math.max(...arr);
+        const min = (arr: number[]) => Math.min(...arr);
+
+        const uniqueTeams = new Set(scouterMatches.map((m) => m.teamNumber));
+
+        return {
+            scouterName: scouterSearchInput,
+            matches: scouterMatches,
+            uniqueTeamCount: uniqueTeams.size,
+            stats: {
+                autoScore: {avg: avg(autoScores), max: max(autoScores), min: min(autoScores)},
+                teleopScore: {avg: avg(teleopScores), max: max(teleopScores), min: min(teleopScores)},
+                totalScore: {avg: avg(totalScores), max: max(totalScores), min: min(totalScores)},
+                climb: {avg: avg(climbScores), max: max(climbScores), min: min(climbScores)},
+                defense: {avg: avg(defenseRatings), max: max(defenseRatings), min: min(defenseRatings)},
+            },
+        };
+    }, [matchEntries, scouterSearchInput, eventType]);
+
     const bubbleData = useMemo(() => {
         return sortedAndFiltered.map((m) => ({
             x: m.score_teleop,
@@ -615,6 +654,7 @@ const Analytics = () => {
                         <TabsList>
                             <TabsTrigger value="all">All Matches</TabsTrigger>
                             <TabsTrigger value="team">Team Search</TabsTrigger>
+                            <TabsTrigger value="scouter">Scouter Search</TabsTrigger>
                             <TabsTrigger value="bubble">Bubble Chart</TabsTrigger>
                             <TabsTrigger value="pit-scouting">Pit Scouting</TabsTrigger>
                             <TabsTrigger value="subjective">Subjective Scouting</TabsTrigger>
@@ -938,6 +978,195 @@ const Analytics = () => {
                                 </div>
                             )}
                         </TabsContent>
+
+                        <TabsContent value="scouter" className="space-y-4">
+                            <div className="flex gap-2">
+                                <Input
+                                    type="text"
+                                    placeholder="Enter scouter name"
+                                    value={scouterSearchInput}
+                                    onChange={(e) => setScouterSearchInput(e.target.value)}
+                                    aria-label="Scouter name"
+                                    className="w-64"
+                                />
+                            </div>
+
+                            {scouterData ? (
+                                <div className="space-y-4">
+                                    <Card className="border-2 border-primary">
+                                        <CardHeader>
+                                            <CardTitle className="text-2xl">{scouterData.scouterName}</CardTitle>
+                                            <p className="text-muted-foreground text-sm">{scouterData.matches.length} matches • {scouterData.uniqueTeamCount} unique teams</p>
+                                        </CardHeader>
+                                    </Card>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        <Card>
+                                            <CardHeader className="pb-3">
+                                                <CardTitle className="text-sm">Auto Score</CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="space-y-2">
+                                                <div>
+                                                    <p className="text-xs text-muted-foreground">Average</p>
+                                                    <p className="text-2xl font-bold">{scouterData.stats.autoScore.avg.toFixed(1)}</p>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
+                                                    <div>
+                                                        <p className="text-xs text-muted-foreground">Max</p>
+                                                        <p className="text-lg font-semibold">{scouterData.stats.autoScore.max}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs text-muted-foreground">Min</p>
+                                                        <p className="text-lg font-semibold">{scouterData.stats.autoScore.min}</p>
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+
+                                        <Card>
+                                            <CardHeader className="pb-3">
+                                                <CardTitle className="text-sm">Teleop Score</CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="space-y-2">
+                                                <div>
+                                                    <p className="text-xs text-muted-foreground">Average</p>
+                                                    <p className="text-2xl font-bold">{scouterData.stats.teleopScore.avg.toFixed(1)}</p>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
+                                                    <div>
+                                                        <p className="text-xs text-muted-foreground">Max</p>
+                                                        <p className="text-lg font-semibold">{scouterData.stats.teleopScore.max}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs text-muted-foreground">Min</p>
+                                                        <p className="text-lg font-semibold">{scouterData.stats.teleopScore.min}</p>
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+
+                                        <Card>
+                                            <CardHeader className="pb-3">
+                                                <CardTitle className="text-sm">Total Score</CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="space-y-2">
+                                                <div>
+                                                    <p className="text-xs text-muted-foreground">Average</p>
+                                                    <p className="text-2xl font-bold">{scouterData.stats.totalScore.avg.toFixed(1)}</p>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
+                                                    <div>
+                                                        <p className="text-xs text-muted-foreground">Max</p>
+                                                        <p className="text-lg font-semibold">{scouterData.stats.totalScore.max}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs text-muted-foreground">Min</p>
+                                                        <p className="text-lg font-semibold">{scouterData.stats.totalScore.min}</p>
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+
+                                        <Card>
+                                            <CardHeader className="pb-3">
+                                                <CardTitle className="text-sm">Climb</CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="space-y-2">
+                                                <div>
+                                                    <p className="text-xs text-muted-foreground">Average</p>
+                                                    <p className="text-2xl font-bold">{scouterData.stats.climb.avg.toFixed(1)}</p>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
+                                                    <div>
+                                                        <p className="text-xs text-muted-foreground">Max</p>
+                                                        <p className="text-lg font-semibold">{scouterData.stats.climb.max}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs text-muted-foreground">Min</p>
+                                                        <p className="text-lg font-semibold">{scouterData.stats.climb.min}</p>
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+
+                                        <Card>
+                                            <CardHeader className="pb-3">
+                                                <CardTitle className="text-sm">Defense Rating</CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="space-y-2">
+                                                <div>
+                                                    <p className="text-xs text-muted-foreground">Average</p>
+                                                    <p className="text-2xl font-bold">{scouterData.stats.defense.avg.toFixed(1)}</p>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
+                                                    <div>
+                                                        <p className="text-xs text-muted-foreground">Max</p>
+                                                        <p className="text-lg font-semibold">{scouterData.stats.defense.max}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs text-muted-foreground">Min</p>
+                                                        <p className="text-lg font-semibold">{scouterData.stats.defense.min}</p>
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+
+                                    <div>
+                                        <h3 className="font-semibold text-lg mb-3">Individual Match Reports</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {scouterData.matches.map((entry) => (
+                                                <Card key={entry.id} className="border-l-4 border-l-primary">
+                                                    <CardHeader className="pb-2">
+                                                        <CardTitle className="flex justify-between items-start">
+                                                            <span className="text-lg">Team {entry.teamNumber}</span>
+                                                            <span className="text-xs bg-secondary px-2 py-1 rounded">{entry.station}</span>
+                                                        </CardTitle>
+                                                    </CardHeader>
+                                                    <CardContent className="text-sm space-y-2">
+                                                        <div className="flex justify-between border-b border-border/50 pb-1">
+                                                            <span className="text-muted-foreground">Match:</span>
+                                                            <span className="font-medium">{entry.matchKey.slice(-6)}</span>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-2 pt-1">
+                                                            <div>
+                                                                <p className="text-xs text-muted-foreground">Auto</p>
+                                                                <p className="font-semibold">{entry.score_auto}</p>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-xs text-muted-foreground">Teleop</p>
+                                                                <p className="font-semibold">{entry.score_teleop}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="pt-2 border-t space-y-1">
+                                                            <div className="flex justify-between">
+                                                                <span className="text-muted-foreground">Total:</span>
+                                                                <span className="font-bold">{entry.total_score}</span>
+                                                            </div>
+                                                            <div className="flex justify-between">
+                                                                <span className="text-muted-foreground">Climb:</span>
+                                                                <span className="font-semibold">{entry.climb}</span>
+                                                            </div>
+                                                            <div className="flex justify-between">
+                                                                <span className="text-muted-foreground">Defense:</span>
+                                                                <span className="font-semibold">{entry.defense_rating}</span>
+                                                            </div>
+                                                        </div>
+                                                    </CardContent>
+                                                </Card>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex items-center justify-center h-64">
+                                    <p className="text-muted-foreground">
+                                        {scouterSearchInput ? "No data found for this scouter" : "Enter a scouter name to view analytics"}
+                                    </p>
+                                </div>
+                            )}
+                        </TabsContent>
+
                         <TabsContent value="bubble" className="space-y-4">
                             <Card>
                                 <CardHeader>
