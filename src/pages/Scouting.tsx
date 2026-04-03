@@ -13,11 +13,11 @@ import {Minus, Play, Plus} from "lucide-react";
 import {useQueue} from "@/hooks/use-queue";
 import {useSubjectiveQueue} from "@/hooks/use-subjective-queue";
 import {
+    type CurrentAssignment,
+    type CurrentSubjectiveAssignment,
     subscribeToActiveMatch,
     subscribeToUserAssignment,
     subscribeToUserSubjectiveAssignment,
-    type CurrentAssignment,
-    type CurrentSubjectiveAssignment,
 } from "@/lib/queue";
 import {get, getDatabase, onValue, ref, remove, serverTimestamp, set,} from "firebase/database";
 import successAudio from "/partyblower.mp3";
@@ -1311,24 +1311,11 @@ const Scouting = () => {
                         {canScoutMatch && (
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Team Number & Notes</CardTitle>
+                                    <CardTitle>Match Scouting - Team {teamNumber}</CardTitle>
                                     <CardDescription>
-                                        Document the team number you're scouting and any related notes
+                                        Answer the following questions about this team's robot and strategy
                                     </CardDescription>
                                 </CardHeader>
-                                <CardContent className="space-y-3">
-                                    <div>
-                                        <Label className="text-base font-medium mb-2 block">
-                                            Team: {teamNumber}
-                                        </Label>
-                                    </div>
-                                    <Textarea
-                                        placeholder="Enter any notes about the team number (e.g., 'Team has two robots', 'Confirmed team number')"
-                                        value={teamNumberNotes}
-                                        onChange={(e) => setTeamNumberNotes(e.target.value)}
-                                        className="min-h-[80px]"
-                                    />
-                                </CardContent>
                             </Card>
                         )}
 
