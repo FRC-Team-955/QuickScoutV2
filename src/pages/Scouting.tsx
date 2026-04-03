@@ -12,7 +12,13 @@ import {useAuth} from "@/contexts/AuthContext";
 import {Minus, Play, Plus} from "lucide-react";
 import {useQueue} from "@/hooks/use-queue";
 import {useSubjectiveQueue} from "@/hooks/use-subjective-queue";
-import {subscribeToActiveMatch, subscribeToUserAssignment, subscribeToUserSubjectiveAssignment} from "@/lib/queue";
+import {
+    type CurrentAssignment,
+    type CurrentSubjectiveAssignment,
+    subscribeToActiveMatch,
+    subscribeToUserAssignment,
+    subscribeToUserSubjectiveAssignment,
+} from "@/lib/queue";
 import {get, getDatabase, onValue, ref, remove, serverTimestamp, set,} from "firebase/database";
 import successAudio from "/partyblower.mp3";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select.tsx";
@@ -426,6 +432,10 @@ const Scouting = () => {
 
     const currentMatchIdRef = useRef<string | null>(null);
     const assignedTeamRef = useRef<string | null>(null);
+    const pendingAssignmentRef = useRef<CurrentAssignment | null>(null);
+    const pendingSubjectiveAssignmentRef = useRef<CurrentSubjectiveAssignment | null>(null);
+    const [currentAssignment, setCurrentAssignment] = useState<CurrentAssignment | null>(null);
+    const [currentSubjectiveAssignment, setCurrentSubjectiveAssignment] = useState<CurrentSubjectiveAssignment | null>(null);
 
     const matchEndedHandledRef = useRef(false);
 
@@ -488,6 +498,30 @@ const Scouting = () => {
     };
 
     const lastProcessedAssignmentRef = useRef<string | null>(null);
+    const lastProcessedSubjectiveAssignmentRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (!user?.id || isManualSessionRef.current) return;
+
+        const pending = pendingAssignmentRef.current;
+        if (!pending) return;
+        if (activeMatch?.id !== pending.matchId) return;
+        if (currentAssignment?.matchId !== activeMatch?.id) return;
+
+        const assignmentKey = `${pending.matchId}:${pending.teamNumber}`;
+        if (lastProcessedAssignmentRef.current === assignmentKey) {
+            pendingAssignmentRef.current = null;
+            return;
+        }
+
+        pendingAssignmentRef.current = null;
+        lastProcessedAssignmentRef.current = assignmentKey;
+        currentMatchIdRef.current = pending.matchId;
+        assignedTeamRef.current = String(pending.teamNumber);
+        matchEndedHandledRef.current = false;
+        startScouting(String(pending.teamNumber), {manual: false});
+    }, [activeMatch?.id, currentAssignment?.matchId, user?.id]);
+
     useEffect(() => {
         if (!user?.id) return;
 
@@ -496,19 +530,30 @@ const Scouting = () => {
                 return;
             }
             if (!assignment) {
+                setCurrentAssignment(null);
+                pendingAssignmentRef.current = null;
                 if (!matchEndedHandledRef.current && !activeMatch) {
                     matchEndedHandledRef.current = true;
                 }
                 return;
             }
 
+            const assignmentKey = `${assignment.matchId}:${assignment.teamNumber}`;
+            if (lastProcessedAssignmentRef.current === assignmentKey) {
+                return;
+            }
+
             currentMatchIdRef.current = assignment.matchId;
             assignedTeamRef.current = String(assignment.teamNumber);
+            setCurrentAssignment(assignment);
 
-            matchEndedHandledRef.current = false;
-
-            if (!activeMatch) {
+            if (activeMatch?.id === assignment.matchId) {
+                pendingAssignmentRef.current = null;
+                lastProcessedAssignmentRef.current = assignmentKey;
+                matchEndedHandledRef.current = false;
                 startScouting(String(assignment.teamNumber), {manual: false});
+            } else {
+                pendingAssignmentRef.current = assignment;
             }
         });
 
@@ -520,16 +565,48 @@ const Scouting = () => {
 
         const unsub = subscribeToUserSubjectiveAssignment(user.id, (assignment) => {
             if (!assignment) {
+                setCurrentSubjectiveAssignment(null);
+                pendingSubjectiveAssignmentRef.current = null;
                 return;
             }
 
-            if (!isInSubjectiveScouting) {
+            const assignmentKey = `${assignment.matchId}:${assignment.teamNumber}`;
+            if (lastProcessedSubjectiveAssignmentRef.current === assignmentKey) {
+                return;
+            }
+
+            if (subjectiveActiveMatch?.id === assignment.matchId && !isInSubjectiveScouting) {
+                pendingSubjectiveAssignmentRef.current = null;
+                lastProcessedSubjectiveAssignmentRef.current = assignmentKey;
+                setCurrentSubjectiveAssignment(assignment);
                 startSubjectiveScouting(String(assignment.teamNumber));
+            } else {
+                setCurrentSubjectiveAssignment(assignment);
+                pendingSubjectiveAssignmentRef.current = assignment;
             }
         });
 
         return unsub;
-    }, [user?.id, isInSubjectiveScouting]);
+    }, [user?.id, isInSubjectiveScouting, subjectiveActiveMatch?.id]);
+
+    useEffect(() => {
+        if (!user?.id || isManualSessionRef.current) return;
+
+        const pending = pendingSubjectiveAssignmentRef.current;
+        if (!pending) return;
+        if (subjectiveActiveMatch?.id !== pending.matchId || isInSubjectiveScouting) return;
+        if (currentSubjectiveAssignment?.matchId !== subjectiveActiveMatch?.id) return;
+
+        const assignmentKey = `${pending.matchId}:${pending.teamNumber}`;
+        if (lastProcessedSubjectiveAssignmentRef.current === assignmentKey) {
+            pendingSubjectiveAssignmentRef.current = null;
+            return;
+        }
+
+        pendingSubjectiveAssignmentRef.current = null;
+        lastProcessedSubjectiveAssignmentRef.current = assignmentKey;
+        startSubjectiveScouting(String(pending.teamNumber));
+    }, [currentSubjectiveAssignment?.matchId, subjectiveActiveMatch?.id, user?.id, isInSubjectiveScouting]);
 
     // Add beforeunload event listener to prevent accidental reload during scouting
     useEffect(() => {
@@ -569,6 +646,9 @@ const Scouting = () => {
             leadSignaledEndRef.current = false;
         };
     }, [activeMatch?.id, user?.id]);
+
+    const canScoutMatch = !!activeMatch && currentAssignment?.matchId === activeMatch.id && !isInSubjectiveScouting && !isLead;
+    const canScoutSubjectiveMatch = !!subjectiveActiveMatch && currentSubjectiveAssignment?.matchId === subjectiveActiveMatch.id && !isLead;
 
     useEffect(() => {
         if (isManualSessionRef.current) return;
@@ -1234,31 +1314,18 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {canScoutMatch && (
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Team Number & Notes</CardTitle>
+                                    <CardTitle>Match Scouting - Team {teamNumber}</CardTitle>
                                     <CardDescription>
-                                        Document the team number you're scouting and any related notes
+                                        Answer the following questions about this team's robot and strategy
                                     </CardDescription>
                                 </CardHeader>
-                                <CardContent className="space-y-3">
-                                    <div>
-                                        <Label className="text-base font-medium mb-2 block">
-                                            Team: {teamNumber}
-                                        </Label>
-                                    </div>
-                                    <Textarea
-                                        placeholder="Enter any notes about the team number (e.g., 'Team has two robots', 'Confirmed team number')"
-                                        value={teamNumberNotes}
-                                        onChange={(e) => setTeamNumberNotes(e.target.value)}
-                                        className="min-h-[80px]"
-                                    />
-                                </CardContent>
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {canScoutMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Autonomous Notes</CardTitle>
@@ -1278,7 +1345,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {canScoutMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Autonomous Fuel</CardTitle>
@@ -1338,7 +1405,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {canScoutMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Auto Climb</CardTitle>
@@ -1363,7 +1430,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {canScoutMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Notes</CardTitle>
@@ -1382,7 +1449,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {canScoutMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Fuel</CardTitle>
@@ -1442,7 +1509,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {canScoutMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Climb</CardTitle>
@@ -1492,7 +1559,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {canScoutMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Defense Score</CardTitle>
@@ -1517,7 +1584,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {canScoutMatch && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Shooting on the Move & Robot Tipped</CardTitle>
@@ -1564,7 +1631,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {activeMatch && !isInSubjectiveScouting && !isLead && (
+                        {canScoutMatch && (
                             <Card>
                                 <CardContent className="pt-6">
                                     <Button
@@ -1616,7 +1683,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {isInSubjectiveScouting && subjectiveActiveMatch && !isLead && (
+                        {isInSubjectiveScouting && canScoutSubjectiveMatch && (
                             <>
                                 <Card>
                                     <CardHeader>

@@ -106,17 +106,22 @@ export const joinQueue = async (user: { id: string; name: string }) => {
 
 export const leaveQueue = async (userId: string) => {
     try {
-        const q = query(ref(db, "queue"), orderByChild("userId"), equalTo(userId));
-        const snap = await get(q);
-        const removes: Promise<void>[] = [];
-        snap.forEach((child) => {
-            removes.push(remove(ref(db, `queue/${child.key}`)));
-        });
-        await Promise.all(removes);
+        await removeQueueEntriesForUser("queue", userId);
+        await remove(ref(db, `users/${userId}/currentAssignment`)).catch(() => {});
     } catch (err) {
         console.error("leaveQueue error", err);
         throw err;
     }
+};
+
+const removeQueueEntriesForUser = async (queuePath: string, userId: string) => {
+    const q = query(ref(db, queuePath), orderByChild("userId"), equalTo(userId));
+    const snap = await get(q);
+    const removes: Promise<void>[] = [];
+    snap.forEach((child) => {
+        removes.push(remove(ref(db, `${queuePath}/${child.key}`)));
+    });
+    await Promise.all(removes);
 };
 
 export const subscribeToQueue = (cb: (entries: QueueEntry[]) => void) => {
@@ -378,7 +383,9 @@ export const startMatch = async (
         if (ops.length) await Promise.all(ops);
 
         // remove only the top 6 participants from queue (not everyone)
-        await Promise.all(topSix.map((t) => leaveQueue(t.userId)));
+        await Promise.all(
+            topSix.map((t) => removeQueueEntriesForUser("queue", t.userId)),
+        );
 
         return matchRef.key;
     } catch (err) {
@@ -521,6 +528,10 @@ export const cleanupDuplicateNames = async (userId: string, name: string) => {
 export const removeUserCompletely = async (userId: string) => {
     try {
         await remove(ref(db, `users/${userId}`));
+        await Promise.all([
+            remove(ref(db, `users/${userId}/currentAssignment`)).catch(() => {}),
+            remove(ref(db, `users/${userId}/currentSubjectiveAssignment`)).catch(() => {}),
+        ]);
         const q = query(ref(db, "queue"), orderByChild("userId"), equalTo(userId));
         const snap = await get(q);
         const removes: Promise<void>[] = [];
@@ -643,13 +654,8 @@ export const joinSubjectiveQueue = async (user: { id: string; name: string }) =>
 
 export const leaveSubjectiveQueue = async (userId: string) => {
     try {
-        const q = query(ref(db, "subjectiveQueue"), orderByChild("userId"), equalTo(userId));
-        const snap = await get(q);
-        const removes: Promise<void>[] = [];
-        snap.forEach((child) => {
-            removes.push(remove(ref(db, `subjectiveQueue/${child.key}`)));
-        });
-        await Promise.all(removes);
+        await removeQueueEntriesForUser("subjectiveQueue", userId);
+        await remove(ref(db, `users/${userId}/currentSubjectiveAssignment`)).catch(() => {});
     } catch (err) {
         console.error("leaveSubjectiveQueue error", err);
         throw err;
@@ -743,7 +749,9 @@ export const startSubjectiveMatch = async (
         if (ops.length) await Promise.all(ops);
 
         // remove all participants from subjective queue
-        await Promise.all(all.map((t) => leaveSubjectiveQueue(t.userId)));
+        await Promise.all(
+            all.map((t) => removeQueueEntriesForUser("subjectiveQueue", t.userId)),
+        );
 
         return matchRef.key;
     } catch (err) {
