@@ -10,6 +10,7 @@ interface User {
   teamNumber: number;
   email?: string;
   isLead: boolean;
+  role?: 'pitDisplay' | 'scouter' | 'lead';
 }
 
 interface AuthContextType {
@@ -39,15 +40,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             "User";
         const formatName =
             name.split(".").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+        const isPitDisplay = firebaseUser.email?.toLowerCase() === "pitdisplay@gmail.com";
         const mappedUser: User = {
           id: firebaseUser.uid,
           name: formatName,
           email: firebaseUser.email || undefined,
           teamNumber: 955,
           isLead: isLeadGmail(firebaseUser.email || undefined),
+          role: isPitDisplay ? 'pitDisplay' : 'scouter',
         };
         setUser(mappedUser);
-        setUserPresence(mappedUser).catch(console.error);
+        if (!isPitDisplay) {
+          setUserPresence(mappedUser).catch(console.error);
+        }
       } else {
         setUser(null);
       }
@@ -72,6 +77,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = async (email: string, password: string) => {
     try {
+      // Special handling for local pitDisplay user
+      if (email.trim().toLowerCase() === "pitdisplay@gmail.com" && password === "123456") {
+        const localUser: User = {
+          id: "pit-display-local",
+          name: "Pit Display",
+          email: "pitdisplay@gmail.com",
+          teamNumber: 955,
+          isLead: false,
+          role: 'pitDisplay',
+        };
+        setUser(localUser);
+        return;
+      }
+
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const signed = cred.user || auth.currentUser;
       if (!signed) throw new Error("Login failed");
@@ -118,6 +137,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = async () => {
     try {
+      // pitDisplay local user doesn't need database cleanup
+      if (user?.role === 'pitDisplay') {
+        setUser(null);
+        return;
+      }
+
       if (user?.id) {
         // prevent the unload handler during explicit logout cleanup
         setSuppressPresenceOnUnload(true);
