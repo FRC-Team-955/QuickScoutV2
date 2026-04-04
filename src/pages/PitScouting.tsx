@@ -298,6 +298,54 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         placeholder: "",
         parent: null,
     },
+
+    ///// AUtos
+    {
+        id: "modify-autos",
+        label: "How easily can they modify autos (on the spot)?",
+        section: "Auto Capabilities",
+        type: "label",
+        parent: null,
+        required: false
+    },
+    {
+        id: "modify-autos-cannot",
+        name: "Can't change at comp",
+        section: "Robot Functions",
+        type: "button-group",
+        parent: "How easily can they modify autos (on the spot)?",
+        label: "",
+        required: false
+    },
+    {
+        id: "modify-autos-hard",
+        name: "Hard to change",
+        section: "Robot Functions",
+        type: "button-group",
+        parent: "How easily can they modify autos (on the spot)?",
+        label: "",
+        required: false
+    },
+    {
+        id: "modify-autos-medium",
+        name: "Medium",
+        section: "Robot Functions",
+        type: "button-group",
+        parent: "How easily can they modify autos (on the spot)?",
+        label: "",
+        required: false
+    },
+    {
+        id: "modify-autos-easy",
+        name: "Easy to change",
+        section: "Robot Functions",
+        type: "button-group",
+        parent: "How easily can they modify autos (on the spot)?",
+        label: "",
+        required: false
+    },
+
+
     {
         id: "starting-locations",
         label: "Starting Location",
