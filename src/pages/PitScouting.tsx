@@ -46,8 +46,8 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         required: false
     },
     {
-        id: "intake-ground-ground",
-        name: "Ground",
+        id: "intake-ground-neutral-zone",
+        name: "Neutral Zone",
         section: "Robot Functions",
         type: "button-group-multi",
         parent: "Intaking Locations",
