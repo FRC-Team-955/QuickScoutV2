@@ -279,14 +279,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         required: false,
         parent: null,
     },
-    {
-        id: "auto-fuel-scoring",
-        label: "Auto Fuel Scoring",
-        section: "Autos",
-        type: "label",
-        required: false,
-        parent: null,
-    },
+
     {
         id: "shooter-type",
         label: "Shooter type (turret, drum shooter, hooded, fixed etc.):",
@@ -307,7 +300,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     },
     {
         id: "starting-locations",
-        label: "Possible Starting Locations",
+        label: "Starting Location",
         section: "Autos",
         type: "label",
         required: false,
@@ -319,27 +312,27 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         label: "",
         name: "Center",
         section: "Autos",
-        type: "button-group-multi",
+        type: "button-group",
         required: false,
-        parent: "Possible Starting Locations",
+        parent: "Starting Location",
     },
     {
         id: "starting-locations-left",
         label: "",
         name: "Left Trench",
         section: "Autos",
-        type: "button-group-multi",
+        type: "button-group",
         required: false,
-        parent: "Possible Starting Locations",
+        parent: "Starting Location",
     },
     {
         id: "starting-locations-right",
         label: "",
         name: "Right Trench",
         section: "Autos",
-        type: "button-group-multi",
+        type: "button-group",
         required: false,
-        parent: "Possible Starting Locations",
+        parent: "Starting Location",
     },
     {
         id: "fuel-scoring",
@@ -353,7 +346,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         id: "score-preloads",
         name: "Shoot",
         section: "Autos",
-        type: "button-group-multi",
+        type: "button-group",
         required: false,
         parent: "Preloads",
         label: ""
@@ -362,7 +355,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         id: "no-shoot-preloads-neutral-zone",
         name: "No shoot (races to neutral zone)",
         section: "Autos",
-        type: "button-group-multi",
+        type: "button-group",
         required: false,
         parent: "Preloads",
         label: ""
@@ -371,27 +364,9 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         id: "no-shoot-preloads-cant-shoot",
         name: "No shoot (can't shoot)",
         section: "Autos",
-        type: "button-group-multi",
+        type: "button-group",
         required: false,
         parent: "Preloads",
-        label: ""
-    },
-    {
-        id: "auto-outpost",
-        name: "Outpost",
-        section: "Autos",
-        type: "button-group-multi",
-        required: false,
-        parent: "Auto Fuel Scoring",
-        label: ""
-    },
-    {
-        id: "auto-depot",
-        name: "Depot",
-        section: "Autos",
-        type: "button-group-multi",
-        required: false,
-        parent: "Auto Fuel Scoring",
         label: ""
     },
     {
@@ -413,7 +388,16 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     },
     {
         id: "auto-intake-outpost-chute",
-        name: "Outpost Chute",
+        name: "Outpost",
+        section: "Autos",
+        type: "button-group-multi",
+        required: false,
+        parent: "Auto Intake Fuel Locations",
+        label: ""
+    },
+    {
+        id: "auto-intake-depot",
+        name: "Depot",
         section: "Autos",
         type: "button-group-multi",
         required: false,
@@ -519,7 +503,7 @@ const PitScouting = () => {
     const [cancelConfirm, setCancelConfirm] = useState(false);
     const cancelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    const [autoCount, setAutoCount] = useState(1);
+    const [autoCount, setAutoCount] = useState(0);
 
 
     const handleStartScouting = (teamNum?: string) => {
