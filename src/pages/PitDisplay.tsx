@@ -4,7 +4,7 @@ import {useNavigate} from "react-router-dom";
 import {Button} from "@/components/ui/button";
 import {Badge} from "@/components/ui/badge";
 import {cn} from "@/lib/utils";
-import {getEventMatches, getEventWebcasts, getEventStatus, buildStreamUrl, getPlayoffMatchLabel} from "@/lib/tba";
+import {buildStreamUrl, getEventMatches, getEventStatus, getEventWebcasts, getPlayoffMatchLabel} from "@/lib/tba";
 import {useAuth} from "@/contexts/AuthContext";
 
 type TbaMatch = {
@@ -20,7 +20,7 @@ type TbaMatch = {
     time?: number;
 };
 
-const EVENT_KEY = "2026inwas";
+const EVENT_KEY = "2026mawor";
 
 const compLevelOrder: Record<string, number> = {
     qm: 0,
@@ -37,25 +37,33 @@ const levelLabel = (lvl: string) => {
     return lvl;
 };
 
-const getMatchLabel = (match: TbaMatch) => {
-    if (match.comp_level === "sf" || match.comp_level === "f" || match.comp_level === "qf") {
-        const label = getPlayoffMatchLabel(match.key, match.comp_level);
-        return label;
-    }
-    return `${levelLabel(match.comp_level)} ${match.match_number}`;
-};
-
 const areTeamsPopulated = (match: TbaMatch): boolean => {
     // Check if both red and blue teams have actual team identifiers
     const redTeams = match.alliances.red.team_keys || [];
     const blueTeams = match.alliances.blue.team_keys || [];
-    
+
     // Teams should be populated with actual team numbers (e.g., "frc1234")
     // If either side has no teams or incomplete teams, show TBD
     const hasValidRedTeams = redTeams.length > 0 && redTeams.every((team) => team && typeof team === "string" && team.startsWith("frc"));
     const hasValidBlueTeams = blueTeams.length > 0 && blueTeams.every((team) => team && typeof team === "string" && team.startsWith("frc"));
-    
+
     return hasValidRedTeams && hasValidBlueTeams;
+};
+
+const getMatchSortTime = (match: TbaMatch): number => {
+    return match.actual_time ?? match.predicted_time ?? match.time ?? Number.MAX_SAFE_INTEGER;
+};
+
+const getMatchLabel = (match: TbaMatch) => {
+    if (match.comp_level === "sf" || match.comp_level === "f" || match.comp_level === "qf") {
+        // For unpopulated playoff matches, show TBD
+        if (!areTeamsPopulated(match)) {
+            return "TBD";
+        }
+        const label = getPlayoffMatchLabel(match.key, match.comp_level);
+        return label;
+    }
+    return `${levelLabel(match.comp_level)} ${match.match_number}`;
 };
 
 const formatTeams = (keys: string[]) =>
@@ -111,13 +119,6 @@ const PitDisplay = () => {
     };
 
     useEffect(() => {
-        const timer = window.setInterval(() => {
-            setCurrentTime(new Date());
-        }, 1000);
-        return () => window.clearInterval(timer);
-    }, []);
-
-    useEffect(() => {
         let mounted = true;
 
         const load = async () => {
@@ -132,9 +133,12 @@ const PitDisplay = () => {
                 if (!mounted) return;
 
                 const sortedMatches = [...(matchData || [])].sort((a: TbaMatch, b: TbaMatch) => {
+                    const timeDiff = getMatchSortTime(a) - getMatchSortTime(b);
+                    if (timeDiff) return timeDiff;
+
                     const levelDiff =
                         (compLevelOrder[a.comp_level] ?? 99) - (compLevelOrder[b.comp_level] ?? 99);
-                    return levelDiff || a.match_number - b.match_number;
+                    return levelDiff || a.match_number - b.match_number || a.key.localeCompare(b.key);
                 });
 
                 setMatches(sortedMatches);
@@ -192,12 +196,12 @@ const PitDisplay = () => {
         const webcast = webcasts[0];
         const url = buildStreamUrl(webcast);
         if (!url) return null;
-        
+
         // Add YouTube embed parameters if it's a YouTube URL
         if (webcast.type === "youtube") {
             return `${url}?autoplay=1&playsinline=1&mute=0&rel=0&modestbranding=1`;
         }
-        
+
         return url;
     }, [webcasts]);
 
@@ -211,15 +215,18 @@ const PitDisplay = () => {
             <header className="border-b border-border bg-card">
                 <div className="max-w-[1800px] mx-auto px-6 py-6 flex items-start justify-between relative">
                     <div className="space-y-2 flex-1 text-center">
-                        <h1 className="text-4xl font-bold font-mono">Team 955 - Pit Display</h1>
-                        <p className="text-3xl text-muted-foreground font-mono">
-                            {currentTime.toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                                second: "2-digit",
-                                timeZone: "America/Los_Angeles",
-                            })}
-                        </p>
+                        <div className="flex items-center justify-center gap-4">
+                            <h1 className="text-4xl font-bold font-mono">Team 955</h1>
+                            <p className="text-4xl font-bold font-mono">-</p>
+                            <p className="text-4xl font-bold font-mono">
+                                {currentTime.toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    second: "2-digit",
+                                    timeZone: "America/Los_Angeles",
+                                })}
+                            </p>
+                        </div>
                         <p className="text-lg text-muted-foreground">Event: {EVENT_KEY}</p>
                     </div>
                     <Button
@@ -272,11 +279,13 @@ const PitDisplay = () => {
                                                         {areTeamsPopulated(match) ? formatTeams(match.alliances.blue.team_keys) : "TBD"}
                                                     </span>
                                                 </div>
-                                                <div className="flex justify-between items-center gap-2 pt-2 border-t border-border/50">
+                                                <div
+                                                    className="flex justify-between items-center gap-2 pt-2 border-t border-border/50">
                                                     <span className="text-muted-foreground text-sm">Score</span>
                                                     <span className="font-mono text-sm">
                                                         {areTeamsPopulated(match) ? (
-                                                            <>R {match.alliances.red.score >= 0 ? match.alliances.red.score : "—"} / B {match.alliances.blue.score >= 0 ? match.alliances.blue.score : "—"}</>
+                                                            <>R {match.alliances.red.score >= 0 ? match.alliances.red.score : "—"} /
+                                                                B {match.alliances.blue.score >= 0 ? match.alliances.blue.score : "—"}</>
                                                         ) : (
                                                             "—"
                                                         )}
