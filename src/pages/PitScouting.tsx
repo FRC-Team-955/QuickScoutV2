@@ -1,4 +1,4 @@
-import {useRef, useState} from "react";
+import {Fragment, useRef, useState} from "react";
 import {useNavigate} from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/Topbar";
@@ -19,11 +19,13 @@ interface PitScoutingQuestion {
     id: string;
     label: string;
     section: string;
-    type: "text" | "textarea" | "select" | "yes-no" | "number" | "checkbox" | "radio";
+    name?: string | null; //used for buttons and multi-buttons
+    type: "text" | "textarea" | "select" | "yes-no" | "number" | "checkbox" | "radio" | "label" | "button-group" | "button-group-multi";
     required: boolean;
     placeholder?: string;
     options?: string[];
     parent?: string | null;
+    group?: string | null;
 }
 
 interface PitScoutingResponse {
@@ -31,64 +33,84 @@ interface PitScoutingResponse {
 }
 
 const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
+
+    ///////////// Intake Type
     {
         id: "intake-type",
         label: "Intaking Locations",
         section: "Robot Functions",
         type: "label",
-        parent: null
+        parent: null,
+        required: false
     },
     {
         id: "intake-ground-ground",
         name: "Ground",
         section: "Robot Functions",
         type: "button-group-multi",
-        parent: "Intaking Locations"
+        parent: "Intaking Locations",
+        label: "",
+        required: false
     },
     {
         id: "intake-ground-outpost",
         name: "Outpost",
         section: "Robot Functions",
         type: "button-group-multi",
-        parent: "Intaking Locations"
+        parent: "Intaking Locations",
+        label: "",
+        required: false
     },
 
-
+    /////////////////////////////////////////// Climb
     {
         id: "climb-level",
         label: "Climb",
         section: "Robot Functions",
         type: "label",
-        parent: null
+        parent: null,
+        required: false
     },
     {
         id: "climb-level-l1",
         name: "L1",
         section: "Robot Functions",
         type: "button-group",
-        parent: "Climb"
+        parent: "Climb",
+        label: "",
+        required: false
     },
     {
         id: "climb-level-l2",
         name: "L2",
         section: "Robot Functions",
         type: "button-group",
-        parent: "Climb"
+        parent: "Climb",
+        label: "",
+        required: false
     },
     {
         id: "climb-level-l3",
         name: "L3",
         section: "Robot Functions",
         type: "button-group",
-        parent: "Climb"
+        parent: "Climb",
+        label: "",
+        required: false
     },
     {
         id: "climb-level-none",
         name: "Nah",
         section: "Robot Functions",
         type: "button-group",
-        parent: "Climb"
+        parent: "Climb",
+        label: "",
+        required: false
     },
+
+
+
+    ///////////////// CLimb Location
     {
         id: "climb-location",
         label: "Climb location",
@@ -104,6 +126,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group-multi",
         required: false,
         parent: "Climb location",
+        label: ""
     },
     {
         id: "climb-location-middle",
@@ -112,6 +135,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group-multi",
         required: false,
         parent: "Climb location",
+        label: ""
     },
     {
         id: "climb-location-straddling",
@@ -120,6 +144,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group-multi",
         required: false,
         parent: "Climb location",
+        label: ""
     },
     {
         id: "climb-location-backflip",
@@ -128,6 +153,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group-multi",
         required: false,
         parent: "Climb location",
+        label: ""
     },
     {
         id: "climb-location-other",
@@ -136,6 +162,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group-multi",
         required: false,
         parent: "Climb location",
+        label: ""
     },
     {
         id: "size-constraints",
@@ -152,6 +179,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group-multi",
         required: false,
         parent: "Size Constraints",
+        label: ""
     },
     {
         id: "over-bump",
@@ -160,6 +188,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group-multi",
         required: false,
         parent: "Size Constraints",
+        label: ""
     },
     {
         id: "shooting-capabilities",
@@ -176,6 +205,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group-multi",
         required: false,
         parent: "Shooting Capabilities",
+        label: ""
     },
     {
         id: "pass-fuel",
@@ -184,6 +214,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group-multi",
         required: false,
         parent: "Shooting Capabilities",
+        label: ""
     },
     {
         id: "defense-rating",
@@ -200,6 +231,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
+        label: ""
     },
     {
         id: "defense-rating-2",
@@ -208,6 +240,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
+        label: ""
     },
     {
         id: "defense-rating-3",
@@ -216,6 +249,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
+        label: ""
     },
     {
         id: "defense-rating-4",
@@ -224,6 +258,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
+        label: ""
     },
     {
         id: "defense-rating-5",
@@ -232,6 +267,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
+        label: ""
     },
     {
         id: "fuel-hopper",
@@ -293,6 +329,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group-multi",
         required: false,
         parent: "Auto Intake Fuel",
+        label: ""
     },
     {
         id: "auto-intake-fuel-station",
@@ -301,6 +338,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group-multi",
         required: false,
         parent: "Auto Intake Fuel",
+        label: ""
     },
     {
         id: "auto-climb",
@@ -400,6 +438,8 @@ const PitScouting = () => {
     const [teamNumber, setTeamNumber] = useState("");
     const [cancelConfirm, setCancelConfirm] = useState(false);
     const cancelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const [autoCount, setAutoCount] = useState(1);
 
 
     const handleStartScouting = (teamNum?: string) => {
@@ -627,10 +667,10 @@ const PitScouting = () => {
                     // no div?
                         <Button
                                     variant={
-                                        (responses[question.group!] === question.name)? "default" : "outline"
+                                        (responses[question.parent!] === question.name)? "default" : "outline"
                                     }
                                     onClick={() =>
-                                        handleResponseChange(question.group!, question.name)
+                                        handleResponseChange(question.parent!, question.name)
                                     }
                                     disabled={!isActive}
                                     className="w-full"
@@ -640,16 +680,16 @@ const PitScouting = () => {
 
                     );
             case "button-group-multi":
-                const selected = (responses[question.group!] as string[]) || [];
+                const selected = (responses[question.parent!] as string[]) || [];
                 return (
                     <Button
                         variant={selected.includes(question.name!) ? "default" : "outline"}
                         onClick={() => {
-                            const current = (responses[question.group!] as string[]) || [];
+                            const current = (responses[question.parent!] as string[]) || [];
                             const next = current.includes(question.name!)
                                 ? current.filter(v => v !== question.name)
                                 : [...current, question.name!];
-                            handleResponseChange(question.group!, next as any);
+                            handleResponseChange(question.parent!, next as any);
                         }}
                         disabled={!isActive}
                         className="w-full"
@@ -744,7 +784,58 @@ const PitScouting = () => {
 
                         {isActive && !loading && (
                             <>
-                                {Object.entries(groupedQuestions).map(([section, sectionQ]) => (
+                                {Object.entries(groupedQuestions).map(([section, sectionQ]) =>
+                                    section === "Autos" ? (
+                                            <Fragment key={section}>
+                                                {Array.from({ length: autoCount }).map((_, index) => (
+                                                    <Card key={index} className="overflow-hidden">
+                                                        <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5">
+                                                            <div className="flex items-center justify-between">
+                                                                <CardTitle className="text-lg text-primary">
+                                                                    Auto {autoCount > 1 ? index + 1 : ""}
+                                                                </CardTitle>
+                                                                {index > 0 && (
+                                                                    <Button size="sm" variant="destructive" onClick={() => setAutoCount(prev => prev - 1)}>
+                                                                        <X className="w-4 h-4" />
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                        </CardHeader>
+                                                        <CardContent className="pt-6 space-y-6">
+                                                            {sectionQ.filter(q => !q.parent).map((question) => {
+                                                                const prefixed = { ...question, id: `auto_${index}_${question.id}` };
+                                                                return (
+                                                                    <div key={prefixed.id} className="space-y-3">
+                                                                        <div className="space-y-2">
+                                                                            <Label className="text-sm font-semibold">{question.label}</Label>
+                                                                            <div className="mt-2">{renderQuestion(prefixed)}</div>
+                                                                        </div>
+                                                                        {/* Render child questions with indentation */}
+                                                                        {getChildQuestions(question.label).length > 0 && (
+                                                                            <div className="ml-6 mt-4 space-y-3 border-l-2 border-primary/30 pl-4">
+                                                                                {getChildQuestions(question.label).map(child => (
+                                                                                    <div key={child.id} className="flex-1 min-w-[80px]">
+                                                                                        {renderQuestion({
+                                                                                            ...child,
+                                                                                            id: `auto_${index}_${child.id}`,
+                                                                                            parent: `auto_${index}_${child.parent}`,
+                                                                                        })}
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </CardContent>
+                                                    </Card>
+                                                ))}
+                                                <Button variant="outline" className="w-full" onClick={() => setAutoCount(prev => prev + 1)}>
+                                                    + Add Auto
+                                                </Button>
+                                            </Fragment>
+                                        ) :
+                                        (
                                     <Card key={section} className="overflow-hidden">
                                         <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5">
                                             <CardTitle className="text-lg text-primary">{section}</CardTitle>
@@ -794,6 +885,7 @@ const PitScouting = () => {
                                             ))}
                                         </CardContent>
                                     </Card>
+
                                 ))}
 
                                 <div className="flex gap-2">
