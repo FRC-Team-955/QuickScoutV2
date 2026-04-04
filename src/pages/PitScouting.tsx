@@ -1,4 +1,4 @@
-import {useRef, useState} from "react";
+import {Fragment, useRef, useState} from "react";
 import {useNavigate} from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/Topbar";
@@ -19,11 +19,13 @@ interface PitScoutingQuestion {
     id: string;
     label: string;
     section: string;
-    type: "text" | "textarea" | "select" | "yes-no" | "number" | "checkbox" | "radio";
+    name?: string | null; //used for buttons and multi-buttons
+    type: "text" | "textarea" | "select" | "yes-no" | "number" | "checkbox" | "radio" | "label" | "button-group" | "button-group-multi";
     required: boolean;
     placeholder?: string;
     options?: string[];
     parent?: string | null;
+    group?: string | null;
 }
 
 interface PitScoutingResponse {
@@ -31,197 +33,256 @@ interface PitScoutingResponse {
 }
 
 const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
+
+    ///////////// Intake Type
     {
-        id: "intake-fuel",
-        label: "Intake Fuel",
+        id: "intake-type",
+        label: "Intaking Locations",
         section: "Robot Functions",
-        type: "checkbox",
-        required: false,
+        type: "label",
         parent: null,
+        required: false
     },
     {
-        id: "intake-fuel-ground",
-        label: "Ground",
+        id: "intake-ground-ground",
+        name: "Ground",
         section: "Robot Functions",
-        type: "checkbox",
-        required: false,
-        parent: "Intake Fuel",
+        type: "button-group-multi",
+        parent: "Intaking Locations",
+        label: "",
+        required: false
     },
     {
-        id: "intake-fuel-station",
-        label: "Fuel Station",
+        id: "intake-ground-outpost",
+        name: "Outpost",
         section: "Robot Functions",
-        type: "checkbox",
-        required: false,
-        parent: "Intake Fuel",
+        type: "button-group-multi",
+        parent: "Intaking Locations",
+        label: "",
+        required: false
     },
+
+    /////////////////////////////////////////// Climb
     {
         id: "climb-level",
         label: "Climb",
         section: "Robot Functions",
-        type: "checkbox",
-        required: false,
+        type: "label",
         parent: null,
+        required: false
     },
     {
         id: "climb-level-l1",
-        label: "L1",
+        name: "L1",
         section: "Robot Functions",
-        type: "radio",
-        required: false,
+        type: "button-group",
         parent: "Climb",
+        label: "",
+        required: false
     },
     {
         id: "climb-level-l2",
-        label: "L2",
+        name: "L2",
         section: "Robot Functions",
-        type: "radio",
-        required: false,
+        type: "button-group",
         parent: "Climb",
+        label: "",
+        required: false
     },
     {
         id: "climb-level-l3",
-        label: "L3",
+        name: "L3",
         section: "Robot Functions",
-        type: "radio",
-        required: false,
+        type: "button-group",
         parent: "Climb",
+        label: "",
+        required: false
     },
+    {
+        id: "climb-level-none",
+        name: "Nah",
+        section: "Robot Functions",
+        type: "button-group",
+        parent: "Climb",
+        label: "",
+        required: false
+    },
+
+
+
+    ///////////////// CLimb Location
     {
         id: "climb-location",
         label: "Climb location",
         section: "Robot Functions",
-        type: "checkbox",
+        type: "label",
         required: false,
         parent: null,
     },
     {
         id: "climb-location-side",
-        label: "Side",
+        name: "Side",
         section: "Robot Functions",
-        type: "radio",
+        type: "button-group-multi",
         required: false,
         parent: "Climb location",
+        label: ""
     },
     {
         id: "climb-location-middle",
-        label: "Middle",
+        name: "Middle",
         section: "Robot Functions",
-        type: "radio",
+        type: "button-group-multi",
         required: false,
         parent: "Climb location",
+        label: ""
     },
     {
         id: "climb-location-straddling",
-        label: "Straddling the Upright",
+        name: "Straddling the Upright",
         section: "Robot Functions",
-        type: "radio",
+        type: "button-group-multi",
         required: false,
         parent: "Climb location",
+        label: ""
     },
     {
         id: "climb-location-backflip",
-        label: "Backflip",
+        name: "Backflip",
         section: "Robot Functions",
-        type: "radio",
+        type: "button-group-multi",
         required: false,
         parent: "Climb location",
+        label: ""
     },
     {
         id: "climb-location-other",
-        label: "Other",
+        name: "Nah",
         section: "Robot Functions",
-        type: "radio",
+        type: "button-group-multi",
         required: false,
         parent: "Climb location",
+        label: ""
     },
     {
-        id: "under-trench-height",
-        label: "Under Trench height (22.25\")",
+        id: "size-constraints",
+        label: "Size Constraints",
         section: "Robot capabilities",
-        type: "checkbox",
+        type: "label",
         required: false,
         parent: null,
     },
     {
-        id: "over-bump",
-        label: "Over the Bump",
+        id: "under-trench-height",
+        name: "Under Trench height (22.25\")",
         section: "Robot capabilities",
-        type: "checkbox",
+        type: "button-group-multi",
+        required: false,
+        parent: "Size Constraints",
+        label: ""
+    },
+    {
+        id: "over-bump",
+        name: "Over the Bump",
+        section: "Robot capabilities",
+        type: "button-group-multi",
+        required: false,
+        parent: "Size Constraints",
+        label: ""
+    },
+    {
+        id: "shooting-capabilities",
+        label: "Shooting Capabilities",
+        section: "Robot capabilities",
+        type: "label",
         required: false,
         parent: null,
     },
     {
         id: "shoot-on-move",
-        label: "Shoot on the move",
+        name: "Shoot on the Move",
         section: "Robot capabilities",
-        type: "checkbox",
+        type: "button-group-multi",
         required: false,
-        parent: null,
+        parent: "Shooting Capabilities",
+        label: ""
     },
     {
         id: "pass-fuel",
-        label: "Pass Fuel to Alliance Zone",
+        name: "Pass Fuel to Alliance Zone",
         section: "Robot capabilities",
-        type: "checkbox",
+        type: "button-group-multi",
         required: false,
-        parent: null,
+        parent: "Shooting Capabilities",
+        label: ""
     },
     {
         id: "defense-rating",
         label: "Defense rating (1-5):",
         section: "Robot capabilities",
-        type: "checkbox",
+        type: "label",
         required: false,
         parent: null,
     },
     {
         id: "defense-rating-1",
-        label: "1",
+        name: "1",
         section: "Robot capabilities",
-        type: "radio",
+        type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
+        label: ""
     },
     {
         id: "defense-rating-2",
-        label: "2",
+        name: "2",
         section: "Robot capabilities",
-        type: "radio",
+        type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
+        label: ""
     },
     {
         id: "defense-rating-3",
-        label: "3",
+        name: "3",
         section: "Robot capabilities",
-        type: "radio",
+        type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
+        label: ""
     },
     {
         id: "defense-rating-4",
-        label: "4",
+        name: "4",
         section: "Robot capabilities",
-        type: "radio",
+        type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
+        label: ""
     },
     {
         id: "defense-rating-5",
-        label: "5",
+        name: "5",
         section: "Robot capabilities",
-        type: "radio",
+        type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
+        label: ""
     },
     {
         id: "fuel-hopper",
-        label: "Approximate amount of fuel in hopper:",
+        label: "Approximate max fuel in hopper:",
         section: "Robot capabilities",
         type: "text",
         required: false,
-        placeholder: "",
+        parent: "Preloads",
+    },
+    {
+        id: "auto-fuel-scoring",
+        label: "Auto Fuel Scoring",
+        section: "Autos",
+        type: "label",
+        required: false,
         parent: null,
     },
     {
@@ -246,55 +307,106 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         id: "starting-locations",
         label: "Possible starting locations:",
         section: "Autos",
+        type: "label",
+        required: false,
+        placeholder: "",
+        parent: null,
+    },
+    {
+        id: "fuel-scoring",
+        label: "Preloads",
+        section: "Autos",
+        type: "label",
+        required: false,
+        parent: null,
+    },
+    {
+        id: "score-preloads",
+        name: "Shoot",
+        section: "Autos",
+        type: "button-group-multi",
+        required: false,
+        parent: "Preloads",
+    },
+    {
+        id: "no-shoot-preloads-neutral-zone",
+        name: "No shoot (races to neutral zone)",
+        section: "Autos",
+        type: "button-group-multi",
+        required: false,
+        parent: "Preloads",
+    },
+    {
+        id: "nah-preloads",
+        name: "No shoot (doesn't shoot)",
+        section: "Autos",
         type: "text",
         required: false,
         placeholder: "",
         parent: null,
     },
     {
-        id: "auto-capabilities",
-        label: "Capabilities (ex: score 8 pre-loads):",
+        id: "auto-outpost",
+        name: "Outpost",
         section: "Autos",
-        type: "text",
+        type: "button-group-multi",
         required: false,
-        placeholder: "",
-        parent: null,
+        parent: "Auto Fuel Scoring",
+    },
+    {
+        id: "auto-depot",
+        name: "Depot",
+        section: "Autos",
+        type: "button-group-multi",
+        required: false,
+        parent: "Auto Fuel Scoring",
     },
     {
         id: "auto-intake-fuel",
-        label: "Auto Intake Fuel",
+        label: "Auto Intake Fuel Locations",
         section: "Autos",
-        type: "checkbox",
+        type: "label",
         required: false,
         parent: null,
     },
     {
         id: "auto-intake-fuel-ground",
-        label: "Ground",
+        name: "Ground",
         section: "Autos",
-        type: "checkbox",
+        type: "button-group-multi",
         required: false,
-        parent: "Auto Intake Fuel",
+        parent: "Auto Intake Fuel Locations",
+        label: ""
     },
     {
-        id: "auto-intake-fuel-station",
-        label: "Fuel Station",
+        id: "auto-intake-outpost-chute",
+        name: "Outpost Chute",
         section: "Autos",
-        type: "checkbox",
+        type: "button-group-multi",
         required: false,
-        parent: "Auto Intake Fuel",
+        parent: "Auto Intake Fuel Locations",
+        label: ""
     },
     {
         id: "auto-climb",
         label: "Climb",
         section: "Autos",
-        type: "checkbox",
+        type: "label", // yea just cuz
         required: false,
         parent: null,
     },
     {
-        id: "dimensions-weight",
-        label: "Dimensions & weight:",
+        id: "dimensions",
+        label: "Dimensions (with bumpers):",
+        section: "Drivebase",
+        type: "text",
+        required: false,
+        placeholder: "",
+        parent: null,
+    },
+    {
+        id: "weight",
+        label: "Weight:",
         section: "Drivebase",
         type: "text",
         required: false,
@@ -373,6 +485,8 @@ const PitScouting = () => {
     const [teamNumber, setTeamNumber] = useState("");
     const [cancelConfirm, setCancelConfirm] = useState(false);
     const cancelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const [autoCount, setAutoCount] = useState(1);
 
 
     const handleStartScouting = (teamNum?: string) => {
@@ -570,7 +684,10 @@ const PitScouting = () => {
                             checked={(value as boolean) || false}
                             onCheckedChange={(checked) => handleResponseChange(question.id, checked)}
                             disabled={!isActive}
+
+
                         />
+
                     </div>
                 );
 
@@ -592,7 +709,41 @@ const PitScouting = () => {
                         </Label>
                     </div>
                 );
+            case "button-group":
+                return (
+                    // no div?
+                        <Button
+                                    variant={
+                                        (responses[question.parent!] === question.name)? "default" : "outline"
+                                    }
+                                    onClick={() =>
+                                        handleResponseChange(question.parent!, question.name)
+                                    }
+                                    disabled={!isActive}
+                                    className="w-full"
+                                >
+                                    {question.name}
+                                </Button>
 
+                    );
+            case "button-group-multi":
+                const selected = (responses[question.parent!] as string[]) || [];
+                return (
+                    <Button
+                        variant={selected.includes(question.name!) ? "default" : "outline"}
+                        onClick={() => {
+                            const current = (responses[question.parent!] as string[]) || [];
+                            const next = current.includes(question.name!)
+                                ? current.filter(v => v !== question.name)
+                                : [...current, question.name!];
+                            handleResponseChange(question.parent!, next as any);
+                        }}
+                        disabled={!isActive}
+                        className="w-full"
+                    >
+                        {question.name}
+                    </Button>
+                );
             default:
                 return null;
         }
@@ -680,7 +831,58 @@ const PitScouting = () => {
 
                         {isActive && !loading && (
                             <>
-                                {Object.entries(groupedQuestions).map(([section, sectionQ]) => (
+                                {Object.entries(groupedQuestions).map(([section, sectionQ]) =>
+                                    section === "Autos" ? (
+                                            <Fragment key={section}>
+                                                {Array.from({ length: autoCount }).map((_, index) => (
+                                                    <Card key={index} className="overflow-hidden">
+                                                        <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5">
+                                                            <div className="flex items-center justify-between">
+                                                                <CardTitle className="text-lg text-primary">
+                                                                    Auto {autoCount > 1 ? index + 1 : ""}
+                                                                </CardTitle>
+                                                                {index > 0 && (
+                                                                    <Button size="sm" variant="destructive" onClick={() => setAutoCount(prev => prev - 1)}>
+                                                                        <X className="w-4 h-4" />
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                        </CardHeader>
+                                                        <CardContent className="pt-6 space-y-6">
+                                                            {sectionQ.filter(q => !q.parent).map((question) => {
+                                                                const prefixed = { ...question, id: `auto_${index}_${question.id}` };
+                                                                return (
+                                                                    <div key={prefixed.id} className="space-y-3">
+                                                                        <div className="space-y-2">
+                                                                            <Label className="text-sm font-semibold">{question.label}</Label>
+                                                                            <div className="mt-2">{renderQuestion(prefixed)}</div>
+                                                                        </div>
+                                                                        {/* Render child questions with indentation */}
+                                                                        {getChildQuestions(question.label).length > 0 && (
+                                                                            <div className="ml-6 mt-4 space-y-3 border-l-2 border-primary/30 pl-4">
+                                                                                {getChildQuestions(question.label).map(child => (
+                                                                                    <div key={child.id} className="flex-1 min-w-[80px]">
+                                                                                        {renderQuestion({
+                                                                                            ...child,
+                                                                                            id: `auto_${index}_${child.id}`,
+                                                                                            parent: `auto_${index}_${child.parent}`,
+                                                                                        })}
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </CardContent>
+                                                    </Card>
+                                                ))}
+                                                <Button variant="outline" className="w-full" onClick={() => setAutoCount(prev => prev + 1)}>
+                                                    + Add Auto
+                                                </Button>
+                                            </Fragment>
+                                        ) :
+                                        (
                                     <Card key={section} className="overflow-hidden">
                                         <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5">
                                             <CardTitle className="text-lg text-primary">{section}</CardTitle>
@@ -730,6 +932,7 @@ const PitScouting = () => {
                                             ))}
                                         </CardContent>
                                     </Card>
+
                                 ))}
 
                                 <div className="flex gap-2">

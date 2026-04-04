@@ -373,6 +373,8 @@ const Scouting = () => {
         setAutoClimb1("");
         setTeleopPassing("");
         setGameSense("");
+        setStrengths("");
+        setWeaknesses("");
     };
 
     const [teamNumber, setTeamNumber] = useState("");
@@ -422,6 +424,10 @@ const Scouting = () => {
     const [autoClimb1, setAutoClimb1] = useState<string>("");
     const [teleopPassing, setTeleopPassing] = useState<string>("");
     const [gameSense, setGameSense] = useState<string>("");
+
+    const [strengths, setStrengths] = useState<string>("");
+    const [weaknesses, setWeaknesses] = useState<string>("");
+
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const currentMatchIdRef = useRef<string | null>(null);
@@ -870,7 +876,7 @@ const Scouting = () => {
                                                     <div className="flex items-center gap-3">
                                                         <div
                                                             className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium">
-                                                            {q.name?.charAt(0)?.toUpperCase() || "?"}
+                                                            {(q.name?.charAt(0)?.toUpperCase() || "?")}
                                                         </div>
                                                         <div>
                                                             <div className="text-sm font-medium">
@@ -1742,9 +1748,20 @@ const Scouting = () => {
                                             </Label>
                                             <Input
                                                 id="team-focus"
-                                                placeholder="e.g., Scoring focused, Balanced mix, Defense oriented"
+                                                placeholder="e.g., Scoring focused, Balanced mix, Defense oriented, Support oriented"
                                                 value={teamFocus}
                                                 onChange={(e) => setTeamFocus(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-3">
+                                            <Label htmlFor="performance-under-pressure" className="text-base font-medium">
+                                                Do they perform well under pressure?
+                                            </Label>
+                                            <Input
+                                                id="performance-under-pressure"
+                                                placeholder="e.g., Panicked and caused chaos, kept playing well"
+                                                value={performanceUnderPressure}
+                                                onChange={(e) => setPerformanceUnderPressure(e.target.value)}
                                             />
                                         </div>
                                     </CardContent>
@@ -1869,6 +1886,28 @@ const Scouting = () => {
                                                 placeholder="e.g., Yes, No, A little"
                                                 value={gameSense}
                                                 onChange={(e) => setGameSense(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-3">
+                                            <Label htmlFor="strengths" className="text-base font-medium">
+                                                Team strengths?
+                                            </Label>
+                                            <Input
+                                                id="strengths"
+                                                placeholder="e.g., Shooting, Defense, Speed"
+                                                value={strengths}
+                                                onChange={(e) => setStrengths(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-3">
+                                            <Label htmlFor="weaknesses" className="text-base font-medium">
+                                                Team weaknesses?
+                                            </Label>
+                                            <Input
+                                                id="weaknesses"
+                                                placeholder="e.g., Bad intake, Can't shoot, Tank Drive"
+                                                value={weaknesses}
+                                                onChange={(e) => setWeaknesses(e.target.value)}
                                             />
                                         </div>
                                     </CardContent>
