@@ -296,7 +296,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     },
     {
         id: "bps",
-        label: "BPS (balls per sec):",
+        label: "BPS (balls per sec)",
         section: "Robot capabilities",
         type: "text",
         required: false,
@@ -340,10 +340,10 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         id: "nah-preloads",
         name: "No shoot (doesn't shoot)",
         section: "Autos",
-        type: "text",
+        type: "button-group-multi",
         required: false,
         placeholder: "",
-        parent: null,
+        parent: "Preloads",
     },
     {
         id: "auto-outpost",
