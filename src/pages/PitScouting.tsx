@@ -453,6 +453,15 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         label: ""
     },
     {
+        id: "estimated-fuel",
+        section: "Autos",
+        type: "text",
+        required: true,
+        placeholder: "",
+        parent: null,
+        label: "Estimated Fuel Scored:",
+    },
+    {
         id: "auto-climb",
         label: "Climb",
         section: "Autos",
@@ -471,7 +480,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     },
     {
         id: "weight",
-        label: "Weight:",
+        label: "Weight (with bumpers/battery):",
         section: "Drivebase",
         type: "text",
         required: false,
