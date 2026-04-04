@@ -1,10 +1,11 @@
 import {useEffect, useMemo, useState} from "react";
-import {ExternalLink, RefreshCw, Tv} from "lucide-react";
+import {LogOut} from "lucide-react";
+import {useNavigate} from "react-router-dom";
 import {Button} from "@/components/ui/button";
 import {Badge} from "@/components/ui/badge";
-import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {cn} from "@/lib/utils";
-import {getEventMatches, getEventMedia, getEventStatus} from "@/lib/tba";
+import {getEventMatches, getEventWebcasts, getEventStatus, buildStreamUrl, getPlayoffMatchLabel} from "@/lib/tba";
+import {useAuth} from "@/contexts/AuthContext";
 
 type TbaMatch = {
     key: string;
@@ -19,14 +20,7 @@ type TbaMatch = {
     time?: number;
 };
 
-type TbaMedia = {
-    type?: string;
-    foreign_key?: string;
-    preferred?: boolean;
-    details?: Record<string, unknown> | null;
-};
-
-const EVENT_KEY = "2026orore";
+const EVENT_KEY = "2026inwas";
 
 const compLevelOrder: Record<string, number> = {
     qm: 0,
@@ -43,21 +37,32 @@ const levelLabel = (lvl: string) => {
     return lvl;
 };
 
+const getMatchLabel = (match: TbaMatch) => {
+    if (match.comp_level === "sf" || match.comp_level === "f" || match.comp_level === "qf") {
+        const label = getPlayoffMatchLabel(match.key, match.comp_level);
+        return label;
+    }
+    return `${levelLabel(match.comp_level)} ${match.match_number}`;
+};
+
+const areTeamsPopulated = (match: TbaMatch): boolean => {
+    // Check if both red and blue teams have actual team identifiers
+    const redTeams = match.alliances.red.team_keys || [];
+    const blueTeams = match.alliances.blue.team_keys || [];
+    
+    // Teams should be populated with actual team numbers (e.g., "frc1234")
+    // If either side has no teams or incomplete teams, show TBD
+    const hasValidRedTeams = redTeams.length > 0 && redTeams.every((team) => team && typeof team === "string" && team.startsWith("frc"));
+    const hasValidBlueTeams = blueTeams.length > 0 && blueTeams.every((team) => team && typeof team === "string" && team.startsWith("frc"));
+    
+    return hasValidRedTeams && hasValidBlueTeams;
+};
+
 const formatTeams = (keys: string[]) =>
     keys
         .map((k) => Number(k.replace("frc", "")))
         .filter(Boolean)
-        .join(", ");
-
-const formatMatchTime = (match: TbaMatch) => {
-    const timestamp = match.actual_time ?? match.predicted_time ?? match.time;
-    if (!timestamp) return "TBD";
-    return new Date(timestamp * 1000).toLocaleTimeString([], {
-        hour: "numeric",
-        minute: "2-digit",
-        timeZone: "America/Los_Angeles",
-    });
-};
+        .join(", ") || "—";
 
 const extractMatchKey = (value: unknown): string | null => {
     if (typeof value === "string" && /_(qm|qf|sf|f)\d+$/i.test(value)) {
@@ -87,31 +92,41 @@ const extractMatchKey = (value: unknown): string | null => {
     return null;
 };
 
-const getStreamVideoId = (media: TbaMedia[]) => {
-    const sorted = [...media].sort((a, b) => Number(Boolean(b.preferred)) - Number(Boolean(a.preferred)));
-    const item = sorted.find((entry) => entry.type === "youtube" && entry.foreign_key);
-    return item?.foreign_key || null;
-};
-
 const PitDisplay = () => {
+    const {logout} = useAuth();
+    const navigate = useNavigate();
     const [matches, setMatches] = useState<TbaMatch[]>([]);
-    const [status, setStatus] = useState<any | null>(null);
-    const [media, setMedia] = useState<TbaMedia[]>([]);
+    const [status, setStatus] = useState<Record<string, unknown> | null>(null);
+    const [webcasts, setWebcasts] = useState<{ type: string; channel: string; file?: string }[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [refreshCount, setRefreshCount] = useState(0);
+    const [currentTime, setCurrentTime] = useState(new Date());
+
+    const handleLogout = async () => {
+        try {
+            await logout();
+            navigate("/login", {replace: true});
+        } catch (error) {
+            console.error("Logout failed:", error);
+        }
+    };
+
+    useEffect(() => {
+        const timer = window.setInterval(() => {
+            setCurrentTime(new Date());
+        }, 1000);
+        return () => window.clearInterval(timer);
+    }, []);
 
     useEffect(() => {
         let mounted = true;
 
         const load = async () => {
             setLoading(true);
-            setError(null);
             try {
-                const [matchData, statusData, mediaData] = await Promise.all([
+                const [matchData, statusData, webcastData] = await Promise.all([
                     getEventMatches(EVENT_KEY),
                     getEventStatus(EVENT_KEY),
-                    getEventMedia(EVENT_KEY),
+                    getEventWebcasts(EVENT_KEY),
                 ]);
 
                 if (!mounted) return;
@@ -124,14 +139,13 @@ const PitDisplay = () => {
 
                 setMatches(sortedMatches);
                 setStatus(statusData || null);
-                setMedia(mediaData || []);
+                setWebcasts(webcastData || []);
             } catch (err) {
                 console.error("Failed to load pit display data", err);
                 if (mounted) {
                     setMatches([]);
                     setStatus(null);
-                    setMedia([]);
-                    setError("Unable to load TBA match data right now.");
+                    setWebcasts([]);
                 }
             } finally {
                 if (mounted) setLoading(false);
@@ -145,7 +159,7 @@ const PitDisplay = () => {
             mounted = false;
             window.clearInterval(interval);
         };
-    }, [refreshCount]);
+    }, []);
 
     const currentMatchKey = useMemo(() => extractMatchKey(status), [status]);
 
@@ -173,218 +187,154 @@ const PitDisplay = () => {
         }));
     }, [currentIndex, matches]);
 
-    const currentMatch = currentIndex >= 0 ? matches[currentIndex] : null;
-    const streamVideoId = useMemo(() => getStreamVideoId(media), [media]);
-    const streamUrl = streamVideoId
-        ? `https://www.youtube.com/embed/${streamVideoId}?autoplay=1&playsinline=1&mute=0&rel=0&modestbranding=1`
-        : null;
+    const streamUrl = useMemo(() => {
+        if (!webcasts.length) return null;
+        const webcast = webcasts[0];
+        const url = buildStreamUrl(webcast);
+        if (!url) return null;
+        
+        // Add YouTube embed parameters if it's a YouTube URL
+        if (webcast.type === "youtube") {
+            return `${url}?autoplay=1&playsinline=1&mute=0&rel=0&modestbranding=1`;
+        }
+        
+        return url;
+    }, [webcasts]);
+
+    const isEmbeddable = useMemo(() => {
+        return webcasts.length > 0 && (webcasts[0].type === "youtube" || webcasts[0].type === "twitch");
+    }, [webcasts]);
 
     return (
-        <div className="min-h-screen bg-background text-foreground">
-            <main className="mx-auto max-w-[1800px] p-4 md:p-6 lg:p-8">
-                <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div>
-                        <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Local display</p>
-                        <h1 className="text-3xl md:text-4xl font-mono font-bold">PitDisplay</h1>
-                        <p className="text-muted-foreground">Event {EVENT_KEY}</p>
+        <div className="min-h-screen bg-background text-foreground flex flex-col">
+            {/* Header */}
+            <header className="border-b border-border bg-card">
+                <div className="max-w-[1800px] mx-auto px-6 py-6 flex items-start justify-between relative">
+                    <div className="space-y-2 flex-1 text-center">
+                        <h1 className="text-4xl font-bold font-mono">Team 955 - Pit Display</h1>
+                        <p className="text-3xl text-muted-foreground font-mono">
+                            {currentTime.toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                second: "2-digit",
+                                timeZone: "America/Los_Angeles",
+                            })}
+                        </p>
+                        <p className="text-lg text-muted-foreground">Event: {EVENT_KEY}</p>
                     </div>
-
-                    <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="px-3 py-1">
-                            {loading ? "Loading matches" : currentMatch ? `Current: ${levelLabel(currentMatch.comp_level)} ${currentMatch.match_number}` : "No current match"}
-                        </Badge>
-                        <Button variant="outline" onClick={() => setRefreshCount((count) => count + 1)}>
-                            <RefreshCw className="mr-2 h-4 w-4" />
-                            Refresh
-                        </Button>
-                    </div>
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={handleLogout}
+                        className="h-10 w-10 absolute right-6"
+                    >
+                        <LogOut className="h-5 w-5"/>
+                    </Button>
                 </div>
+            </header>
 
-                {error && (
-                    <Card className="mb-6 border-destructive/40">
-                        <CardContent className="p-4 text-destructive">{error}</CardContent>
-                    </Card>
-                )}
-
-                <div className="grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-6 items-start">
-                    <section className="space-y-4">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center justify-between gap-3">
-                                    <span className="font-mono text-xl">Match Window</span>
-                                    <Badge variant="outline">Top-left summary</Badge>
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                                {currentMatch ? (
-                                    <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-4">
-                                        <div className="flex flex-wrap items-center justify-between gap-3">
-                                            <div>
-                                                <p className="text-sm uppercase tracking-wide text-muted-foreground">Current match</p>
-                                                <h2 className="text-2xl font-mono font-bold">
-                                                    {levelLabel(currentMatch.comp_level)} {currentMatch.match_number}
-                                                </h2>
-                                                <p className="text-sm text-muted-foreground">{currentMatch.key}</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-sm text-muted-foreground">Scheduled / live time</p>
-                                                <p className="text-lg font-mono font-semibold">{formatMatchTime(currentMatch)}</p>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <div className="rounded-md border border-red-500/20 bg-red-500/5 p-3">
-                                                <p className="text-xs uppercase tracking-wide text-red-400 mb-1">Red Alliance</p>
-                                                <p className="text-sm">
-                                                    Teams: <span className="font-medium">{formatTeams(currentMatch.alliances.red.team_keys)}</span>
-                                                </p>
-                                                <p className="text-sm">
-                                                    Score: <span className="font-mono font-semibold">{currentMatch.alliances.red.score >= 0 ? currentMatch.alliances.red.score : "TBD"}</span>
-                                                </p>
+            {/* Main Content */}
+            <main className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex-1 flex gap-4 p-4 overflow-hidden">
+                    {/* Left: Match Schedule */}
+                    <section className="w-80 flex flex-col overflow-auto border border-border rounded-lg p-4">
+                        {visibleMatches.length > 0 ? (
+                            <div className="space-y-3">
+                                {visibleMatches.map(({match, relativeIndex}) => {
+                                    const isCurrent = relativeIndex === 0;
+                                    return (
+                                        <div
+                                            key={match.key}
+                                            className={cn(
+                                                "rounded-lg border p-4 space-y-3 transition-colors",
+                                                isCurrent
+                                                    ? "border-primary bg-primary/10"
+                                                    : "border-border bg-card/50",
+                                            )}
+                                        >
+                                            <div className="flex items-start justify-between gap-2">
+                                                <h3 className="font-mono font-bold text-base">
+                                                    {getMatchLabel(match)}
+                                                </h3>
+                                                {isCurrent && <Badge className="text-xs">Now</Badge>}
                                             </div>
 
-                                            <div className="rounded-md border border-blue-500/20 bg-blue-500/5 p-3">
-                                                <p className="text-xs uppercase tracking-wide text-blue-400 mb-1">Blue Alliance</p>
-                                                <p className="text-sm">
-                                                    Teams: <span className="font-medium">{formatTeams(currentMatch.alliances.blue.team_keys)}</span>
-                                                </p>
-                                                <p className="text-sm">
-                                                    Score: <span className="font-mono font-semibold">{currentMatch.alliances.blue.score >= 0 ? currentMatch.alliances.blue.score : "TBD"}</span>
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="rounded-lg border border-dashed border-border p-6 text-center text-muted-foreground">
-                                        {loading ? "Loading current match…" : "No match information available yet."}
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="font-mono text-xl">Two Before / Two After</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {visibleMatches.length > 0 ? (
-                                        visibleMatches.map(({match, relativeIndex}) => {
-                                            const isCurrent = relativeIndex === 0;
-                                            return (
-                                                <div
-                                                    key={match.key}
-                                                    className={cn(
-                                                        "rounded-lg border p-4 space-y-3 transition-colors",
-                                                        isCurrent
-                                                            ? "border-primary bg-primary/5"
-                                                            : "border-border bg-card",
-                                                    )}
-                                                >
-                                                    <div className="flex items-start justify-between gap-3">
-                                                        <div>
-                                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                                                                {relativeIndex < 0 ? `${Math.abs(relativeIndex)} previous` : relativeIndex > 0 ? `${relativeIndex} ahead` : "Current"}
-                                                            </p>
-                                                            <h3 className="font-mono text-lg font-bold">
-                                                                {levelLabel(match.comp_level)} {match.match_number}
-                                                            </h3>
-                                                            <p className="text-xs text-muted-foreground">{formatMatchTime(match)}</p>
-                                                        </div>
-                                                        {isCurrent && <Badge>Now</Badge>}
-                                                    </div>
-
-                                                    <div className="space-y-2 text-sm">
-                                                        <div className="flex items-start justify-between gap-3">
-                                                            <span className="text-red-400">Red</span>
-                                                            <span className="text-right font-medium">
-                                                                {formatTeams(match.alliances.red.team_keys)}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-start justify-between gap-3">
-                                                            <span className="text-blue-400">Blue</span>
-                                                            <span className="text-right font-medium">
-                                                                {formatTeams(match.alliances.blue.team_keys)}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center justify-between pt-2 border-t border-border/50 text-sm">
-                                                            <span className="text-muted-foreground">Scores</span>
-                                                            <span className="font-mono">
-                                                                R {match.alliances.red.score >= 0 ? match.alliances.red.score : "TBD"} / B {match.alliances.blue.score >= 0 ? match.alliances.blue.score : "TBD"}
-                                                            </span>
-                                                        </div>
-                                                    </div>
+                                            <div className="space-y-2">
+                                                <div className="flex justify-between items-center gap-2">
+                                                    <span className="text-red-400 font-medium text-sm">Red</span>
+                                                    <span className="text-right text-sm">
+                                                        {areTeamsPopulated(match) ? formatTeams(match.alliances.red.team_keys) : "TBD"}
+                                                    </span>
                                                 </div>
-                                            );
-                                        })
-                                    ) : (
-                                        <div className="md:col-span-2 rounded-lg border border-dashed border-border p-6 text-center text-muted-foreground">
-                                            {loading ? "Loading match window…" : "No matches to show."}
-                                        </div>
-                                    )}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </section>
-
-                    <section className="space-y-4 sticky top-4">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2 font-mono text-xl">
-                                    <Tv className="h-5 w-5" />
-                                    Livestream
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {streamUrl ? (
-                                    <div className="space-y-3">
-                                        <div className="relative overflow-hidden rounded-lg border border-border bg-black">
-                                            <div className="aspect-video w-full">
-                                                <iframe
-                                                    className="h-full w-full"
-                                                    src={streamUrl}
-                                                    title="TBA Livestream"
-                                                    allow="autoplay; encrypted-media; picture-in-picture"
-                                                    allowFullScreen
-                                                />
+                                                <div className="flex justify-between items-center gap-2">
+                                                    <span className="text-blue-400 font-medium text-sm">Blue</span>
+                                                    <span className="text-right text-sm">
+                                                        {areTeamsPopulated(match) ? formatTeams(match.alliances.blue.team_keys) : "TBD"}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between items-center gap-2 pt-2 border-t border-border/50">
+                                                    <span className="text-muted-foreground text-sm">Score</span>
+                                                    <span className="font-mono text-sm">
+                                                        {areTeamsPopulated(match) ? (
+                                                            <>R {match.alliances.red.score >= 0 ? match.alliances.red.score : "—"} / B {match.alliances.blue.score >= 0 ? match.alliances.blue.score : "—"}</>
+                                                        ) : (
+                                                            "—"
+                                                        )}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
-                                        <div className="flex items-center justify-between gap-3">
-                                            <p className="text-sm text-muted-foreground">
-                                                Stream sourced from TBA media
-                                            </p>
-                                            <Button variant="outline" asChild>
-                                                <a href={`https://www.youtube.com/watch?v=${streamVideoId}`} target="_blank" rel="noreferrer">
-                                                    <ExternalLink className="mr-2 h-4 w-4" />
-                                                    Open Stream
-                                                </a>
-                                            </Button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="rounded-lg border border-dashed border-border p-6 text-center text-muted-foreground">
-                                        No livestream was found for this event in TBA media.
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                                {loading ? "Loading matches…" : "No matches available"}
+                            </div>
+                        )}
+                    </section>
 
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="font-mono text-xl">Display Notes</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-2 text-sm text-muted-foreground">
-                                <p>This page is local-only and does not use Firebase.</p>
-                                <p>It refreshes the match list every 30 seconds.</p>
-                                <p>If the stream does not auto-start with sound, the browser may require a manual click.</p>
-                            </CardContent>
-                        </Card>
+                    {/* Right: Livestream */}
+                    <section className="flex-1 flex flex-col overflow-hidden border border-border rounded-lg bg-black">
+                        {isEmbeddable && streamUrl ? (
+                            <iframe
+                                className="w-full h-full"
+                                src={streamUrl}
+                                title="TBA Livestream"
+                                allow="autoplay; encrypted-media; picture-in-picture"
+                                allowFullScreen
+                            />
+                        ) : streamUrl ? (
+                            <div className="w-full h-full flex items-center justify-center">
+                                <a
+                                    href={streamUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-400 hover:text-blue-300 underline"
+                                >
+                                    Open Stream: {webcasts[0]?.type.toUpperCase()}
+                                </a>
+                            </div>
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                                {loading ? "Loading stream…" : "No stream available"}
+                            </div>
+                        )}
                     </section>
                 </div>
+
+                {/* Bottom: Queue */}
+                <section
+                    className="h-32 border-t border-border bg-card/50 flex items-center justify-center text-muted-foreground rounded-t-lg">
+                    {/* Queue section placeholder - API not yet implemented */}
+                </section>
             </main>
         </div>
     );
 };
 
 export default PitDisplay;
+
+
+
 
