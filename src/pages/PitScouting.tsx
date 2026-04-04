@@ -368,14 +368,14 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "starting-locations-center",
         label: "",
-        name: "Center",
+        name: "Center (in front of hub)",
         section: "Autos",
         type: "button-group",
         required: false,
         parent: "Starting Location",
     },
     {
-        id: "starting-locations-left",
+        id: "starting-locations-left-trench",
         label: "",
         name: "Left Trench",
         section: "Autos",
@@ -384,13 +384,41 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         parent: "Starting Location",
     },
     {
-        id: "starting-locations-right",
+        id: "starting-locations-right-trench",
         label: "",
         name: "Right Trench",
         section: "Autos",
         type: "button-group",
         required: false,
         parent: "Starting Location",
+    },
+    {
+        id: "starting-locations-left-bump",
+        label: "",
+        name: "Left Bump",
+        section: "Autos",
+        type: "button-group",
+        required: false,
+        parent: "Starting Location",
+    },
+    {
+        id: "starting-locations-right-bump",
+        label: "",
+        name: "Right Bump",
+        section: "Autos",
+        type: "button-group",
+        required: false,
+        parent: "Starting Location",
+    },
+    {
+        id: "starting-locations-other",
+        name: "Right Trench",
+        section: "Autos",
+        type: "text",
+        required: false,
+        placeholder: "Other starting location:",
+        parent: "Starting Location",
+        label: "",
     },
     {
         id: "starting-locations-left-bump",
@@ -588,7 +616,9 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "label", // yea just cuz
         required: false,
         parent: null,
-    },
+    }, // this one duplicates the climb options from robot capabilities section
+
+    ///// Drivebase
     {
         id: "dimensions",
         label: "Dimensions (with bumpers):",
