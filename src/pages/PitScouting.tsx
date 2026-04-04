@@ -32,29 +32,28 @@ interface PitScoutingResponse {
 
 const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
-        id: "intake-fuel",
-        label: "Intake Fuel",
-        section: "Robot Functions",
-        type: "checkbox",
-        required: false,
-        parent: null,
-    },
-    {
-        id: "intake-fuel-ground",
-        label: "Ground",
-        section: "Robot Functions",
-        type: "checkbox",
-        required: false,
-        parent: "Intake Fuel",
-    },
-    {
-        id: "intake-fuel-station",
-        label: "Fuel Station",
-        section: "Robot Functions",
-        type: "checkbox",
-        required: false,
-        parent: "Intake Fuel",
-    },
+            id: "intake-type",
+            label: "Intaking Locations",
+            section: "Robot Functions",
+            type: "label",
+            parent: null
+        },
+        {
+            id: "intake-ground-ground",
+            name: "Ground",
+            section: "Robot Functions",
+            type: "button-group-multi",
+            parent: "Intaking Locations"
+        },
+        {
+            id: "intake-ground-outpost",
+            name: "Outpost",
+            section: "Robot Functions",
+            type: "button-group-multi",
+            parent: "Intaking Locations"
+        },
+
+
     {
         id: "climb-level",
         label: "Climb",
@@ -94,47 +93,47 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         id: "climb-location",
         label: "Climb location",
         section: "Robot Functions",
-        type: "checkbox",
+        type: "label",
         required: false,
         parent: null,
     },
     {
         id: "climb-location-side",
-        label: "Side",
+        name: "Side",
         section: "Robot Functions",
-        type: "radio",
+        type: "button-group-multi",
         required: false,
         parent: "Climb location",
     },
     {
         id: "climb-location-middle",
-        label: "Middle",
+        name: "Middle",
         section: "Robot Functions",
-        type: "radio",
+        type: "button-group-multi",
         required: false,
         parent: "Climb location",
     },
     {
         id: "climb-location-straddling",
-        label: "Straddling the Upright",
+        name: "Straddling the Upright",
         section: "Robot Functions",
-        type: "radio",
+        type: "button-group-multi",
         required: false,
         parent: "Climb location",
     },
     {
         id: "climb-location-backflip",
-        label: "Backflip",
+        name: "Backflip",
         section: "Robot Functions",
-        type: "radio",
+        type: "button-group-multi",
         required: false,
         parent: "Climb location",
     },
     {
         id: "climb-location-other",
-        label: "Other",
+        name: "Nah",
         section: "Robot Functions",
-        type: "radio",
+        type: "button-group-multi",
         required: false,
         parent: "Climb location",
     },
@@ -174,47 +173,47 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         id: "defense-rating",
         label: "Defense rating (1-5):",
         section: "Robot capabilities",
-        type: "checkbox",
+        type: "label",
         required: false,
         parent: null,
     },
     {
         id: "defense-rating-1",
-        label: "1",
+        name: "1",
         section: "Robot capabilities",
-        type: "radio",
+        type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
     },
     {
         id: "defense-rating-2",
-        label: "2",
+        name: "2",
         section: "Robot capabilities",
-        type: "radio",
+        type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
     },
     {
         id: "defense-rating-3",
-        label: "3",
+        name: "3",
         section: "Robot capabilities",
-        type: "radio",
+        type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
     },
     {
         id: "defense-rating-4",
-        label: "4",
+        name: "4",
         section: "Robot capabilities",
-        type: "radio",
+        type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
     },
     {
         id: "defense-rating-5",
-        label: "5",
+        name: "5",
         section: "Robot capabilities",
-        type: "radio",
+        type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
     },
@@ -267,23 +266,23 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         id: "auto-intake-fuel",
         label: "Auto Intake Fuel",
         section: "Autos",
-        type: "checkbox",
+        type: "label",
         required: false,
         parent: null,
     },
     {
         id: "auto-intake-fuel-ground",
-        label: "Ground",
+        name: "Ground",
         section: "Autos",
-        type: "checkbox",
+        type: "button-group-multi",
         required: false,
         parent: "Auto Intake Fuel",
     },
     {
         id: "auto-intake-fuel-station",
-        label: "Fuel Station",
+        name: "Fuel Station",
         section: "Autos",
-        type: "checkbox",
+        type: "button-group-multi",
         required: false,
         parent: "Auto Intake Fuel",
     },
@@ -291,7 +290,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         id: "auto-climb",
         label: "Climb",
         section: "Autos",
-        type: "checkbox",
+        type: "label", // yea just cuz
         required: false,
         parent: null,
     },
@@ -573,7 +572,10 @@ const PitScouting = () => {
                             checked={(value as boolean) || false}
                             onCheckedChange={(checked) => handleResponseChange(question.id, checked)}
                             disabled={!isActive}
+
+
                         />
+
                     </div>
                 );
 
@@ -612,6 +614,24 @@ const PitScouting = () => {
                                 </Button>
 
                     );
+            case "button-group-multi":
+                const selected = (responses[question.group!] as string[]) || [];
+                return (
+                    <Button
+                        variant={selected.includes(question.name!) ? "default" : "outline"}
+                        onClick={() => {
+                            const current = (responses[question.group!] as string[]) || [];
+                            const next = current.includes(question.name!)
+                                ? current.filter(v => v !== question.name)
+                                : [...current, question.name!];
+                            handleResponseChange(question.group!, next as any);
+                        }}
+                        disabled={!isActive}
+                        className="w-full"
+                    >
+                        {question.name}
+                    </Button>
+                );
             default:
                 return null;
         }
