@@ -9,6 +9,7 @@ import Index from "./components/Index";
 import Login from "./pages/Login";
 import Scouting from "./pages/Scouting";
 import PitScouting from "./pages/PitScouting";
+import PitDisplay from "./pages/PitDisplay";
 import NotFound from "./pages/NotFound";
 import Analytics from "./pages/Analytics";
 import Matches from "./pages/Matches";
@@ -42,7 +43,7 @@ const RedirectHandler = () => {
 };
 
 const AppContent = () => {
-    const {isAuthenticated, loading} = useAuth();
+    const {isAuthenticated, loading, user} = useAuth();
     const location = useLocation();
     const navigate = useNavigate();
     const [currentView, setCurrentView] = useState(
@@ -54,8 +55,24 @@ const AppContent = () => {
     const updateDetectedRef = useRef(false);
     const updateAlertIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+    // Force pitDisplay user to pit-display page
+    useEffect(() => {
+        if (user?.role === 'pitDisplay' && location.pathname !== "/pit-display") {
+            navigate("/pit-display", {replace: true});
+        }
+    }, [user?.role, location.pathname, navigate]);
+
     useEffect(() => {
         const path = location.pathname;
+
+        // PitDisplay users can only access pit-display
+        if (user?.role === 'pitDisplay') {
+            setCurrentView("/pit-display");
+            if (path !== "/pit-display") {
+                navigate("/pit-display", {replace: true});
+            }
+            return;
+        }
 
         if (path !== "/") {
             setCurrentView(path);
@@ -70,14 +87,14 @@ const AppContent = () => {
         }
 
         lastPathRef.current = path;
-    }, [location.pathname, navigate]);
+    }, [location.pathname, navigate, user?.role]);
 
     useEffect(() => {
         if (loading) return;
 
         if (isAuthenticated && currentView === "/login") {
             setCurrentView("/dashboard");
-        } else if (!isAuthenticated && currentView !== "/login") {
+        } else if (!isAuthenticated && currentView !== "/login" && currentView !== "/pit-display") {
             setCurrentView("/login");
         }
     }, [currentView, isAuthenticated, loading]);
@@ -142,6 +159,11 @@ const AppContent = () => {
     }, []);
 
     const renderPage = () => {
+        // PitDisplay users can only see the pit display page
+        if (user?.role === 'pitDisplay') {
+            return <PitDisplay/>;
+        }
+
         switch (currentView) {
             case "/login":
                 return (
@@ -167,6 +189,8 @@ const AppContent = () => {
                         <PitScouting/>
                     </ProtectedRoute>
                 );
+            case "/pit-display":
+                return <PitDisplay/>;
             case "/analytics":
                 return (
                     <ProtectedRoute>
