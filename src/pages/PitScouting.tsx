@@ -420,24 +420,6 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         parent: "Starting Location",
         label: "",
     },
-    {
-        id: "starting-locations-left-bump",
-        label: "",
-        name: "Left Bump",
-        section: "Autos",
-        type: "button-group",
-        required: false,
-        parent: "Starting Location",
-    },
-    {
-        id: "starting-locations-right-bump",
-        label: "",
-        name: "Right Bump",
-        section: "Autos",
-        type: "button-group",
-        required: false,
-        parent: "Starting Location",
-    },
     // move through locations
     {
         id: "auto-locations",
