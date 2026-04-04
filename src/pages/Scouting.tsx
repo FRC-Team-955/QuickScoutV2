@@ -1409,7 +1409,7 @@ const Scouting = () => {
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Auto Climb</CardTitle>
-                                    <CardDescription>Can this team climb?</CardDescription>
+                                    <CardDescription>Did this team climb?</CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     <div className="flex gap-2">
@@ -1841,29 +1841,7 @@ const Scouting = () => {
                                             />
                                         </div>
 
-                                        <div className="space-y-3">
-                                            <Label htmlFor="auto-fuel" className="text-base font-medium">
-                                                Did they score more than eight fuel?
-                                            </Label>
-                                            <Input
-                                                id="auto-fuel"
-                                                placeholder="e.g., Yes, No, 10+"
-                                                value={autoFuel}
-                                                onChange={(e) => setAutoFuel(e.target.value)}
-                                            />
-                                        </div>
 
-                                        <div className="space-y-3">
-                                            <Label htmlFor="auto-climb" className="text-base font-medium">
-                                                Did they climb during auto?
-                                            </Label>
-                                            <Input
-                                                id="auto-climb"
-                                                placeholder="e.g., No, L1, L2, L3"
-                                                value={autoClimb1}
-                                                onChange={(e) => setAutoClimb1(e.target.value)}
-                                            />
-                                        </div>
 
                                         <div className="space-y-3">
                                             <Label htmlFor="teleop-passing" className="text-base font-medium">

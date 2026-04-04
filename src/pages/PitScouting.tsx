@@ -540,7 +540,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     },
     {
         id: "auto-intake-fuel",
-        label: "Intaking Locations",
+        label: "Intaking Locations ",
         section: "Autos",
         type: "label",
         required: false,
@@ -552,7 +552,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         section: "Autos",
         type: "button-group-multi",
         required: false,
-        parent: "Intaking Locations",
+        parent: "Intaking Locations ",
         label: ""
     },
     {
@@ -561,7 +561,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         section: "Autos",
         type: "button-group-multi",
         required: false,
-        parent: "Intaking Locations",
+        parent: "Intaking Locations ",
         label: ""
     },
     {
@@ -570,7 +570,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         section: "Autos",
         type: "button-group-multi",
         required: false,
-        parent: "Intaking Locations",
+        parent: "Intaking Locations ",
         label: ""
     },
     {
@@ -933,7 +933,7 @@ const PitScouting = () => {
 
                     );
             case "button-group-multi":
-                const selected = (responses[question.parent!] as string[]) || [];
+                { const selected = (responses[question.parent!] as string[]) || [];
                 return (
                     <Button
                         variant={selected.includes(question.name!) ? "default" : "outline"}
@@ -949,7 +949,7 @@ const PitScouting = () => {
                     >
                         {question.name}
                     </Button>
-                );
+                ); }
             default:
                 return null;
         }
@@ -1047,7 +1047,7 @@ const PitScouting = () => {
                                                                 <CardTitle className="text-lg text-primary">
                                                                     Auto {index + 1}
                                                                 </CardTitle>
-                                                                {index > 0 && (
+                                                                {(
                                                                     <Button size="sm" variant="destructive" onClick={() => setAutoCount(prev => prev - 1)}>
                                                                         <X className="w-4 h-4" />
                                                                     </Button>
