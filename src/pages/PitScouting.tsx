@@ -32,6 +32,8 @@ interface PitScoutingResponse {
     [key: string]: string | number | boolean | null;
 }
 
+// @ts-ignore
+// @ts-ignore
 const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
 
     ///////////// Intake Type
@@ -44,8 +46,8 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         required: false
     },
     {
-        id: "intake-ground-ground",
-        name: "Ground",
+        id: "intake-ground-neutral-zone",
+        name: "Neutral Zone",
         section: "Robot Functions",
         type: "button-group-multi",
         parent: "Intaking Locations",
@@ -272,26 +274,20 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "fuel-hopper",
         label: "Approximate max fuel in hopper:",
+        placeholder: "",
         section: "Robot capabilities",
         type: "text",
-        required: false,
-        parent: "Preloads",
-    },
-    {
-        id: "auto-fuel-scoring",
-        label: "Auto Fuel Scoring",
-        section: "Autos",
-        type: "label",
         required: false,
         parent: null,
     },
+
     {
         id: "shooter-type",
-        label: "Shooter type (turret, drum shooter, hooded, fixed etc.):",
+        label: "Shooter type:",
         section: "Robot capabilities",
         type: "text",
         required: false,
-        placeholder: "",
+        placeholder: "eg., turret, drum shooter, hooded, fixed",
         parent: null,
     },
     {
@@ -303,9 +299,66 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         placeholder: "",
         parent: null,
     },
+
+    ///// AUtos
+    {
+        id: "modify-autos",
+        label: "How easily can they modify autos (on the spot)?",
+        section: "Auto Capabilities",
+        type: "label",
+        parent: null,
+        required: false
+    },
+    {
+        id: "modify-autos-cannot",
+        name: "Can't change at comp",
+        section: "Robot Functions",
+        type: "button-group",
+        parent: "How easily can they modify autos (on the spot)?",
+        label: "",
+        required: false
+    },
+    {
+        id: "modify-autos-hard",
+        name: "Hard to change",
+        section: "Robot Functions",
+        type: "button-group",
+        parent: "How easily can they modify autos (on the spot)?",
+        label: "",
+        required: false
+    },
+    {
+        id: "modify-autos-medium",
+        name: "Medium",
+        section: "Robot Functions",
+        type: "button-group",
+        parent: "How easily can they modify autos (on the spot)?",
+        label: "",
+        required: false
+    },
+    {
+        id: "modify-autos-easy",
+        name: "Easy to change",
+        section: "Robot Functions",
+        type: "button-group",
+        parent: "How easily can they modify autos (on the spot)?",
+        label: "",
+        required: false
+    },
+
+
+    {
+        id: "auto-description",
+        section: "Autos",
+        type: "text",
+        placeholder: "This auto does...",
+        required: false,
+        parent: null,
+        label: "Auto Description"
+    },
     {
         id: "starting-locations",
-        label: "Possible starting locations:",
+        label: "Starting Location",
         section: "Autos",
         type: "label",
         required: false,
@@ -313,8 +366,153 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         parent: null,
     },
     {
+        id: "starting-locations-center",
+        label: "",
+        name: "Center (in front of hub)",
+        section: "Autos",
+        type: "button-group",
+        required: false,
+        parent: "Starting Location",
+    },
+    {
+        id: "starting-locations-left-trench",
+        label: "",
+        name: "Left Trench",
+        section: "Autos",
+        type: "button-group",
+        required: false,
+        parent: "Starting Location",
+    },
+    {
+        id: "starting-locations-right-trench",
+        label: "",
+        name: "Right Trench",
+        section: "Autos",
+        type: "button-group",
+        required: false,
+        parent: "Starting Location",
+    },
+    {
+        id: "starting-locations-left-bump",
+        label: "",
+        name: "Left Bump",
+        section: "Autos",
+        type: "button-group",
+        required: false,
+        parent: "Starting Location",
+    },
+    {
+        id: "starting-locations-right-bump",
+        label: "",
+        name: "Right Bump",
+        section: "Autos",
+        type: "button-group",
+        required: false,
+        parent: "Starting Location",
+    },
+    {
+        id: "starting-locations-other",
+        name: "Other",
+        section: "Autos",
+        type: "button-group",
+        required: false,
+        parent: "Starting Location",
+    },
+    {
+        id: "starting-locations-other-text",
+        section: "Autos",
+        type: "text",
+        required: false,
+        placeholder: "Other starting location:",
+        parent: "Starting Location",
+        label: "",
+    },
+    // move through locations
+    {
+        id: "auto-locations",
+        label: "Regions",
+        section: "Autos",
+        type: "label",
+        required: false,
+        placeholder: "",
+        parent: null,
+    },
+    {
+        id: "auto-locations-neutral",
+        label: "",
+        name: "Neutral Zone",
+        section: "Autos",
+        type: "button-group-multi",
+        required: false,
+        parent: "Regions",
+    },
+    {
+        id: "auto-locations-left-trench",
+        label: "",
+        name: "Left Trench",
+        section: "Autos",
+        type: "button-group-multi",
+        required: false,
+        parent: "Regions",
+    },
+    {
+        id: "auto-locations-left-bump",
+        label: "",
+        name: "Left Bump",
+        section: "Autos",
+        type: "button-group-multi",
+        required: false,
+        parent: "Regions",
+    },
+    {
+        id: "auto-locations-right-trench",
+        label: "",
+        name: "Right Trench",
+        section: "Autos",
+        type: "button-group-multi",
+        required: false,
+        parent: "Regions",
+    },
+    {
+        id: "auto-locations-right-bump",
+        label: "",
+        name: "Right Bump",
+        section: "Autos",
+        type: "button-group-multi",
+        required: false,
+        parent: "Regions",
+    },
+    {
+        id: "auto-locations-depot",
+        label: "",
+        name: "Depot",
+        section: "Autos",
+        type: "button-group-multi",
+        required: false,
+        parent: "Regions",
+    },
+    {
+        id: "auto-locations-outpost",
+        label: "",
+        name: "Outpost",
+        section: "Autos",
+        type: "button-group-multi",
+        required: false,
+        parent: "Regions",
+    },
+    {
+        id: "auto-locations-tower",
+        label: "",
+        name: "Tower",
+        section: "Autos",
+        type: "button-group-multi",
+        required: false,
+        parent: "Regions",
+    },
+
+    {
         id: "fuel-scoring",
-        label: "Preloads",
+        label: "Preloaded Fuel",
         section: "Autos",
         type: "label",
         required: false,
@@ -324,46 +522,32 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         id: "score-preloads",
         name: "Shoot",
         section: "Autos",
-        type: "button-group-multi",
+        type: "button-group",
         required: false,
-        parent: "Preloads",
+        parent: "Preloaded Fuel",
+        label: ""
     },
     {
         id: "no-shoot-preloads-neutral-zone",
         name: "No shoot (races to neutral zone)",
         section: "Autos",
-        type: "button-group-multi",
+        type: "button-group",
         required: false,
-        parent: "Preloads",
+        parent: "Preloaded Fuel",
+        label: ""
     },
     {
-        id: "nah-preloads",
-        name: "No shoot (doesn't shoot)",
+        id: "no-shoot-preloads-cant-shoot",
+        name: "No shoot (can't shoot)",
         section: "Autos",
-        type: "text",
+        type: "button-group",
         required: false,
-        placeholder: "",
-        parent: null,
-    },
-    {
-        id: "auto-outpost",
-        name: "Outpost",
-        section: "Autos",
-        type: "button-group-multi",
-        required: false,
-        parent: "Auto Fuel Scoring",
-    },
-    {
-        id: "auto-depot",
-        name: "Depot",
-        section: "Autos",
-        type: "button-group-multi",
-        required: false,
-        parent: "Auto Fuel Scoring",
+        parent: "Preloaded Fuel",
+        label: ""
     },
     {
         id: "auto-intake-fuel",
-        label: "Auto Intake Fuel Locations",
+        label: "Intaking Locations ",
         section: "Autos",
         type: "label",
         required: false,
@@ -375,17 +559,44 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         section: "Autos",
         type: "button-group-multi",
         required: false,
-        parent: "Auto Intake Fuel Locations",
+        parent: "Intaking Locations ",
         label: ""
     },
     {
         id: "auto-intake-outpost-chute",
-        name: "Outpost Chute",
+        name: "Outpost",
         section: "Autos",
         type: "button-group-multi",
         required: false,
-        parent: "Auto Intake Fuel Locations",
+        parent: "Intaking Locations ",
         label: ""
+    },
+    {
+        id: "auto-intake-depot",
+        name: "Depot",
+        section: "Autos",
+        type: "button-group-multi",
+        required: false,
+        parent: "Intaking Locations ",
+        label: ""
+    },
+    {
+        id: "estimated-fuel",
+        section: "Autos",
+        type: "text",
+        required: true,
+        placeholder: "",
+        parent: null,
+        label: "Estimated Fuel Scored:",
+    },
+    {
+        id: "shooting-notes",
+        section: "Autos",
+        type: "text",
+        required: true,
+        placeholder: "eg., Jams often, SOTM",
+        parent: null,
+        label: "Notes on shooting:",
     },
     {
         id: "auto-climb",
@@ -394,32 +605,34 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "label", // yea just cuz
         required: false,
         parent: null,
-    },
+    }, // this one duplicates the climb options from robot capabilities section
+
+    ///// Drivebase
     {
         id: "dimensions",
         label: "Dimensions (with bumpers):",
         section: "Drivebase",
         type: "text",
         required: false,
-        placeholder: "",
+        placeholder: "31x28 inch",
         parent: null,
     },
     {
         id: "weight",
-        label: "Weight:",
+        label: "Weight (with bumpers/battery):",
         section: "Drivebase",
         type: "text",
         required: false,
-        placeholder: "",
+        placeholder: "749 lbs",
         parent: null,
     },
     {
         id: "special-details",
-        label: "Any special details (i.e. swerve type, gearing):",
+        label: "Any special details:",
         section: "Drivebase",
         type: "text",
         required: false,
-        placeholder: "",
+        placeholder: "eg., swerve type, gearing",
         parent: null,
     },
     {
@@ -486,7 +699,7 @@ const PitScouting = () => {
     const [cancelConfirm, setCancelConfirm] = useState(false);
     const cancelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    const [autoCount, setAutoCount] = useState(1);
+    const [autoCount, setAutoCount] = useState(0);
 
 
     const handleStartScouting = (teamNum?: string) => {
@@ -727,7 +940,7 @@ const PitScouting = () => {
 
                     );
             case "button-group-multi":
-                const selected = (responses[question.parent!] as string[]) || [];
+                { const selected = (responses[question.parent!] as string[]) || [];
                 return (
                     <Button
                         variant={selected.includes(question.name!) ? "default" : "outline"}
@@ -743,7 +956,7 @@ const PitScouting = () => {
                     >
                         {question.name}
                     </Button>
-                );
+                ); }
             default:
                 return null;
         }
@@ -839,9 +1052,9 @@ const PitScouting = () => {
                                                         <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5">
                                                             <div className="flex items-center justify-between">
                                                                 <CardTitle className="text-lg text-primary">
-                                                                    Auto {autoCount > 1 ? index + 1 : ""}
+                                                                    Auto {index + 1}
                                                                 </CardTitle>
-                                                                {index > 0 && (
+                                                                {(
                                                                     <Button size="sm" variant="destructive" onClick={() => setAutoCount(prev => prev - 1)}>
                                                                         <X className="w-4 h-4" />
                                                                     </Button>
