@@ -59,33 +59,36 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         id: "climb-level",
         label: "Climb",
         section: "Robot Functions",
-        type: "checkbox",
-        required: false,
-        parent: null,
+        type: "label",
+        parent: null
     },
     {
         id: "climb-level-l1",
-        label: "L1",
+        name: "L1",
         section: "Robot Functions",
-        type: "radio",
-        required: false,
-        parent: "Climb",
+        type: "button-group",
+        parent: "Climb"
     },
     {
         id: "climb-level-l2",
-        label: "L2",
+        name: "L2",
         section: "Robot Functions",
-        type: "radio",
-        required: false,
-        parent: "Climb",
+        type: "button-group",
+        parent: "Climb"
     },
     {
         id: "climb-level-l3",
-        label: "L3",
+        name: "L3",
         section: "Robot Functions",
-        type: "radio",
-        required: false,
-        parent: "Climb",
+        type: "button-group",
+        parent: "Climb"
+    },
+    {
+        id: "climb-level-none",
+        name: "Nah",
+        section: "Robot Functions",
+        type: "button-group",
+        parent: "Climb"
     },
     {
         id: "climb-location",
@@ -592,7 +595,23 @@ const PitScouting = () => {
                         </Label>
                     </div>
                 );
+            case "button-group":
+                return (
+                    // no div?
+                        <Button
+                                    variant={
+                                        (responses[question.group!] === question.name)? "default" : "outline"
+                                    }
+                                    onClick={() =>
+                                        handleResponseChange(question.group!, question.name)
+                                    }
+                                    disabled={!isActive}
+                                    className="w-full"
+                                >
+                                    {question.name}
+                                </Button>
 
+                    );
             default:
                 return null;
         }
