@@ -299,6 +299,14 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         parent: null,
     },
     {
+        id: "auto-description",
+        section: "Autos",
+        type: "text",
+        required: false,
+        parent: null,
+        label: "Auto Description"
+    },
+    {
         id: "starting-locations",
         label: "Starting Location",
         section: "Autos",
