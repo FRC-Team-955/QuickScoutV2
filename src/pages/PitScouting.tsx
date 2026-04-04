@@ -412,7 +412,14 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     },
     {
         id: "starting-locations-other",
-        name: "Right Trench",
+        name: "Other",
+        section: "Autos",
+        type: "button-group",
+        required: false,
+        parent: "Starting Location",
+    },
+    {
+        id: "starting-locations-other-text",
         section: "Autos",
         type: "text",
         required: false,
@@ -505,7 +512,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
 
     {
         id: "fuel-scoring",
-        label: "Preloads",
+        label: "Preloaded Fuel",
         section: "Autos",
         type: "label",
         required: false,
@@ -517,7 +524,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         section: "Autos",
         type: "button-group",
         required: false,
-        parent: "Preloads",
+        parent: "Preloaded Fuel",
         label: ""
     },
     {
@@ -526,7 +533,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         section: "Autos",
         type: "button-group",
         required: false,
-        parent: "Preloads",
+        parent: "Preloaded Fuel",
         label: ""
     },
     {
@@ -535,7 +542,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         section: "Autos",
         type: "button-group",
         required: false,
-        parent: "Preloads",
+        parent: "Preloaded Fuel",
         label: ""
     },
     {
