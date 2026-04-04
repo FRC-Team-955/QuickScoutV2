@@ -32,6 +32,8 @@ interface PitScoutingResponse {
     [key: string]: string | number | boolean | null;
 }
 
+// @ts-ignore
+// @ts-ignore
 const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
 
     ///////////// Intake Type
@@ -275,7 +277,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         section: "Robot capabilities",
         type: "text",
         required: false,
-        parent: "Preloads",
+        parent: null,
     },
     {
         id: "auto-fuel-scoring",
@@ -305,12 +307,39 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     },
     {
         id: "starting-locations",
-        label: "Possible starting locations:",
+        label: "Possible Starting Locations",
         section: "Autos",
         type: "label",
         required: false,
         placeholder: "",
         parent: null,
+    },
+    {
+        id: "starting-locations-center",
+        label: "",
+        name: "Center",
+        section: "Autos",
+        type: "button-group-multi",
+        required: false,
+        parent: "Possible Starting Locations",
+    },
+    {
+        id: "starting-locations-left",
+        label: "",
+        name: "Left Trench",
+        section: "Autos",
+        type: "button-group-multi",
+        required: false,
+        parent: "Possible Starting Locations",
+    },
+    {
+        id: "starting-locations-right",
+        label: "",
+        name: "Right Trench",
+        section: "Autos",
+        type: "button-group-multi",
+        required: false,
+        parent: "Possible Starting Locations",
     },
     {
         id: "fuel-scoring",
@@ -327,6 +356,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group-multi",
         required: false,
         parent: "Preloads",
+        label: ""
     },
     {
         id: "no-shoot-preloads-neutral-zone",
@@ -335,15 +365,16 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group-multi",
         required: false,
         parent: "Preloads",
+        label: ""
     },
     {
-        id: "nah-preloads",
-        name: "No shoot (doesn't shoot)",
+        id: "no-shoot-preloads-cant-shoot",
+        name: "No shoot (can't shoot)",
         section: "Autos",
-        type: "text",
+        type: "button-group-multi",
         required: false,
-        placeholder: "",
-        parent: null,
+        parent: "Preloads",
+        label: ""
     },
     {
         id: "auto-outpost",
@@ -352,6 +383,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group-multi",
         required: false,
         parent: "Auto Fuel Scoring",
+        label: ""
     },
     {
         id: "auto-depot",
@@ -360,6 +392,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group-multi",
         required: false,
         parent: "Auto Fuel Scoring",
+        label: ""
     },
     {
         id: "auto-intake-fuel",
