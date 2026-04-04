@@ -32,26 +32,26 @@ interface PitScoutingResponse {
 
 const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
-            id: "intake-type",
-            label: "Intaking Locations",
-            section: "Robot Functions",
-            type: "label",
-            parent: null
-        },
-        {
-            id: "intake-ground-ground",
-            name: "Ground",
-            section: "Robot Functions",
-            type: "button-group-multi",
-            parent: "Intaking Locations"
-        },
-        {
-            id: "intake-ground-outpost",
-            name: "Outpost",
-            section: "Robot Functions",
-            type: "button-group-multi",
-            parent: "Intaking Locations"
-        },
+        id: "intake-type",
+        label: "Intaking Locations",
+        section: "Robot Functions",
+        type: "label",
+        parent: null
+    },
+    {
+        id: "intake-ground-ground",
+        name: "Ground",
+        section: "Robot Functions",
+        type: "button-group-multi",
+        parent: "Intaking Locations"
+    },
+    {
+        id: "intake-ground-outpost",
+        name: "Outpost",
+        section: "Robot Functions",
+        type: "button-group-multi",
+        parent: "Intaking Locations"
+    },
 
 
     {
@@ -138,36 +138,52 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         parent: "Climb location",
     },
     {
-        id: "under-trench-height",
-        label: "Under Trench height (22.25\")",
+        id: "size-constraints",
+        label: "Size Constraints",
         section: "Robot capabilities",
-        type: "checkbox",
+        type: "label",
         required: false,
         parent: null,
     },
     {
-        id: "over-bump",
-        label: "Over the Bump",
+        id: "under-trench-height",
+        name: "Under Trench height (22.25\")",
         section: "Robot capabilities",
-        type: "checkbox",
+        type: "button-group-multi",
+        required: false,
+        parent: "Size Constraints",
+    },
+    {
+        id: "over-bump",
+        name: "Over the Bump",
+        section: "Robot capabilities",
+        type: "button-group-multi",
+        required: false,
+        parent: "Size Constraints",
+    },
+    {
+        id: "shooting-capabilities",
+        label: "Shooting Capabilities",
+        section: "Robot capabilities",
+        type: "label",
         required: false,
         parent: null,
     },
     {
         id: "shoot-on-move",
-        label: "Shoot on the move",
+        name: "Shoot on the Move",
         section: "Robot capabilities",
-        type: "checkbox",
+        type: "button-group-multi",
         required: false,
-        parent: null,
+        parent: "Shooting Capabilities",
     },
     {
         id: "pass-fuel",
-        label: "Pass Fuel to Alliance Zone",
+        name: "Pass Fuel to Alliance Zone",
         section: "Robot capabilities",
-        type: "checkbox",
+        type: "button-group-multi",
         required: false,
-        parent: null,
+        parent: "Shooting Capabilities",
     },
     {
         id: "defense-rating",
@@ -219,7 +235,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     },
     {
         id: "fuel-hopper",
-        label: "Approximate amount of fuel in hopper:",
+        label: "Approximate max fuel in hopper:",
         section: "Robot capabilities",
         type: "text",
         required: false,
