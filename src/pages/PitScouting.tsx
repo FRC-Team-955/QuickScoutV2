@@ -614,7 +614,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         section: "Drivebase",
         type: "text",
         required: false,
-        placeholder: "31x28 inch",
+        placeholder: "ex. 31\"x28\"",
         parent: null,
     },
     {
@@ -623,7 +623,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         section: "Drivebase",
         type: "text",
         required: false,
-        placeholder: "749 lbs",
+        placeholder: "ex. 74.9 lbs",
         parent: null,
     },
     {
