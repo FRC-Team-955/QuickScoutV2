@@ -726,6 +726,8 @@ const PitScouting = () => {
     };
 
     const handleSubmit = async () => {
+        //const everything_but_autos =
+
         if (!user?.id) {
             toast("You must be logged in to submit pit scouting data");
             return;
@@ -746,6 +748,21 @@ const PitScouting = () => {
             const now = new Date();
             const dateStr = now.toISOString().split("T")[0]; // YYYY-MM-DD
 
+            const autoResponses: Record<string, Record<string, any>> = {};
+            const flatResponses: PitScoutingResponse = {};
+
+            Object.entries(responses).forEach(([key, value]) => {
+                const autoMatch = key.match(/^auto_(\d+)_(.+)$/);
+                if (autoMatch) {
+                    const index = autoMatch[1];
+                    const fieldId = autoMatch[2];
+                    if (!autoResponses[index]) autoResponses[index] = {};
+                    autoResponses[index][fieldId] = value;
+                } else {
+                    flatResponses[key] = value;
+                }
+            });
+
             const pitScoutingRef = ref(
                 db,
                 `pitScouting/${dateStr}/${teamNumber}/${user.id}`
@@ -756,7 +773,10 @@ const PitScouting = () => {
                 scoutName: user.name || "Unknown",
                 scoutId: user.id,
                 submittedAt: serverTimestamp(),
-                responses,
+                ...flatResponses,        // all non-auto at the top level
+                ...Object.fromEntries(
+                    Object.entries(autoResponses).map(([index, data]) => [`auto${index}`, data]))
+
             });
 
             toast("Pit scouting data submitted successfully!");
