@@ -1183,8 +1183,23 @@ const Analytics = () => {
                                                 <YAxis type="number" dataKey="y" name="Auto Points" unit=""/>
                                                 <ZAxis dataKey="r" range={[50, 400]}/>
                                                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                                <ReTooltip cursor={{strokeDasharray: '3 3'}}
-                                                           formatter={((value: any, name: any) => [value, name]) as any} />
+                                                <ReTooltip
+                                                    cursor={{strokeDasharray: '3 3'}}
+                                                    content={({payload}) => {
+                                                        if (!payload || payload.length === 0) return null;
+                                                        const d = payload[0].payload;
+                                                        return (
+                                                            <div className="bg-background border border-border rounded shadow-md p-3 text-sm space-y-1">
+                                                                <p className="font-bold text-base">Team {d.team}</p>
+                                                                <p><span className="text-muted-foreground">Teleop:</span> {d.x}</p>
+                                                                <p><span className="text-muted-foreground">Auto:</span> {d.y}</p>
+                                                                <p><span className="text-muted-foreground">Climb:</span> {d.r > 3 ? d.r / 6 : 0}</p>
+                                                                {d.robotTipped && <p className="text-red-500 font-semibold">⚠ Robot Tipped</p>}
+                                                                {d.robotDead && <p className="text-black font-semibold">💀 Robot Dead</p>}
+                                                            </div>
+                                                        );
+                                                    }}
+                                                />
                                                 <Legend/>
                                                 <Scatter
                                                     name="Scouts"
