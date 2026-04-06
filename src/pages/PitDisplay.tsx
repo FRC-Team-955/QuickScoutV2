@@ -5,6 +5,7 @@ import {Button} from "@/components/ui/button";
 import {Badge} from "@/components/ui/badge";
 import {cn} from "@/lib/utils";
 import {buildStreamUrl, getEventMatches, getEventStatus, getEventWebcasts, getPlayoffMatchLabel} from "@/lib/tba";
+import {getEventLiveStatus, type NexusEventStatusResponse} from "@/lib/nexus";
 import {useAuth} from "@/contexts/AuthContext";
 
 type TbaMatch = {
@@ -20,7 +21,8 @@ type TbaMatch = {
     time?: number;
 };
 
-const EVENT_KEY = "2026mawor";
+const EVENT_KEY = "2026pncmp";
+const TEAM_NUMBER = "955";
 
 const compLevelOrder: Record<string, number> = {
     qm: 0,
@@ -60,8 +62,7 @@ const getMatchLabel = (match: TbaMatch) => {
         if (!areTeamsPopulated(match)) {
             return "TBD";
         }
-        const label = getPlayoffMatchLabel(match.key, match.comp_level);
-        return label;
+        return getPlayoffMatchLabel(match.key, match.comp_level);
     }
     return `${levelLabel(match.comp_level)} ${match.match_number}`;
 };
@@ -71,6 +72,40 @@ const formatTeams = (keys: string[]) =>
         .map((k) => Number(k.replace("frc", "")))
         .filter(Boolean)
         .join(", ") || "—";
+
+const normalizeTeamNumber = (team: string | number) => String(team).replace(/^frc/i, "");
+
+const isTeamInMatch = (teams: string[] | undefined, teamNumber: string) =>
+    (teams ?? []).some((team) => normalizeTeamNumber(team) === teamNumber);
+
+const normalizeMatchStatus = (status?: string | null) => (status ?? "").trim().toLowerCase();
+
+const getEstimatedQueueTimeMs = (estimatedQueueTime?: number | null): number | null => {
+    if (estimatedQueueTime == null) return null;
+
+    return estimatedQueueTime < 10_000_000_000 ? estimatedQueueTime * 1000 : estimatedQueueTime;
+};
+
+const formatCountdown = (ms: number | null): string => {
+    if (ms == null) return "ETA unavailable";
+
+    const totalSeconds = Math.max(0, Math.round(ms / 1000));
+    if (totalSeconds === 0) return "Queuing now";
+
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+    }
+
+    if (minutes > 0) {
+        return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+    }
+
+    return `${seconds}s`;
+};
 
 const extractMatchKey = (value: unknown): string | null => {
     if (typeof value === "string" && /_(qm|qf|sf|f)\d+$/i.test(value)) {
@@ -106,6 +141,7 @@ const PitDisplay = () => {
     const [matches, setMatches] = useState<TbaMatch[]>([]);
     const [status, setStatus] = useState<Record<string, unknown> | null>(null);
     const [webcasts, setWebcasts] = useState<{ type: string; channel: string; file?: string }[]>([]);
+    const [nexusStatus, setNexusStatus] = useState<NexusEventStatusResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -124,10 +160,16 @@ const PitDisplay = () => {
         const load = async () => {
             setLoading(true);
             try {
-                const [matchData, statusData, webcastData] = await Promise.all([
+                const nexusPromise = getEventLiveStatus(EVENT_KEY).catch((error) => {
+                    console.warn("Failed to load Nexus queue data", error);
+                    return null;
+                });
+
+                const [matchData, statusData, webcastData, queueData] = await Promise.all([
                     getEventMatches(EVENT_KEY),
                     getEventStatus(EVENT_KEY),
                     getEventWebcasts(EVENT_KEY),
+                    nexusPromise,
                 ]);
 
                 if (!mounted) return;
@@ -144,12 +186,14 @@ const PitDisplay = () => {
                 setMatches(sortedMatches);
                 setStatus(statusData || null);
                 setWebcasts(webcastData || []);
+                setNexusStatus(queueData || null);
             } catch (err) {
                 console.error("Failed to load pit display data", err);
                 if (mounted) {
                     setMatches([]);
                     setStatus(null);
                     setWebcasts([]);
+                    setNexusStatus(null);
                 }
             } finally {
                 if (mounted) setLoading(false);
@@ -163,6 +207,11 @@ const PitDisplay = () => {
             mounted = false;
             window.clearInterval(interval);
         };
+    }, []);
+
+    useEffect(() => {
+        const tick = window.setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => window.clearInterval(tick);
     }, []);
 
     const currentMatchKey = useMemo(() => extractMatchKey(status), [status]);
@@ -208,6 +257,28 @@ const PitDisplay = () => {
     const isEmbeddable = useMemo(() => {
         return webcasts.length > 0 && (webcasts[0].type === "youtube" || webcasts[0].type === "twitch");
     }, [webcasts]);
+
+    const queueEntry = useMemo(() => {
+        if (!nexusStatus?.matches?.length) return null;
+
+        const teamMatches = nexusStatus.matches.filter(
+            (match) =>
+                isTeamInMatch(match.redTeams, TEAM_NUMBER) ||
+                isTeamInMatch(match.blueTeams, TEAM_NUMBER),
+        );
+
+        if (!teamMatches.length) return null;
+
+        const nextMatch =
+            teamMatches.find((match) => normalizeMatchStatus(match.status) !== "on field") ?? teamMatches[0];
+
+        const etaMs = getEstimatedQueueTimeMs(nextMatch.times?.estimatedQueueTime);
+        const allianceColor = isTeamInMatch(nextMatch.redTeams, TEAM_NUMBER) ? "red" : "blue";
+
+        return {match: nextMatch, etaMs, allianceColor};
+    }, [nexusStatus]);
+
+    const queueCountdownMs = queueEntry?.etaMs != null ? queueEntry.etaMs - currentTime.getTime() : null;
 
     return (
         <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -335,7 +406,27 @@ const PitDisplay = () => {
                 {/* Bottom: Queue */}
                 <section
                     className="h-32 border-t border-border bg-card/50 flex items-center justify-center text-muted-foreground rounded-t-lg">
-                    {/* Queue section placeholder - API not yet implemented */}
+                    <div className="text-center space-y-2 px-4">
+                        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Queue</p>
+                        {queueEntry ? (
+                            <>
+                                <p className="text-xl font-semibold text-foreground">
+                                    Team 955&apos;s next match is {queueEntry.match.label}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                    {queueEntry.match.status ? `Status: ${queueEntry.match.status} · ` : ""}
+                                    Put on the {queueEntry.allianceColor} bumpers
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                    We will be queued in {formatCountdown(queueCountdownMs)}
+                                </p>
+                            </>
+                        ) : loading ? (
+                            <p className="text-sm">Loading queue…</p>
+                        ) : (
+                            <p className="text-sm">Team 955 doesn&apos;t have any future matches scheduled yet</p>
+                        )}
+                    </div>
                 </section>
             </main>
         </div>

@@ -291,6 +291,7 @@ const Scouting = () => {
 
         if (teamNum) setSubjectiveTeamNumber(String(teamNum));
 
+        setIsInMatchScouting(false);
         setIsInSubjectiveScouting(true);
         setAutonomousEffectiveness("");
         setCanQuicklyScore("");
@@ -355,6 +356,7 @@ const Scouting = () => {
         }
 
         setIsInSubjectiveScouting(false);
+        setIsInMatchScouting(false);
         setSubjectiveTeamNumber("");
         setAutonomousEffectiveness("");
         setCanQuicklyScore("");
@@ -395,6 +397,8 @@ const Scouting = () => {
 
     const [sotm, setSotm] = useState<string>("");
     const [robotTipped, setRobotTipped] = useState<string>("");
+
+    const [isInMatchScouting, setIsInMatchScouting] = useState(false);
 
     // Subjective Scouting State
     const [subjectiveTeamNumber, setSubjectiveTeamNumber] = useState("");
@@ -483,6 +487,7 @@ const Scouting = () => {
 
         if (teamNum) setTeamNumber(String(teamNum));
 
+        setIsInSubjectiveScouting(false);
         setAutonomousNotes("");
         setAutonomousFuel(0);
         setAutoClimb("");
@@ -492,6 +497,7 @@ const Scouting = () => {
         setDefenseScore("");
         setEndGameNotes("");
         setDidClimb(false);
+        setIsInMatchScouting(true);
 
         // Show scouter which team they're scouting
         toast(`Scouting Team ${effectiveTeam}`);
@@ -521,6 +527,20 @@ const Scouting = () => {
         matchEndedHandledRef.current = false;
         startScouting(String(pending.teamNumber), {manual: false});
     }, [activeMatch?.id, currentAssignment?.matchId, user?.id]);
+
+    useEffect(() => {
+        if (isManualSessionRef.current) return;
+
+        if (!activeMatch?.id || currentAssignment?.matchId !== activeMatch.id) {
+            setIsInMatchScouting(false);
+            currentMatchIdRef.current = null;
+            assignedTeamRef.current = null;
+            if (!activeMatch?.id) {
+                pendingAssignmentRef.current = null;
+                matchEndedHandledRef.current = false;
+            }
+        }
+    }, [activeMatch?.id, currentAssignment?.matchId]);
 
     useEffect(() => {
         if (!user?.id) return;
@@ -559,6 +579,15 @@ const Scouting = () => {
 
         return unsub;
     }, [user?.id, activeMatch]);
+
+    useEffect(() => {
+        if (!subjectiveActiveMatch?.id || currentSubjectiveAssignment?.matchId !== subjectiveActiveMatch.id) {
+            setIsInSubjectiveScouting(false);
+            if (!subjectiveActiveMatch?.id) {
+                pendingSubjectiveAssignmentRef.current = null;
+            }
+        }
+    }, [subjectiveActiveMatch?.id, currentSubjectiveAssignment?.matchId]);
 
     useEffect(() => {
         if (!user?.id) return;
@@ -649,6 +678,7 @@ const Scouting = () => {
 
     const canScoutMatch = !!activeMatch && currentAssignment?.matchId === activeMatch.id && !isInSubjectiveScouting && !isLead;
     const canScoutSubjectiveMatch = !!subjectiveActiveMatch && currentSubjectiveAssignment?.matchId === subjectiveActiveMatch.id && !isLead;
+    const isActivelyScouting = isInMatchScouting || isInSubjectiveScouting;
 
     useEffect(() => {
         if (isManualSessionRef.current) return;
@@ -805,6 +835,7 @@ const Scouting = () => {
         setAutoClimb1("");
         setTeleopPassing("");
         setGameSense("");
+        setIsInMatchScouting(false);
         isManualSessionRef.current = false;
     };
 
@@ -843,7 +874,7 @@ const Scouting = () => {
                     <div className="space-y-6">
                         <div className="flex items-center justify-between"></div>
 
-                        {(isLead || !activeMatch) && !isInSubjectiveScouting && (
+                        {(isLead || !isActivelyScouting) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Match Queue</CardTitle>
@@ -973,7 +1004,7 @@ const Scouting = () => {
 
                                     <div className="flex gap-3 items-center">
                                         {!isLead ? (
-                                            !activeMatch ? (
+                                            /* !activeMatch ? */(
                                                 <Button
                                                     onClick={handleQueueToggle}
                                                     disabled={queueLoading}
@@ -986,11 +1017,11 @@ const Scouting = () => {
                                                     )}
                                                     {isInQueue ? "Leave match queue" : "Join match queue"}
                                                 </Button>
-                                            ) : (
+                                            ) /*: (
                                                 <div className="flex-1 text-center text-sm text-muted-foreground">
                                                     Scouting in progress
                                                 </div>
-                                            )
+                                            ) */
                                         ) : activeMatch ? (
                                             activeMatch.startedBy === user?.id ? (
                                                 <div className="flex gap-2 flex-1">
@@ -1095,7 +1126,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {(isLead || (!subjectiveActiveMatch && !activeMatch)) && (
+                        {(isLead || !isActivelyScouting) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Subjective Queue</CardTitle>
@@ -1169,7 +1200,7 @@ const Scouting = () => {
 
                                     <div className="flex gap-3 items-center">
                                         {!isLead ? (
-                                            !subjectiveActiveMatch ? (
+                                            /* !subjectiveActiveMatch ? */ (
                                                 <Button
                                                     onClick={handleSubjectiveQueueToggle}
                                                     disabled={subjectiveQueueLoading}
@@ -1182,11 +1213,11 @@ const Scouting = () => {
                                                     )}
                                                     {isInSubjectiveQueue ? "Leave subjective queue" : "Join subjective queue"}
                                                 </Button>
-                                            ) : (
+                                            ) /*: (
                                                 <div className="flex-1 text-center text-sm text-muted-foreground">
                                                     Scouting in progress
                                                 </div>
-                                            )
+                                            ) */
                                         ) : subjectiveActiveMatch ? (
                                             subjectiveActiveMatch.startedBy === user?.id ? (
                                                 <Button
@@ -1754,7 +1785,8 @@ const Scouting = () => {
                                             />
                                         </div>
                                         <div className="space-y-3">
-                                            <Label htmlFor="performance-under-pressure" className="text-base font-medium">
+                                            <Label htmlFor="performance-under-pressure"
+                                                   className="text-base font-medium">
                                                 Do they perform well under pressure?
                                             </Label>
                                             <Input
@@ -1840,7 +1872,6 @@ const Scouting = () => {
                                                 onChange={(e) => setRobotPenalties(e.target.value)}
                                             />
                                         </div>
-
 
 
                                         <div className="space-y-3">
