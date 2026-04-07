@@ -7,9 +7,11 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue,} from "@/
 import {Input} from "@/components/ui/input";
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
 import {Button} from "@/components/ui/button";
-import {get, ref} from "firebase/database";
+import {AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle} from "@/components/ui/alert-dialog";
+import {useAuth} from "@/contexts/AuthContext";
+import {get, ref, remove} from "firebase/database";
 import {db} from "@/lib/firebase";
-import {isOSFData, OSF_DATE_RANGE} from "@/lib/dateUtils";
+import {CLACK_DATE_RANGE, getDataLabel, OSF_DATE_RANGE} from "@/lib/dateUtils";
 import {
     CartesianGrid,
     Legend,
@@ -21,6 +23,8 @@ import {
     YAxis,
     ZAxis,
 } from "recharts";
+import {Trash2} from "lucide-react";
+import {toast} from "sonner";
 
 type Filters = {
     sortBy:
@@ -32,9 +36,12 @@ type Filters = {
         | "best_defense";
 };
 
+type EventType = "all" | "osf" | "clack" | "current";
+
 export type MatchEntry = {
     id: string;
     matchKey: string;
+    userId: string;
     station: string;
     teamNumber: number;
     scoutName: string;
@@ -52,6 +59,7 @@ export type MatchEntry = {
 
 export type PitScoutingEntry = {
     id: string;
+    dateStr: string;
     teamNumber: number;
     scoutName: string;
     scoutId: string;
@@ -93,7 +101,23 @@ export type SubjectiveScoutingEntry = {
     submittedAt: number;
 };
 
+const matchesSelectedEvent = (timestamp: number, eventType: EventType): boolean => {
+    const dataLabel = getDataLabel(timestamp);
+    if (eventType === "osf") return dataLabel === "OSF";
+    if (eventType === "clack") return dataLabel === "Clack";
+    if (eventType === "current") return dataLabel === "Current";
+    return true;
+};
+
+type DeleteTarget = {
+    kind: "match" | "pit" | "subjective";
+    id: string;
+    path: string;
+    label: string;
+};
+
 const Analytics = () => {
+    const {user} = useAuth();
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState("analytics");
     const [viewTab, setViewTab] = useState("all");
@@ -104,8 +128,12 @@ const Analytics = () => {
     const [pitScoutingEntries, setPitScoutingEntries] = useState<PitScoutingEntry[]>([]);
     const [pitTeamNumberInput, setPitTeamNumberInput] = useState("");
     const [subjectiveScoutingEntries, setSubjectiveScoutingEntries] = useState<SubjectiveScoutingEntry[]>([]);
-    const [eventType, setEventType] = useState<"all" | "osf" | "current">("all");
+    const [eventType, setEventType] = useState<EventType>("all");
     const [scouterSearchInput, setScouterSearchInput] = useState("");
+    const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+    const [deleting, setDeleting] = useState(false);
+
+    const isLead = !!user?.isLead;
 
     const handleTabChange = (tab: string) => {
         setActiveTab(tab);
@@ -116,6 +144,51 @@ const Analytics = () => {
         if (tab === "matches") navigate("/matches");
         if (tab === "leaderboard") navigate("/leaderboard");
     };
+
+    const openDeleteDialog = (target: DeleteTarget) => {
+        if (!isLead) return;
+        setDeleteTarget(target);
+    };
+
+    const handleDeleteConfirmed = async () => {
+        if (!deleteTarget) return;
+
+        try {
+            setDeleting(true);
+            await remove(ref(db, deleteTarget.path));
+
+            if (deleteTarget.kind === "match") {
+                setMatchEntries((prev) => prev.filter((entry) => entry.id !== deleteTarget.id));
+            } else if (deleteTarget.kind === "pit") {
+                setPitScoutingEntries((prev) => prev.filter((entry) => entry.id !== deleteTarget.id));
+            } else if (deleteTarget.kind === "subjective") {
+                setSubjectiveScoutingEntries((prev) => prev.filter((entry) => entry.id !== deleteTarget.id));
+            }
+
+            toast("Scouting report deleted.");
+        } catch (error) {
+            console.error("Failed to delete scouting report:", error);
+            toast("Failed to delete scouting report.");
+        } finally {
+            setDeleting(false);
+            setDeleteTarget(null);
+        }
+    };
+
+    const renderDeleteButton = (target: DeleteTarget) => (
+        isLead ? (
+            <Button
+                type="button"
+                variant="destructive"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                onClick={() => openDeleteDialog(target)}
+                aria-label="Delete scouting report"
+            >
+                <Trash2 className="h-4 w-4" />
+            </Button>
+        ) : null
+    );
 
     useEffect(() => {
         const fetchData = async () => {
@@ -197,12 +270,12 @@ const Analytics = () => {
                         return {defenseValue: 0, defenseDisplay: "N/A"};
                     };
 
-                    Object.entries(matchesData).forEach(([matchKey, matchValue]: [string, Record<string, unknown>]) => {
+                            Object.entries(matchesData).forEach(([matchKey, matchValue]: [string, Record<string, unknown>]) => {
                         const participantsRoot = matchValue.participants || matchValue;
 
                         if (typeof participantsRoot !== 'object') return;
 
-                        Object.entries(participantsRoot).forEach(([stationId, data]: [string, Record<string, unknown>]) => {
+                            Object.entries(participantsRoot).forEach(([stationId, data]: [string, Record<string, unknown>]) => {
                             if (!data || typeof data !== 'object' || !data.teamNumber) return;
 
                             const teamNum = parseInt(String(data.teamNumber));
@@ -224,6 +297,7 @@ const Analytics = () => {
                             allEntries.push({
                                 id: `${matchKey}_${stationId}_${(data.submittedAt as number) || Math.random()}`,
                                 matchKey: matchKey,
+                                userId: (data.userId as string) || stationId,
                                 station: stationId,
                                 teamNumber: teamNum,
                                 scoutName: (data.scoutName as string) || "Unknown",
@@ -268,6 +342,7 @@ const Analytics = () => {
 
                                 allPitEntries.push({
                                     id: `${dateStr}_${teamNum}_${userId}`,
+                                    dateStr,
                                     teamNumber: (entryValue.teamNumber as number) || parseInt(teamNum, 10) || 0,
                                     scoutName: (entryValue.scoutName as string) || "Unknown",
                                     scoutId: (entryValue.scoutId as string) || userId || "",
@@ -322,9 +397,9 @@ const Analytics = () => {
                             allSubjectiveEntries.push({
                                 id: `${matchId}_${userId}`,
                                 matchId,
+                                userId,
                                 teamNumber: teamNumber,
                                 scoutName: scoutName,
-                                userId,
                                 robotPerformance: {
                                     autonomousEffectiveness: (robotPerf.autonomousEffectiveness as string) || "",
                                     canQuicklyScore: (robotPerf.canQuicklyScore as string) || "",
@@ -372,10 +447,8 @@ const Analytics = () => {
         let filtered = matchEntries;
         
         // Filter by event type
-        if (eventType === "osf") {
-            filtered = filtered.filter(e => isOSFData(e.submittedAt));
-        } else if (eventType === "current") {
-            filtered = filtered.filter(e => !isOSFData(e.submittedAt));
+        if (eventType !== "all") {
+            filtered = filtered.filter(e => matchesSelectedEvent(e.submittedAt, eventType));
         }
         
         return filtered.sort((a, b) => {
@@ -405,10 +478,8 @@ const Analytics = () => {
         let teamMatches = matchEntries.filter(entry => entry.teamNumber === teamNum);
         
         // Filter by event type
-        if (eventType === "osf") {
-            teamMatches = teamMatches.filter(e => isOSFData(e.submittedAt));
-        } else if (eventType === "current") {
-            teamMatches = teamMatches.filter(e => !isOSFData(e.submittedAt));
+        if (eventType !== "all") {
+            teamMatches = teamMatches.filter(e => matchesSelectedEvent(e.submittedAt, eventType));
         }
 
         if (teamMatches.length === 0) return null;
@@ -440,10 +511,8 @@ const Analytics = () => {
         let filtered = pitScoutingEntries;
         
         // Filter by event type
-        if (eventType === "osf") {
-            filtered = filtered.filter(e => isOSFData(e.submittedAt));
-        } else if (eventType === "current") {
-            filtered = filtered.filter(e => !isOSFData(e.submittedAt));
+        if (eventType !== "all") {
+            filtered = filtered.filter(e => matchesSelectedEvent(e.submittedAt, eventType));
         }
         
         return filtered;
@@ -453,10 +522,8 @@ const Analytics = () => {
         let filtered = subjectiveScoutingEntries;
         
         // Filter by event type
-        if (eventType === "osf") {
-            filtered = filtered.filter(e => isOSFData(e.submittedAt));
-        } else if (eventType === "current") {
-            filtered = filtered.filter(e => !isOSFData(e.submittedAt));
+        if (eventType !== "all") {
+            filtered = filtered.filter(e => matchesSelectedEvent(e.submittedAt, eventType));
         }
         
         return filtered;
@@ -468,8 +535,9 @@ const Analytics = () => {
 
         let scouterMatches = matchEntries.filter((entry) => entry.scoutName.toLowerCase().includes(searchTerm));
 
-        if (eventType === "osf") scouterMatches = scouterMatches.filter((e) => isOSFData(e.submittedAt));
-        else if (eventType === "current") scouterMatches = scouterMatches.filter((e) => !isOSFData(e.submittedAt));
+        if (eventType !== "all") {
+            scouterMatches = scouterMatches.filter((e) => matchesSelectedEvent(e.submittedAt, eventType));
+        }
 
         if (scouterMatches.length === 0) return null;
 
@@ -662,13 +730,14 @@ const Analytics = () => {
 
                         <div className="flex items-center gap-3 py-4">
                             <span className="text-sm font-medium">Event Type:</span>
-                            <Select value={eventType} onValueChange={(v: any) => setEventType(v)}>
+                            <Select value={eventType} onValueChange={(v) => setEventType(v as EventType)}>
                                 <SelectTrigger className="w-[200px]">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All Events</SelectItem>
                                     <SelectItem value="osf">OSF ({OSF_DATE_RANGE})</SelectItem>
+                                    <SelectItem value="clack">Clack ({CLACK_DATE_RANGE})</SelectItem>
                                     <SelectItem value="current">Current Event</SelectItem>
                                 </SelectContent>
                             </Select>
@@ -701,16 +770,23 @@ const Analytics = () => {
                                 {loading ? (
                                     <p>Loading scouted matches...</p>
                                 ) : (
-                                    sortedAndFiltered.map((entry) => (
+                                            sortedAndFiltered.map((entry) => (
                                         <Card key={entry.id} className="overflow-hidden border-l-4 border-l-primary">
                                             <CardHeader className="pb-2">
-                                                <CardTitle className="flex justify-between items-start">
+                                                <CardTitle className="flex justify-between items-start gap-3">
                                                     <div className="flex flex-col">
                                                         <span className="text-xl">Team {entry.teamNumber}</span>
                                                     </div>
-                                                    <div
-                                                        className="bg-secondary px-2 py-1 rounded text-[10px] font-mono">
-                                                        {entry.matchKey.slice(-6)}
+                                                    <div className="flex items-start gap-2">
+                                                        <div className="bg-secondary px-2 py-1 rounded text-[10px] font-mono">
+                                                            {entry.matchKey.slice(-6)}
+                                                        </div>
+                                                        {renderDeleteButton({
+                                                            kind: "match",
+                                                            id: entry.id,
+                                                            path: `matches/${entry.matchKey}/participants/${entry.userId}`,
+                                                            label: `Team ${entry.teamNumber} • Match ${entry.matchKey.slice(-6)}`,
+                                                        })}
                                                     </div>
                                                 </CardTitle>
                                             </CardHeader>
@@ -926,11 +1002,17 @@ const Analytics = () => {
                                             {teamSpecificData.matches.map((entry) => (
                                                 <Card key={entry.id} className="border-l-4 border-l-primary">
                                                     <CardHeader className="pb-2">
-                                                        <CardTitle className="flex justify-between items-start">
-                                                            <span
-                                                                className="text-lg">Match {entry.matchKey.slice(-6)}</span>
-                                                            <span
-                                                                className="text-xs bg-secondary px-2 py-1 rounded">{entry.station}</span>
+                                                        <CardTitle className="flex justify-between items-start gap-3">
+                                                            <span className="text-lg">Match {entry.matchKey.slice(-6)}</span>
+                                                            <div className="flex items-start gap-2">
+                                                                <span className="text-xs bg-secondary px-2 py-1 rounded">{entry.station}</span>
+                                                                {renderDeleteButton({
+                                                                    kind: "match",
+                                                                    id: entry.id,
+                                                                    path: `matches/${entry.matchKey}/participants/${entry.userId}`,
+                                                                    label: `Team ${entry.teamNumber} • Match ${entry.matchKey.slice(-6)}`,
+                                                                })}
+                                                            </div>
                                                         </CardTitle>
                                                     </CardHeader>
                                                     <CardContent className="text-sm space-y-2">
@@ -1118,9 +1200,17 @@ const Analytics = () => {
                                             {scouterData.matches.map((entry) => (
                                                 <Card key={entry.id} className="border-l-4 border-l-primary">
                                                     <CardHeader className="pb-2">
-                                                        <CardTitle className="flex justify-between items-start">
+                                                        <CardTitle className="flex justify-between items-start gap-3">
                                                             <span className="text-lg">Team {entry.teamNumber}</span>
-                                                            <span className="text-xs bg-secondary px-2 py-1 rounded">{entry.station}</span>
+                                                            <div className="flex items-start gap-2">
+                                                                <span className="text-xs bg-secondary px-2 py-1 rounded">{entry.station}</span>
+                                                                {renderDeleteButton({
+                                                                    kind: "match",
+                                                                    id: entry.id,
+                                                                    path: `matches/${entry.matchKey}/participants/${entry.userId}`,
+                                                                    label: `Team ${entry.teamNumber} • Match ${entry.matchKey.slice(-6)}`,
+                                                                })}
+                                                            </div>
                                                         </CardTitle>
                                                     </CardHeader>
                                                     <CardContent className="text-sm space-y-2">
@@ -1323,16 +1413,24 @@ const Analytics = () => {
                                                 <Card key={entry.id} className="overflow-hidden">
                                                     <CardHeader
                                                         className="bg-gradient-to-r from-primary/10 to-primary/5 pb-3">
-                                                        <CardTitle className="flex justify-between items-start">
+                                                        <CardTitle className="flex justify-between items-start gap-3">
                                                             <div className="flex flex-col gap-1">
                                                                 <span
                                                                     className="text-2xl font-bold">Team {entry.teamNumber}</span>
                                                                 <span
                                                                     className="text-xs text-muted-foreground">Scout: {entry.scoutName}</span>
                                                             </div>
-                                                            <div
-                                                                className="bg-secondary px-3 py-1 rounded text-xs font-mono">
-                                                                {new Date(entry.submittedAt).toLocaleDateString([], {timeZone: "America/Los_Angeles"})}
+                                                            <div className="flex items-start gap-2">
+                                                                <div
+                                                                    className="bg-secondary px-3 py-1 rounded text-xs font-mono">
+                                                                    {new Date(entry.submittedAt).toLocaleDateString([], {timeZone: "America/Los_Angeles"})}
+                                                                </div>
+                                                                {renderDeleteButton({
+                                                                    kind: "pit",
+                                                                    id: entry.id,
+                                                                    path: `pitScouting/${entry.dateStr}/${entry.teamNumber}/${entry.scoutId}`,
+                                                                    label: `Team ${entry.teamNumber} • Pit scouting`,
+                                                                })}
                                                             </div>
                                                         </CardTitle>
                                                     </CardHeader>
@@ -1445,18 +1543,26 @@ const Analytics = () => {
                                 <p className="text-muted-foreground">No subjective scouting data found</p>
                             ) : (
                                 <div className="grid grid-cols-1 gap-4">
-                                    {filteredSubjectiveScoutingEntries.map((entry) => (
+                                        {filteredSubjectiveScoutingEntries.map((entry) => (
                                         <Card key={entry.id} className="overflow-hidden border-l-4 border-l-accent">
                                             <CardHeader className="bg-gradient-to-r from-accent/10 to-accent/5 pb-3">
-                                                <CardTitle className="flex justify-between items-start">
+                                                <CardTitle className="flex justify-between items-start gap-3">
                                                     <div className="flex flex-col gap-1">
                                                         <span
                                                             className="text-2xl font-bold">Team {entry.teamNumber}</span>
                                                         <span
                                                             className="text-xs text-muted-foreground">Scout: {entry.scoutName}</span>
                                                     </div>
-                                                    <div className="bg-secondary px-3 py-1 rounded text-xs font-mono">
-                                                        {new Date(entry.submittedAt).toLocaleDateString([], {timeZone: "America/Los_Angeles"})}
+                                                    <div className="flex items-start gap-2">
+                                                        <div className="bg-secondary px-3 py-1 rounded text-xs font-mono">
+                                                            {new Date(entry.submittedAt).toLocaleDateString([], {timeZone: "America/Los_Angeles"})}
+                                                        </div>
+                                                        {renderDeleteButton({
+                                                            kind: "subjective",
+                                                            id: entry.id,
+                                                            path: `subjectiveMatches/${entry.matchId}/participants/${entry.userId}`,
+                                                            label: `Team ${entry.teamNumber} • Subjective scouting`,
+                                                        })}
                                                     </div>
                                                 </CardTitle>
                                             </CardHeader>
@@ -1572,6 +1678,27 @@ const Analytics = () => {
                     </Tabs>
                 </div>
             </main>
+            <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete scouting report</AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-2">
+                            <span>Are you sure you want to delete this? This cannot be undone.</span>
+                            {deleteTarget && <span className="block text-xs text-muted-foreground">{deleteTarget.label}</span>}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDeleteConfirmed}
+                            disabled={deleting}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {deleting ? "Deleting..." : "Confirm"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 };
