@@ -1307,45 +1307,45 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {!isInSubjectiveScouting && !activeMatch && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Start Manual Scouting Session</CardTitle>
-                                    <CardDescription>
-                                        Enter the team number you're scouting and begin
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="team-number">Team Number</Label>
-                                        <Input
-                                            id="team-number"
-                                            type="text"
-                                            placeholder="Enter team number"
-                                            value={teamNumber}
-                                            onChange={(e) => setTeamNumber(e.target.value)}
-                                        />
-                                    </div>
+                        {/*{!isInSubjectiveScouting && !activeMatch && (*/}
+                        {/*    <Card>*/}
+                        {/*        <CardHeader>*/}
+                        {/*            <CardTitle>Start Manual Scouting Session</CardTitle>*/}
+                        {/*            <CardDescription>*/}
+                        {/*                Enter the team number you're scouting and begin*/}
+                        {/*            </CardDescription>*/}
+                        {/*        </CardHeader>*/}
+                        {/*        <CardContent className="space-y-4">*/}
+                        {/*            <div className="space-y-2">*/}
+                        {/*                <Label htmlFor="team-number">Team Number</Label>*/}
+                        {/*                <Input*/}
+                        {/*                    id="team-number"*/}
+                        {/*                    type="text"*/}
+                        {/*                    placeholder="Enter team number"*/}
+                        {/*                    value={teamNumber}*/}
+                        {/*                    onChange={(e) => setTeamNumber(e.target.value)}*/}
+                        {/*                />*/}
+                        {/*            </div>*/}
 
-                                    {isLead || !isLead ? (
-                                        <Button
-                                            onClick={() => startScouting(teamNumber, {manual: true})}
-                                            className="w-full"
-                                            size="lg"
-                                            disabled={!teamNumber.trim()}
-                                        >
-                                            <Play className="w-4 h-4 mr-2"/>
-                                            Start Scouting
-                                        </Button>
-                                    ) : (
-                                        <div className="w-full text-center text-sm text-muted-foreground">
-                                            You will be started automatically when the lead assigns a
-                                            team to you.
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        )}
+                        {/*            {isLead || !isLead ? (*/}
+                        {/*                <Button*/}
+                        {/*                    onClick={() => startScouting(teamNumber, {manual: true})}*/}
+                        {/*                    className="w-full"*/}
+                        {/*                    size="lg"*/}
+                        {/*                    disabled={!teamNumber.trim()}*/}
+                        {/*                >*/}
+                        {/*                    <Play className="w-4 h-4 mr-2"/>*/}
+                        {/*                    Start Scouting*/}
+                        {/*                </Button>*/}
+                        {/*            ) : (*/}
+                        {/*                <div className="w-full text-center text-sm text-muted-foreground">*/}
+                        {/*                    You will be started automatically when the lead assigns a*/}
+                        {/*                    team to you.*/}
+                        {/*                </div>*/}
+                        {/*            )}*/}
+                        {/*        </CardContent>*/}
+                        {/*    </Card>*/}
+                        {/*)}*/}
 
                         {canScoutMatch && (
                             <Card>
