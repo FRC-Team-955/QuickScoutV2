@@ -407,7 +407,9 @@ const Scouting = () => {
     // Section 1: Robot Performance and Strategy
     const [autonomousEffectiveness, setAutonomousEffectiveness] = useState<string>("");
     const [canQuicklyScore, setCanQuicklyScore] = useState<string>("");
+    const [estimatedBPS, setEstimatedBPS] = useState<string>("");
     const [canClimb, setCanClimb] = useState<string>("");
+    const [climbTime, setClimbTime] = useState<string>("");
     const [climbLevelSubjective, setClimbLevelSubjective] = useState<string>("");
 
     // Section 2: Team Dynamics
@@ -1744,13 +1746,25 @@ const Scouting = () => {
 
                                         <div className="space-y-3">
                                             <Label htmlFor="quick-score" className="text-base font-medium">
-                                                Can their robot quickly score fuels?
+                                                Estimated fuels scored per cycle?
                                             </Label>
                                             <Input
                                                 id="quick-score"
                                                 placeholder="e.g., Yes, No, or description"
                                                 value={canQuicklyScore}
                                                 onChange={(e) => setCanQuicklyScore(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="estimated-bps" className="text-base font-medium">
+                                                Estimated BPS (optional)?
+                                            </Label>
+                                            <Input
+                                                id="estimated-bps"
+                                                placeholder="e.g., 3-5 BPS, 1-2 BPS, or N/A"
+                                                value={estimatedBPS}
+                                                onChange={(e) => setEstimatedBPS(e.target.value)}
                                             />
                                         </div>
 
@@ -1765,6 +1779,19 @@ const Scouting = () => {
                                                 onChange={(e) => setCanClimb(e.target.value)}
                                             />
                                         </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="climb-time" className="text-base font-medium">
+                                                Estimated time to climb?
+                                            </Label>
+                                            <Input
+                                                id="climb-time"
+                                                placeholder="e.g., <10s, 10-20s, >20s, or N/A"
+                                                value={climbTime}
+                                                onChange={(e) => setClimbTime(e.target.value)}
+                                            />
+                                        </div>
+
                                     </CardContent>
                                 </Card>
 
@@ -1784,18 +1811,18 @@ const Scouting = () => {
                                                 onChange={(e) => setTeamFocus(e.target.value)}
                                             />
                                         </div>
-                                        <div className="space-y-3">
-                                            <Label htmlFor="performance-under-pressure"
-                                                   className="text-base font-medium">
-                                                Do they perform well under pressure?
-                                            </Label>
-                                            <Input
-                                                id="performance-under-pressure"
-                                                placeholder="e.g., Panicked and caused chaos, kept playing well"
-                                                value={performanceUnderPressure}
-                                                onChange={(e) => setPerformanceUnderPressure(e.target.value)}
-                                            />
-                                        </div>
+                                        {/*<div className="space-y-3">*/}
+                                        {/*    <Label htmlFor="performance-under-pressure"*/}
+                                        {/*           className="text-base font-medium">*/}
+                                        {/*        Do they perform well under pressure?*/}
+                                        {/*    </Label>*/}
+                                        {/*    <Input*/}
+                                        {/*        id="performance-under-pressure"*/}
+                                        {/*        placeholder="e.g., Panicked and caused chaos, kept playing well"*/}
+                                        {/*        value={performanceUnderPressure}*/}
+                                        {/*        onChange={(e) => setPerformanceUnderPressure(e.target.value)}*/}
+                                        {/*    />*/}
+                                        {/*</div>*/}
                                     </CardContent>
                                 </Card>
 
@@ -1814,6 +1841,18 @@ const Scouting = () => {
                                                 placeholder="e.g., Very effective, Moderately effective, Ineffective"
                                                 value={blockingEffectiveness}
                                                 onChange={(e) => setBlockingEffectiveness(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="defensive-skill" className="text-base font-medium">
+                                                Do they seem experienced with playing defense?
+                                            </Label>
+                                            <Input
+                                                id="defensive-skill"
+                                                placeholder="e.g., Yes, No, A little"
+                                                value={defensiveSkill}
+                                                onChange={(e) => setDefensiveSkill(e.target.value)}
                                             />
                                         </div>
 
@@ -1837,17 +1876,6 @@ const Scouting = () => {
                                         <CardTitle>Misc</CardTitle>
                                     </CardHeader>
                                     <CardContent className="space-y-6">
-                                        <div className="space-y-3">
-                                            <Label htmlFor="defensive-skill" className="text-base font-medium">
-                                                Do they seem experienced with playing defense?
-                                            </Label>
-                                            <Input
-                                                id="defensive-skill"
-                                                placeholder="e.g., Yes, No, A little"
-                                                value={defensiveSkill}
-                                                onChange={(e) => setDefensiveSkill(e.target.value)}
-                                            />
-                                        </div>
 
                                         <div className="space-y-3">
                                             <Label htmlFor="robot-reliability" className="text-base font-medium">
@@ -1899,7 +1927,7 @@ const Scouting = () => {
                                         </div>
                                         <div className="space-y-3">
                                             <Label htmlFor="strengths" className="text-base font-medium">
-                                                Team strengths?
+                                                Team and Robot Strengths?
                                             </Label>
                                             <Input
                                                 id="strengths"
@@ -1910,7 +1938,7 @@ const Scouting = () => {
                                         </div>
                                         <div className="space-y-3">
                                             <Label htmlFor="weaknesses" className="text-base font-medium">
-                                                Team weaknesses?
+                                                Team and Robot Weaknesses?
                                             </Label>
                                             <Input
                                                 id="weaknesses"
