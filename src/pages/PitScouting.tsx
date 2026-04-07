@@ -32,8 +32,7 @@ interface PitScoutingResponse {
     [key: string]: string | number | boolean | null;
 }
 
-// @ts-ignore
-// @ts-ignore
+
 const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
 
     ///////////// Intake Type
@@ -417,6 +416,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "button-group",
         required: false,
         parent: "Starting Location",
+        label: ""
     },
     {
         id: "starting-locations-other-text",
@@ -430,85 +430,14 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     // move through locations
     {
         id: "auto-locations",
-        label: "Regions",
+        label: "Cycle Path",
         section: "Autos",
-        type: "label",
+        type: "text",
         required: false,
-        placeholder: "",
+        placeholder: "Please list locations along this auto's path.",
         parent: null,
     },
-    {
-        id: "auto-locations-neutral",
-        label: "",
-        name: "Neutral Zone",
-        section: "Autos",
-        type: "button-group-multi",
-        required: false,
-        parent: "Regions",
-    },
-    {
-        id: "auto-locations-left-trench",
-        label: "",
-        name: "Left Trench",
-        section: "Autos",
-        type: "button-group-multi",
-        required: false,
-        parent: "Regions",
-    },
-    {
-        id: "auto-locations-left-bump",
-        label: "",
-        name: "Left Bump",
-        section: "Autos",
-        type: "button-group-multi",
-        required: false,
-        parent: "Regions",
-    },
-    {
-        id: "auto-locations-right-trench",
-        label: "",
-        name: "Right Trench",
-        section: "Autos",
-        type: "button-group-multi",
-        required: false,
-        parent: "Regions",
-    },
-    {
-        id: "auto-locations-right-bump",
-        label: "",
-        name: "Right Bump",
-        section: "Autos",
-        type: "button-group-multi",
-        required: false,
-        parent: "Regions",
-    },
-    {
-        id: "auto-locations-depot",
-        label: "",
-        name: "Depot",
-        section: "Autos",
-        type: "button-group-multi",
-        required: false,
-        parent: "Regions",
-    },
-    {
-        id: "auto-locations-outpost",
-        label: "",
-        name: "Outpost",
-        section: "Autos",
-        type: "button-group-multi",
-        required: false,
-        parent: "Regions",
-    },
-    {
-        id: "auto-locations-tower",
-        label: "",
-        name: "Tower",
-        section: "Autos",
-        type: "button-group-multi",
-        required: false,
-        parent: "Regions",
-    },
+
 
     {
         id: "fuel-scoring",
@@ -545,6 +474,8 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         parent: "Preloaded Fuel",
         label: ""
     },
+
+    /*
     {
         id: "auto-intake-fuel",
         label: "Intaking Locations ",
@@ -580,6 +511,8 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         parent: "Intaking Locations ",
         label: ""
     },
+    */
+
     {
         id: "estimated-fuel",
         section: "Autos",
@@ -594,7 +527,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         section: "Autos",
         type: "text",
         required: false,
-        placeholder: "eg., Jams often, SOTM",
+        placeholder: "eg., Jams often, Shoot on the Move",
         parent: null,
         label: "Notes on shooting:",
     },
@@ -658,6 +591,14 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "textarea",
         required: false,
         placeholder: "Any unique mechanisms or features?",
+    },
+    {
+        id: "driver-experience",
+        label: "Driver Experience",
+        section: "Strategy & Notes",
+        type: "textarea",
+        required: false,
+        placeholder: "Experience of the driveteam(s)",
     },
     {
         id: "additional-notes",
