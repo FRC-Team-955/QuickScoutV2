@@ -25,6 +25,74 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/c
 import {toast} from "sonner";
 import {getEventMatches} from "@/lib/tba";
 
+// Draft persistence types and helpers
+type MatchScoutingDraft = {
+    teamNumber: string;
+    autonomousNotes: string;
+    autonomousFuel: number;
+    autoClimb: string;
+    teamNumberNotes: string;
+    teleopNotes: string;
+    teleopFuel: number;
+    teleopClimb: string;
+    endGameNotes: string;
+    didClimb: boolean;
+    climbLevel: string;
+    defenseScore: string;
+    sotm: string;
+    robotTipped: string;
+};
+
+type SubjectiveScoutingDraft = {
+    subjectiveTeamNumber: string;
+    autonomousEffectiveness: string;
+    canQuicklyScore: string;
+    estimatedBPS: string;
+    canClimb: string;
+    climbTime: string;
+    defensiveStrategy: string;
+    blockingEffectiveness: string;
+    allyCooperation: string;
+    robotReliability: string;
+    robotPenalties: string;
+    autoFuel: string;
+    autoClimb1: string;
+    teleopPassing: string;
+    gameSense: string;
+    strengths: string;
+    weaknesses: string;
+};
+
+const getMatchDraftKey = (userId: string, matchId: string, teamNumber: string) =>
+    `scout_draft_match:${userId}:${matchId}:${teamNumber}`;
+
+const getSubjectiveDraftKey = (userId: string, matchId: string, teamNumber: string) =>
+    `scout_draft_subjective:${userId}:${matchId}:${teamNumber}`;
+
+const readDraft = <T extends object>(key: string): T | null => {
+    try {
+        const data = localStorage.getItem(key);
+        return data ? JSON.parse(data) : null;
+    } catch {
+        return null;
+    }
+};
+
+const writeDraft = <T extends object>(key: string, data: T): void => {
+    try {
+        localStorage.setItem(key, JSON.stringify(data));
+    } catch {
+        console.warn("Failed to write draft to localStorage");
+    }
+};
+
+const removeDraft = (key: string): void => {
+    try {
+        localStorage.removeItem(key);
+    } catch {
+        console.warn("Failed to remove draft from localStorage");
+    }
+};
 
 const Scouting = () => {
     const {user} = useAuth();
@@ -295,7 +363,9 @@ const Scouting = () => {
         setIsInSubjectiveScouting(true);
         setAutonomousEffectiveness("");
         setCanQuicklyScore("");
+        setEstimatedBPS("");
         setCanClimb("");
+        setClimbTime("");
         setClimbLevelSubjective("");
         setPerformanceUnderPressure("");
         setTeamFocus("");
@@ -303,6 +373,15 @@ const Scouting = () => {
         setDefensiveStrategy("");
         setBlockingEffectiveness("");
         setAllyCooperation("");
+        setDefensiveSkill("");
+        setRobotReliability("");
+        setRobotPenalties("");
+        setAutoFuel("");
+        setAutoClimb1("");
+        setTeleopPassing("");
+        setGameSense("");
+        setStrengths("");
+        setWeaknesses("");
     };
 
     const resetSubjectiveScouting = async () => {
@@ -348,6 +427,13 @@ const Scouting = () => {
                     },
                 });
                 await remove(ref(db, `users/${user.id}/currentSubjectiveAssignment`));
+
+                // Remove draft from localStorage after successful submission
+                if (subjectiveDraftKeyRef.current) {
+                    removeDraft(subjectiveDraftKeyRef.current);
+                    subjectiveDraftKeyRef.current = null;
+                }
+
                 toast("Subjective scouting submitted!");
             } catch (err) {
                 console.error("Failed to submit subjective scouting data:", err);
@@ -360,7 +446,9 @@ const Scouting = () => {
         setSubjectiveTeamNumber("");
         setAutonomousEffectiveness("");
         setCanQuicklyScore("");
+        setEstimatedBPS("");
         setCanClimb("");
+        setClimbTime("");
         setClimbLevelSubjective("");
         setPerformanceUnderPressure("");
         setTeamFocus("");
@@ -407,7 +495,9 @@ const Scouting = () => {
     // Section 1: Robot Performance and Strategy
     const [autonomousEffectiveness, setAutonomousEffectiveness] = useState<string>("");
     const [canQuicklyScore, setCanQuicklyScore] = useState<string>("");
+    const [estimatedBPS, setEstimatedBPS] = useState<string>("");
     const [canClimb, setCanClimb] = useState<string>("");
+    const [climbTime, setClimbTime] = useState<string>("");
     const [climbLevelSubjective, setClimbLevelSubjective] = useState<string>("");
 
     // Section 2: Team Dynamics
@@ -440,6 +530,9 @@ const Scouting = () => {
     const pendingSubjectiveAssignmentRef = useRef<CurrentSubjectiveAssignment | null>(null);
     const [currentAssignment, setCurrentAssignment] = useState<CurrentAssignment | null>(null);
     const [currentSubjectiveAssignment, setCurrentSubjectiveAssignment] = useState<CurrentSubjectiveAssignment | null>(null);
+
+    const matchDraftKeyRef = useRef<string | null>(null);
+    const subjectiveDraftKeyRef = useRef<string | null>(null);
 
     const matchEndedHandledRef = useRef(false);
 
@@ -680,6 +773,197 @@ const Scouting = () => {
     const canScoutSubjectiveMatch = !!subjectiveActiveMatch && currentSubjectiveAssignment?.matchId === subjectiveActiveMatch.id && !isLead;
     const isActivelyScouting = isInMatchScouting || isInSubjectiveScouting;
 
+    // Check for existing drafts on mount and resume scouting
+    useEffect(() => {
+        if (!user?.id) return;
+
+        // Check if there's an existing match draft and resume if so
+        if (!isInMatchScouting) {
+            // Look through localStorage for match drafts for this user
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key?.startsWith(`scout_draft_match:${user.id}:`)) {
+                    const draft = readDraft<MatchScoutingDraft>(key);
+                    if (draft && draft.teamNumber) {
+                        const parts = key.split(':');
+                        if (parts.length >= 4 && parts[2] === activeMatch?.id) {
+                            matchDraftKeyRef.current = key;
+                            setTeamNumber(draft.teamNumber);
+                            setAutonomousNotes(draft.autonomousNotes);
+                            setAutonomousFuel(draft.autonomousFuel);
+                            setAutoClimb(draft.autoClimb);
+                            setTeamNumberNotes(draft.teamNumberNotes);
+                            setTeleopNotes(draft.teleopNotes);
+                            setTeleopFuel(draft.teleopFuel);
+                            setTeleopClimb(draft.teleopClimb);
+                            setEndGameNotes(draft.endGameNotes);
+                            setDidClimb(draft.didClimb);
+                            setClimbLevel(draft.climbLevel);
+                            setDefenseScore(draft.defenseScore);
+                            setSotm(draft.sotm);
+                            setRobotTipped(draft.robotTipped);
+                            setIsInMatchScouting(true);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check if there's an existing subjective draft and resume if so
+        if (!isInSubjectiveScouting) {
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key?.startsWith(`scout_draft_subjective:${user.id}:`)) {
+                    const draft = readDraft<SubjectiveScoutingDraft>(key);
+                    if (draft && draft.subjectiveTeamNumber) {
+                        const parts = key.split(':');
+                        if (parts.length >= 4 && parts[2] === subjectiveActiveMatch?.id) {
+                            subjectiveDraftKeyRef.current = key;
+                            setSubjectiveTeamNumber(draft.subjectiveTeamNumber);
+                            setAutonomousEffectiveness(draft.autonomousEffectiveness);
+                            setCanQuicklyScore(draft.canQuicklyScore);
+                            setEstimatedBPS(draft.estimatedBPS);
+                            setCanClimb(draft.canClimb);
+                            setClimbTime(draft.climbTime);
+                            setDefensiveStrategy(draft.defensiveStrategy);
+                            setBlockingEffectiveness(draft.blockingEffectiveness);
+                            setAllyCooperation(draft.allyCooperation);
+                            setRobotReliability(draft.robotReliability);
+                            setRobotPenalties(draft.robotPenalties);
+                            setAutoFuel(draft.autoFuel);
+                            setAutoClimb1(draft.autoClimb1);
+                            setTeleopPassing(draft.teleopPassing);
+                            setGameSense(draft.gameSense);
+                            setStrengths(draft.strengths);
+                            setWeaknesses(draft.weaknesses);
+                            setIsInSubjectiveScouting(true);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }, [user?.id, isInMatchScouting, isInSubjectiveScouting, activeMatch?.id, subjectiveActiveMatch?.id]);
+
+    // Auto-resume match scouting if assignment exists
+    useEffect(() => {
+        if (isInMatchScouting || !currentAssignment?.matchId || !currentAssignment?.teamNumber) return;
+        setIsInMatchScouting(true);
+    }, [currentAssignment?.matchId, currentAssignment?.teamNumber, isInMatchScouting]);
+
+    // Restore match scouting draft when entering scouting mode
+    useEffect(() => {
+        if (!user?.id || !currentAssignment?.matchId || !currentAssignment?.teamNumber || !isInMatchScouting) return;
+
+        const draftKey = getMatchDraftKey(user.id, currentAssignment.matchId, String(currentAssignment.teamNumber));
+        if (matchDraftKeyRef.current === draftKey) return; // Already restored this draft
+        matchDraftKeyRef.current = draftKey;
+
+        const draft = readDraft<MatchScoutingDraft>(draftKey);
+        if (draft) {
+            setTeamNumber(draft.teamNumber);
+            setAutonomousNotes(draft.autonomousNotes);
+            setAutonomousFuel(draft.autonomousFuel);
+            setAutoClimb(draft.autoClimb);
+            setTeamNumberNotes(draft.teamNumberNotes);
+            setTeleopNotes(draft.teleopNotes);
+            setTeleopFuel(draft.teleopFuel);
+            setTeleopClimb(draft.teleopClimb);
+            setEndGameNotes(draft.endGameNotes);
+            setDidClimb(draft.didClimb);
+            setClimbLevel(draft.climbLevel);
+            setDefenseScore(draft.defenseScore);
+            setSotm(draft.sotm);
+            setRobotTipped(draft.robotTipped);
+        }
+    }, [currentAssignment?.matchId, currentAssignment?.teamNumber, isInMatchScouting, user?.id]);
+
+    // Auto-resume subjective scouting if assignment exists
+    useEffect(() => {
+        if (isInSubjectiveScouting || !currentSubjectiveAssignment?.matchId || !currentSubjectiveAssignment?.teamNumber) return;
+        setIsInSubjectiveScouting(true);
+    }, [currentSubjectiveAssignment?.matchId, currentSubjectiveAssignment?.teamNumber, isInSubjectiveScouting]);
+
+    // Restore subjective scouting draft when entering scouting mode
+    useEffect(() => {
+        if (!user?.id || !currentSubjectiveAssignment?.matchId || !currentSubjectiveAssignment?.teamNumber || !isInSubjectiveScouting) return;
+
+        const draftKey = getSubjectiveDraftKey(user.id, currentSubjectiveAssignment.matchId, String(currentSubjectiveAssignment.teamNumber));
+        if (subjectiveDraftKeyRef.current === draftKey) return; // Already restored this draft
+        subjectiveDraftKeyRef.current = draftKey;
+
+        const draft = readDraft<SubjectiveScoutingDraft>(draftKey);
+        if (draft) {
+            setSubjectiveTeamNumber(draft.subjectiveTeamNumber);
+            setAutonomousEffectiveness(draft.autonomousEffectiveness);
+            setCanQuicklyScore(draft.canQuicklyScore);
+            setEstimatedBPS(draft.estimatedBPS);
+            setCanClimb(draft.canClimb);
+            setClimbTime(draft.climbTime);
+            setDefensiveStrategy(draft.defensiveStrategy);
+            setBlockingEffectiveness(draft.blockingEffectiveness);
+            setAllyCooperation(draft.allyCooperation);
+            setRobotReliability(draft.robotReliability);
+            setRobotPenalties(draft.robotPenalties);
+            setAutoFuel(draft.autoFuel);
+            setAutoClimb1(draft.autoClimb1);
+            setTeleopPassing(draft.teleopPassing);
+            setGameSense(draft.gameSense);
+            setStrengths(draft.strengths);
+            setWeaknesses(draft.weaknesses);
+        }
+    }, [currentSubjectiveAssignment?.matchId, currentSubjectiveAssignment?.teamNumber, isInSubjectiveScouting, user?.id]);
+
+    // Persist match scouting draft on every field change
+    useEffect(() => {
+        const draftKey = matchDraftKeyRef.current;
+        if (!draftKey) return;
+
+        writeDraft<MatchScoutingDraft>(draftKey, {
+            teamNumber,
+            autonomousNotes,
+            autonomousFuel,
+            autoClimb,
+            teamNumberNotes,
+            teleopNotes,
+            teleopFuel,
+            teleopClimb,
+            endGameNotes,
+            didClimb,
+            climbLevel,
+            defenseScore,
+            sotm,
+            robotTipped,
+        });
+    }, [teamNumber, autonomousNotes, autonomousFuel, autoClimb, teamNumberNotes, teleopNotes, teleopFuel, teleopClimb, endGameNotes, didClimb, climbLevel, defenseScore, sotm, robotTipped]);
+
+    // Persist subjective scouting draft on every field change
+    useEffect(() => {
+        const draftKey = subjectiveDraftKeyRef.current;
+        if (!draftKey) return;
+
+        writeDraft<SubjectiveScoutingDraft>(draftKey, {
+            subjectiveTeamNumber,
+            autonomousEffectiveness,
+            canQuicklyScore,
+            estimatedBPS,
+            canClimb,
+            climbTime,
+            defensiveStrategy,
+            blockingEffectiveness,
+            allyCooperation,
+            robotReliability: robotReliablity,
+            robotPenalties,
+            autoFuel,
+            autoClimb1,
+            teleopPassing,
+            gameSense,
+            strengths,
+            weaknesses,
+        });
+    }, [subjectiveTeamNumber, autonomousEffectiveness, canQuicklyScore, estimatedBPS, canClimb, climbTime, defensiveStrategy, blockingEffectiveness, allyCooperation, robotReliablity, robotPenalties, autoFuel, autoClimb1, teleopPassing, gameSense, strengths, weaknesses]);
+
     useEffect(() => {
         if (isManualSessionRef.current) return;
         if (!activeMatch?.id || !user?.id) return;
@@ -773,6 +1057,12 @@ const Scouting = () => {
                 });
                 await remove(ref(db, `users/${user.id}/currentAssignment`));
 
+                // Remove draft from localStorage after successful submission
+                if (matchDraftKeyRef.current) {
+                    removeDraft(matchDraftKeyRef.current);
+                    matchDraftKeyRef.current = null;
+                }
+
                 // Check if lead signaled end and all other scouters have submitted
                 const matchRef = ref(db, `matches/${matchId}`);
                 const matchSnap = await get(matchRef);
@@ -820,7 +1110,9 @@ const Scouting = () => {
         setSubjectiveTeamNumber("");
         setAutonomousEffectiveness("");
         setCanQuicklyScore("");
+        setEstimatedBPS("");
         setCanClimb("");
+        setClimbTime("");
         setClimbLevelSubjective("");
         setPerformanceUnderPressure("");
         setTeamFocus("");
@@ -835,6 +1127,8 @@ const Scouting = () => {
         setAutoClimb1("");
         setTeleopPassing("");
         setGameSense("");
+        setStrengths("");
+        setWeaknesses("");
         setIsInMatchScouting(false);
         isManualSessionRef.current = false;
     };
@@ -1037,8 +1331,37 @@ const Scouting = () => {
                                                         onClick={async () => {
                                                             if (!activeMatch?.id) return toast("No active match to end");
                                                             try {
+                                                                // Clear all drafts from localStorage for this match
+                                                                const keys = [];
+                                                                for (let i = 0; i < localStorage.length; i++) {
+                                                                    const key = localStorage.key(i);
+                                                                    if (key) keys.push(key);
+                                                                }
+
+                                                                // Now remove matching keys
+                                                                keys.forEach(key => {
+                                                                    const isMatchDraft = key.includes(`scout_draft_match:`);
+                                                                    const isSubjectiveDraft = key.includes(`scout_draft_subjective:`);
+                                                                    if (isMatchDraft || isSubjectiveDraft) {
+                                                                        localStorage.removeItem(key);
+                                                                    }
+                                                                });
+
                                                                 await endMatch(activeMatch.id);
-                                                                toast("Match force ended - all scouters cleared");
+
+                                                                // If current user is scouting, reset their state and navigate
+                                                                if (isInMatchScouting || isInSubjectiveScouting) {
+                                                                    setIsInMatchScouting(false);
+                                                                    setIsInSubjectiveScouting(false);
+                                                                    matchDraftKeyRef.current = null;
+                                                                    subjectiveDraftKeyRef.current = null;
+                                                                    toast("Match ended. Returning to dashboard...");
+                                                                    setTimeout(() => {
+                                                                        navigate("/dashboard");
+                                                                    }, 500);
+                                                                } else {
+                                                                    toast("Match force ended - all scouters cleared");
+                                                                }
                                                             } catch (err) {
                                                                 console.error(err);
                                                                 toast((err as Error)?.message || "Failed to force end match");
@@ -1305,47 +1628,47 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {!isInSubjectiveScouting && !activeMatch && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Start Manual Scouting Session</CardTitle>
-                                    <CardDescription>
-                                        Enter the team number you're scouting and begin
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="team-number">Team Number</Label>
-                                        <Input
-                                            id="team-number"
-                                            type="text"
-                                            placeholder="Enter team number"
-                                            value={teamNumber}
-                                            onChange={(e) => setTeamNumber(e.target.value)}
-                                        />
-                                    </div>
+                        {/*{!isInSubjectiveScouting && !activeMatch && (*/}
+                        {/*    <Card>*/}
+                        {/*        <CardHeader>*/}
+                        {/*            <CardTitle>Start Manual Scouting Session</CardTitle>*/}
+                        {/*            <CardDescription>*/}
+                        {/*                Enter the team number you're scouting and begin*/}
+                        {/*            </CardDescription>*/}
+                        {/*        </CardHeader>*/}
+                        {/*        <CardContent className="space-y-4">*/}
+                        {/*            <div className="space-y-2">*/}
+                        {/*                <Label htmlFor="team-number">Team Number</Label>*/}
+                        {/*                <Input*/}
+                        {/*                    id="team-number"*/}
+                        {/*                    type="text"*/}
+                        {/*                    placeholder="Enter team number"*/}
+                        {/*                    value={teamNumber}*/}
+                        {/*                    onChange={(e) => setTeamNumber(e.target.value)}*/}
+                        {/*                />*/}
+                        {/*            </div>*/}
 
-                                    {isLead || !isLead ? (
-                                        <Button
-                                            onClick={() => startScouting(teamNumber, {manual: true})}
-                                            className="w-full"
-                                            size="lg"
-                                            disabled={!teamNumber.trim()}
-                                        >
-                                            <Play className="w-4 h-4 mr-2"/>
-                                            Start Scouting
-                                        </Button>
-                                    ) : (
-                                        <div className="w-full text-center text-sm text-muted-foreground">
-                                            You will be started automatically when the lead assigns a
-                                            team to you.
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        )}
+                        {/*            {isLead || !isLead ? (*/}
+                        {/*                <Button*/}
+                        {/*                    onClick={() => startScouting(teamNumber, {manual: true})}*/}
+                        {/*                    className="w-full"*/}
+                        {/*                    size="lg"*/}
+                        {/*                    disabled={!teamNumber.trim()}*/}
+                        {/*                >*/}
+                        {/*                    <Play className="w-4 h-4 mr-2"/>*/}
+                        {/*                    Start Scouting*/}
+                        {/*                </Button>*/}
+                        {/*            ) : (*/}
+                        {/*                <div className="w-full text-center text-sm text-muted-foreground">*/}
+                        {/*                    You will be started automatically when the lead assigns a*/}
+                        {/*                    team to you.*/}
+                        {/*                </div>*/}
+                        {/*            )}*/}
+                        {/*        </CardContent>*/}
+                        {/*    </Card>*/}
+                        {/*)}*/}
 
-                        {canScoutMatch && (
+                        {(isInMatchScouting || canScoutMatch) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Match Scouting - Team {teamNumber}</CardTitle>
@@ -1376,7 +1699,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {canScoutMatch && (
+                        {(isInMatchScouting || canScoutMatch) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Autonomous Fuel</CardTitle>
@@ -1436,7 +1759,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {canScoutMatch && (
+                        {(isInMatchScouting || canScoutMatch) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Auto Climb</CardTitle>
@@ -1461,7 +1784,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {canScoutMatch && (
+                        {(isInMatchScouting || canScoutMatch) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Notes</CardTitle>
@@ -1480,7 +1803,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {canScoutMatch && (
+                        {(isInMatchScouting || canScoutMatch) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Fuel</CardTitle>
@@ -1540,7 +1863,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {canScoutMatch && (
+                        {(isInMatchScouting || canScoutMatch) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Teleop Climb</CardTitle>
@@ -1590,7 +1913,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {canScoutMatch && (
+                        {(isInMatchScouting || canScoutMatch) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Defense Score</CardTitle>
@@ -1615,7 +1938,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {canScoutMatch && (
+                        {(isInMatchScouting || canScoutMatch) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Shooting on the Move & Robot Tipped</CardTitle>
@@ -1662,7 +1985,7 @@ const Scouting = () => {
                             </Card>
                         )}
 
-                        {canScoutMatch && (
+                        {(isInMatchScouting || canScoutMatch) && (
                             <Card>
                                 <CardContent className="pt-6">
                                     <Button
@@ -1671,7 +1994,13 @@ const Scouting = () => {
                                             try {
                                                 await resetScouting();
 
-                                                const matchId = activeMatch.id;
+                                                const matchId = activeMatch?.id || currentMatchIdRef.current;
+                                                if (!matchId) {
+                                                    toast("Error: No match ID found");
+                                                    setIsSubmitting(false);
+                                                    return;
+                                                }
+
                                                 const db = getDatabase();
                                                 const participantsRef = ref(db, `matches/${matchId}/participants`);
                                                 const participantsSnap = await get(participantsRef);
@@ -1744,13 +2073,25 @@ const Scouting = () => {
 
                                         <div className="space-y-3">
                                             <Label htmlFor="quick-score" className="text-base font-medium">
-                                                Can their robot quickly score fuels?
+                                                Estimated fuels scored per cycle?
                                             </Label>
                                             <Input
                                                 id="quick-score"
                                                 placeholder="e.g., Yes, No, or description"
                                                 value={canQuicklyScore}
                                                 onChange={(e) => setCanQuicklyScore(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="estimated-bps" className="text-base font-medium">
+                                                Estimated BPS (optional)?
+                                            </Label>
+                                            <Input
+                                                id="estimated-bps"
+                                                placeholder="e.g., 3-5 BPS, 1-2 BPS, or N/A"
+                                                value={estimatedBPS}
+                                                onChange={(e) => setEstimatedBPS(e.target.value)}
                                             />
                                         </div>
 
@@ -1763,6 +2104,30 @@ const Scouting = () => {
                                                 placeholder="e.g., Yes - L1, No, or description"
                                                 value={canClimb}
                                                 onChange={(e) => setCanClimb(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="spacey-3">
+                                            <Label htmlFor="climb-time" className="text-base font-medium">
+                                                Estimated time to climb?
+                                            </Label>
+                                            <Input
+                                                id="climb-time"
+                                                placeholder="e.g., <10s, 10-20s, >20s, or N/A"
+                                                value={climbTime}
+                                                onChange={(e) => setClimbTime(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label htmlFor="climb-level-subjective" className="text-base font-medium">
+                                                Climb Level (Subjective)?
+                                            </Label>
+                                            <Input
+                                                id="climb-level-subjective"
+                                                placeholder="e.g., L1, L2, L3, or N/A"
+                                                value={climbLevelSubjective}
+                                                onChange={(e) => setClimbLevelSubjective(e.target.value)}
                                             />
                                         </div>
                                     </CardContent>
@@ -1818,6 +2183,18 @@ const Scouting = () => {
                                         </div>
 
                                         <div className="space-y-3">
+                                            <Label htmlFor="defensive-skill" className="text-base font-medium">
+                                                Do they seem experienced with playing defense?
+                                            </Label>
+                                            <Input
+                                                id="defensive-skill"
+                                                placeholder="e.g., Yes, No, A little"
+                                                value={defensiveSkill}
+                                                onChange={(e) => setDefensiveSkill(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
                                             <Label htmlFor="ally-cooperation" className="text-base font-medium">
                                                 How well do they work their allies for combined strategies (constantly
                                                 bumping or getting in their way)?
@@ -1837,17 +2214,6 @@ const Scouting = () => {
                                         <CardTitle>Misc</CardTitle>
                                     </CardHeader>
                                     <CardContent className="space-y-6">
-                                        <div className="space-y-3">
-                                            <Label htmlFor="defensive-skill" className="text-base font-medium">
-                                                Do they seem experienced with playing defense?
-                                            </Label>
-                                            <Input
-                                                id="defensive-skill"
-                                                placeholder="e.g., Yes, No, A little"
-                                                value={defensiveSkill}
-                                                onChange={(e) => setDefensiveSkill(e.target.value)}
-                                            />
-                                        </div>
 
                                         <div className="space-y-3">
                                             <Label htmlFor="robot-reliability" className="text-base font-medium">
@@ -1899,7 +2265,7 @@ const Scouting = () => {
                                         </div>
                                         <div className="space-y-3">
                                             <Label htmlFor="strengths" className="text-base font-medium">
-                                                Team strengths?
+                                                Team and Robot Strengths?
                                             </Label>
                                             <Input
                                                 id="strengths"
@@ -1910,7 +2276,7 @@ const Scouting = () => {
                                         </div>
                                         <div className="space-y-3">
                                             <Label htmlFor="weaknesses" className="text-base font-medium">
-                                                Team weaknesses?
+                                                Team and Robot Weaknesses?
                                             </Label>
                                             <Input
                                                 id="weaknesses"
