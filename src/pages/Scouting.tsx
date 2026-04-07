@@ -295,7 +295,9 @@ const Scouting = () => {
         setIsInSubjectiveScouting(true);
         setAutonomousEffectiveness("");
         setCanQuicklyScore("");
+        setEstimatedBPS("");
         setCanClimb("");
+        setClimbTime("");
         setClimbLevelSubjective("");
         setPerformanceUnderPressure("");
         setTeamFocus("");
@@ -303,6 +305,15 @@ const Scouting = () => {
         setDefensiveStrategy("");
         setBlockingEffectiveness("");
         setAllyCooperation("");
+        setDefensiveSkill("");
+        setRobotReliability("");
+        setRobotPenalties("");
+        setAutoFuel("");
+        setAutoClimb1("");
+        setTeleopPassing("");
+        setGameSense("");
+        setStrengths("");
+        setWeaknesses("");
     };
 
     const resetSubjectiveScouting = async () => {
@@ -360,7 +371,9 @@ const Scouting = () => {
         setSubjectiveTeamNumber("");
         setAutonomousEffectiveness("");
         setCanQuicklyScore("");
+        setEstimatedBPS("");
         setCanClimb("");
+        setClimbTime("");
         setClimbLevelSubjective("");
         setPerformanceUnderPressure("");
         setTeamFocus("");
@@ -822,7 +835,9 @@ const Scouting = () => {
         setSubjectiveTeamNumber("");
         setAutonomousEffectiveness("");
         setCanQuicklyScore("");
+        setEstimatedBPS("");
         setCanClimb("");
+        setClimbTime("");
         setClimbLevelSubjective("");
         setPerformanceUnderPressure("");
         setTeamFocus("");
@@ -837,6 +852,8 @@ const Scouting = () => {
         setAutoClimb1("");
         setTeleopPassing("");
         setGameSense("");
+        setStrengths("");
+        setWeaknesses("");
         setIsInMatchScouting(false);
         isManualSessionRef.current = false;
     };
