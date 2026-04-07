@@ -8,7 +8,7 @@ import {useAuth} from "@/contexts/AuthContext";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@/components/ui/table";
 import {get, ref} from "firebase/database";
 import {db} from "@/lib/firebase";
-import {OSF_DATE_RANGE} from "@/lib/dateUtils";
+import {CLACK_DATE_RANGE, filterByEventType, isClackData, isOSFData, OSF_DATE_RANGE} from "@/lib/dateUtils";
 
 type LeaderboardRow = {
     key: string;
@@ -18,13 +18,16 @@ type LeaderboardRow = {
     submittedAt: number;
 };
 
+type EventType = "all" | "osf" | "clack" | "current";
+
 const Leaderboard = () => {
     const {user} = useAuth();
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState("leaderboard");
-    const [eventType, setEventType] = useState("all");
+    const [eventType, setEventType] = useState<EventType>("all");
     const [loading, setLoading] = useState(false);
     const [osfRows, setOsfRows] = useState<LeaderboardRow[]>([]);
+    const [clackRows, setClackRows] = useState<LeaderboardRow[]>([]);
     const [currentRows, setCurrentRows] = useState<LeaderboardRow[]>([]);
 
     const handleTabChange = (tab: string) => {
@@ -43,6 +46,43 @@ const Leaderboard = () => {
             navigate("/leaderboard");
         }
     };
+
+    const renderLeaderboardCard = (title: string, rows: LeaderboardRow[]) => (
+        <Card>
+            <CardHeader className="border-b border-border">
+                <CardTitle className="text-lg font-mono">{title}</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-[80px]">Rank</TableHead>
+                                <TableHead>Scout</TableHead>
+                                <TableHead className="text-right">Matches Scouted</TableHead>
+                                <TableHead className="text-right">Last Submission</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {rows.map((row, index) => (
+                                <TableRow
+                                    key={row.key}
+                                    className={row.scoutName === user?.name ? "bg-primary/5" : undefined}
+                                >
+                                    <TableCell className="font-mono">{index + 1}</TableCell>
+                                    <TableCell className="font-medium">{row.scoutName}</TableCell>
+                                    <TableCell className="text-right font-mono">{row.matches}</TableCell>
+                                    <TableCell className="text-right text-xs text-muted-foreground">
+                                        {row.lastSubmitted ? new Date(row.lastSubmitted).toLocaleString() : "—"}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
+    );
 
     useEffect(() => {
         const fetchLeaderboard = async () => {
@@ -136,19 +176,14 @@ const Leaderboard = () => {
                     });
                 }
 
-                // Define OSF date range
-                const OSF_START = new Date(2026, 2, 6, 0, 0, 0).getTime();
-                const OSF_END = new Date(2026, 2, 7, 23, 59, 59).getTime();
-                const isOSF = (timestamp: number) => timestamp >= OSF_START && timestamp <= OSF_END;
-
                 // Aggregate submissions by event type
                 const osfTally = new Map<string, LeaderboardRow>();
+                const clackTally = new Map<string, LeaderboardRow>();
                 const currentTally = new Map<string, LeaderboardRow>();
 
                 submissions.forEach((subList, key) => {
                     const scoutName = subList[0]?.scoutName || "";
-                    const osfSubs = subList.filter(s => isOSF(s.submittedAt));
-                    const currentSubs = subList.filter(s => !isOSF(s.submittedAt));
+                    const {osf: osfSubs, clack: clackSubs, current: currentSubs} = filterByEventType(subList);
 
                     // For OSF
                     if (osfSubs.length > 0) {
@@ -157,6 +192,18 @@ const Leaderboard = () => {
                             key,
                             scoutName,
                             matches: osfSubs.length,
+                            lastSubmitted,
+                            submittedAt: lastSubmitted,
+                        });
+                    }
+
+                    // For Clack
+                    if (clackSubs.length > 0) {
+                        const lastSubmitted = Math.max(...clackSubs.map(s => s.submittedAt));
+                        clackTally.set(key, {
+                            key,
+                            scoutName,
+                            matches: clackSubs.length,
                             lastSubmitted,
                             submittedAt: lastSubmitted,
                         });
@@ -179,15 +226,20 @@ const Leaderboard = () => {
                 const osfRows = Array.from(osfTally.values()).sort(
                     (a, b) => b.matches - a.matches || b.lastSubmitted - a.lastSubmitted
                 );
+                const clackRows = Array.from(clackTally.values()).sort(
+                    (a, b) => b.matches - a.matches || b.lastSubmitted - a.lastSubmitted
+                );
                 const currentRows = Array.from(currentTally.values()).sort(
                     (a, b) => b.matches - a.matches || b.lastSubmitted - a.lastSubmitted
                 );
 
                 setOsfRows(osfRows);
+                setClackRows(clackRows);
                 setCurrentRows(currentRows);
             } catch (error) {
                 console.error("Error fetching leaderboard data:", error);
                 setOsfRows([]);
+                setClackRows([]);
                 setCurrentRows([]);
             } finally {
                 setLoading(false);
@@ -218,7 +270,7 @@ const Leaderboard = () => {
                             </p>
                         </div>
                         <div className="text-sm text-muted-foreground">
-                            {loading ? "Loading…" : `${osfRows.length + currentRows.length} scouts`}
+                            {loading ? "Loading…" : `${osfRows.length + clackRows.length + currentRows.length} scouts`}
                         </div>
                     </div>
 
@@ -231,6 +283,7 @@ const Leaderboard = () => {
                             <SelectContent>
                                 <SelectItem value="all">All Events</SelectItem>
                                 <SelectItem value="osf">OSF ({OSF_DATE_RANGE})</SelectItem>
+                                <SelectItem value="clack">Clack ({CLACK_DATE_RANGE})</SelectItem>
                                 <SelectItem value="current">Current Event</SelectItem>
                             </SelectContent>
                         </Select>
@@ -254,171 +307,27 @@ const Leaderboard = () => {
                             {eventType === "all" && (
                                 <>
                                     {osfRows.length > 0 && (
-                                        <Card>
-                                            <CardHeader className="border-b border-border">
-                                                <CardTitle className="text-lg font-mono">
-                                                    OSF Scout Activity ({OSF_DATE_RANGE})
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="p-0">
-                                                <div className="overflow-x-auto">
-                                                    <Table>
-                                                        <TableHeader>
-                                                            <TableRow>
-                                                                <TableHead className="w-[80px]">Rank</TableHead>
-                                                                <TableHead>Scout</TableHead>
-                                                                <TableHead className="text-right">
-                                                                    Matches Scouted
-                                                                </TableHead>
-                                                                <TableHead className="text-right">
-                                                                    Last Submission
-                                                                </TableHead>
-                                                            </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                            {osfRows.map((row, index) => (
-                                                                <TableRow
-                                                                    key={row.key}
-                                                                    className={
-                                                                        row.scoutName === user?.name
-                                                                            ? "bg-primary/5"
-                                                                            : undefined
-                                                                    }
-                                                                >
-                                                                    <TableCell className="font-mono">
-                                                                        {index + 1}
-                                                                    </TableCell>
-                                                                    <TableCell className="font-medium">
-                                                                        {row.scoutName}
-                                                                    </TableCell>
-                                                                    <TableCell className="text-right font-mono">
-                                                                        {row.matches}
-                                                                    </TableCell>
-                                                                    <TableCell className="text-right text-xs text-muted-foreground">
-                                                                        {row.lastSubmitted
-                                                                            ? new Date(row.lastSubmitted).toLocaleString()
-                                                                            : "—"}
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))}
-                                                        </TableBody>
-                                                    </Table>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
+                                        renderLeaderboardCard(`OSF Scout Activity (${OSF_DATE_RANGE})`, osfRows)
+                                    )}
+
+                                    {clackRows.length > 0 && (
+                                        renderLeaderboardCard(`Clack Scout Activity (${CLACK_DATE_RANGE})`, clackRows)
                                     )}
 
                                     {currentRows.length > 0 && (
-                                        <Card>
-                                            <CardHeader className="border-b border-border">
-                                                <CardTitle className="text-lg font-mono">
-                                                    Current Event Scout Activity
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="p-0">
-                                                <div className="overflow-x-auto">
-                                                    <Table>
-                                                        <TableHeader>
-                                                            <TableRow>
-                                                                <TableHead className="w-[80px]">Rank</TableHead>
-                                                                <TableHead>Scout</TableHead>
-                                                                <TableHead className="text-right">
-                                                                    Matches Scouted
-                                                                </TableHead>
-                                                                <TableHead className="text-right">
-                                                                    Last Submission
-                                                                </TableHead>
-                                                            </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                            {currentRows.map((row, index) => (
-                                                                <TableRow
-                                                                    key={row.key}
-                                                                    className={
-                                                                        row.scoutName === user?.name
-                                                                            ? "bg-primary/5"
-                                                                            : undefined
-                                                                    }
-                                                                >
-                                                                    <TableCell className="font-mono">
-                                                                        {index + 1}
-                                                                    </TableCell>
-                                                                    <TableCell className="font-medium">
-                                                                        {row.scoutName}
-                                                                    </TableCell>
-                                                                    <TableCell className="text-right font-mono">
-                                                                        {row.matches}
-                                                                    </TableCell>
-                                                                    <TableCell className="text-right text-xs text-muted-foreground">
-                                                                        {row.lastSubmitted
-                                                                            ? new Date(row.lastSubmitted).toLocaleString()
-                                                                            : "—"}
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))}
-                                                        </TableBody>
-                                                    </Table>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
+                                        renderLeaderboardCard("Current Event Scout Activity", currentRows)
                                     )}
                                 </>
                             )}
 
                             {/* OSF Only */}
                             {eventType === "osf" && osfRows.length > 0 && (
-                                <Card>
-                                    <CardHeader className="border-b border-border">
-                                        <CardTitle className="text-lg font-mono">
-                                            OSF Scout Activity ({OSF_DATE_RANGE})
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="p-0">
-                                        <div className="overflow-x-auto">
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead className="w-[80px]">Rank</TableHead>
-                                                        <TableHead>Scout</TableHead>
-                                                        <TableHead className="text-right">
-                                                            Matches Scouted
-                                                        </TableHead>
-                                                        <TableHead className="text-right">
-                                                            Last Submission
-                                                        </TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {osfRows.map((row, index) => (
-                                                        <TableRow
-                                                            key={row.key}
-                                                            className={
-                                                                row.scoutName === user?.name
-                                                                    ? "bg-primary/5"
-                                                                    : undefined
-                                                            }
-                                                        >
-                                                            <TableCell className="font-mono">
-                                                                {index + 1}
-                                                            </TableCell>
-                                                            <TableCell className="font-medium">
-                                                                {row.scoutName}
-                                                            </TableCell>
-                                                            <TableCell className="text-right font-mono">
-                                                                {row.matches}
-                                                            </TableCell>
-                                                            <TableCell className="text-right text-xs text-muted-foreground">
-                                                                {row.lastSubmitted
-                                                                    ? new Date(row.lastSubmitted).toLocaleString()
-                                                                    : "—"}
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ))}
-                                                </TableBody>
-                                            </Table>
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                                renderLeaderboardCard(`OSF Scout Activity (${OSF_DATE_RANGE})`, osfRows)
+                            )}
+
+                            {/* Clack Only */}
+                            {eventType === "clack" && clackRows.length > 0 && (
+                                renderLeaderboardCard(`Clack Scout Activity (${CLACK_DATE_RANGE})`, clackRows)
                             )}
 
                             {/* OSF selected but no data */}
@@ -430,60 +339,18 @@ const Leaderboard = () => {
                                 </Card>
                             )}
 
-                            {/* Current Event Only */}
-                            {eventType === "current" && currentRows.length > 0 && (
+                            {/* Clack selected but no data */}
+                            {eventType === "clack" && clackRows.length === 0 && (
                                 <Card>
-                                    <CardHeader className="border-b border-border">
-                                        <CardTitle className="text-lg font-mono">
-                                            Current Event Scout Activity
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="p-0">
-                                        <div className="overflow-x-auto">
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead className="w-[80px]">Rank</TableHead>
-                                                        <TableHead>Scout</TableHead>
-                                                        <TableHead className="text-right">
-                                                            Matches Scouted
-                                                        </TableHead>
-                                                        <TableHead className="text-right">
-                                                            Last Submission
-                                                        </TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {currentRows.map((row, index) => (
-                                                        <TableRow
-                                                            key={row.key}
-                                                            className={
-                                                                row.scoutName === user?.name
-                                                                    ? "bg-primary/5"
-                                                                    : undefined
-                                                            }
-                                                        >
-                                                            <TableCell className="font-mono">
-                                                                {index + 1}
-                                                            </TableCell>
-                                                            <TableCell className="font-medium">
-                                                                {row.scoutName}
-                                                            </TableCell>
-                                                            <TableCell className="text-right font-mono">
-                                                                {row.matches}
-                                                            </TableCell>
-                                                            <TableCell className="text-right text-xs text-muted-foreground">
-                                                                {row.lastSubmitted
-                                                                    ? new Date(row.lastSubmitted).toLocaleString()
-                                                                    : "—"}
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ))}
-                                                </TableBody>
-                                            </Table>
-                                        </div>
+                                    <CardContent className="p-6 text-sm text-muted-foreground">
+                                        No Clack scouting data found.
                                     </CardContent>
                                 </Card>
+                            )}
+
+                            {/* Current Event Only */}
+                            {eventType === "current" && currentRows.length > 0 && (
+                                renderLeaderboardCard("Current Event Scout Activity", currentRows)
                             )}
 
                             {/* Current Event selected but no data */}

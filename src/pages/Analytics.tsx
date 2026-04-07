@@ -9,7 +9,7 @@ import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
 import {Button} from "@/components/ui/button";
 import {get, ref} from "firebase/database";
 import {db} from "@/lib/firebase";
-import {isOSFData, OSF_DATE_RANGE} from "@/lib/dateUtils";
+import {CLACK_DATE_RANGE, getDataLabel, OSF_DATE_RANGE} from "@/lib/dateUtils";
 import {
     CartesianGrid,
     Legend,
@@ -31,6 +31,8 @@ type Filters = {
         | "highest_climb"
         | "best_defense";
 };
+
+type EventType = "all" | "osf" | "clack" | "current";
 
 export type MatchEntry = {
     id: string;
@@ -93,6 +95,14 @@ export type SubjectiveScoutingEntry = {
     submittedAt: number;
 };
 
+const matchesSelectedEvent = (timestamp: number, eventType: EventType): boolean => {
+    const dataLabel = getDataLabel(timestamp);
+    if (eventType === "osf") return dataLabel === "OSF";
+    if (eventType === "clack") return dataLabel === "Clack";
+    if (eventType === "current") return dataLabel === "Current";
+    return true;
+};
+
 const Analytics = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState("analytics");
@@ -104,7 +114,7 @@ const Analytics = () => {
     const [pitScoutingEntries, setPitScoutingEntries] = useState<PitScoutingEntry[]>([]);
     const [pitTeamNumberInput, setPitTeamNumberInput] = useState("");
     const [subjectiveScoutingEntries, setSubjectiveScoutingEntries] = useState<SubjectiveScoutingEntry[]>([]);
-    const [eventType, setEventType] = useState<"all" | "osf" | "current">("all");
+    const [eventType, setEventType] = useState<EventType>("all");
     const [scouterSearchInput, setScouterSearchInput] = useState("");
 
     const handleTabChange = (tab: string) => {
@@ -372,10 +382,8 @@ const Analytics = () => {
         let filtered = matchEntries;
         
         // Filter by event type
-        if (eventType === "osf") {
-            filtered = filtered.filter(e => isOSFData(e.submittedAt));
-        } else if (eventType === "current") {
-            filtered = filtered.filter(e => !isOSFData(e.submittedAt));
+        if (eventType !== "all") {
+            filtered = filtered.filter(e => matchesSelectedEvent(e.submittedAt, eventType));
         }
         
         return filtered.sort((a, b) => {
@@ -405,10 +413,8 @@ const Analytics = () => {
         let teamMatches = matchEntries.filter(entry => entry.teamNumber === teamNum);
         
         // Filter by event type
-        if (eventType === "osf") {
-            teamMatches = teamMatches.filter(e => isOSFData(e.submittedAt));
-        } else if (eventType === "current") {
-            teamMatches = teamMatches.filter(e => !isOSFData(e.submittedAt));
+        if (eventType !== "all") {
+            teamMatches = teamMatches.filter(e => matchesSelectedEvent(e.submittedAt, eventType));
         }
 
         if (teamMatches.length === 0) return null;
@@ -440,10 +446,8 @@ const Analytics = () => {
         let filtered = pitScoutingEntries;
         
         // Filter by event type
-        if (eventType === "osf") {
-            filtered = filtered.filter(e => isOSFData(e.submittedAt));
-        } else if (eventType === "current") {
-            filtered = filtered.filter(e => !isOSFData(e.submittedAt));
+        if (eventType !== "all") {
+            filtered = filtered.filter(e => matchesSelectedEvent(e.submittedAt, eventType));
         }
         
         return filtered;
@@ -453,10 +457,8 @@ const Analytics = () => {
         let filtered = subjectiveScoutingEntries;
         
         // Filter by event type
-        if (eventType === "osf") {
-            filtered = filtered.filter(e => isOSFData(e.submittedAt));
-        } else if (eventType === "current") {
-            filtered = filtered.filter(e => !isOSFData(e.submittedAt));
+        if (eventType !== "all") {
+            filtered = filtered.filter(e => matchesSelectedEvent(e.submittedAt, eventType));
         }
         
         return filtered;
@@ -468,8 +470,9 @@ const Analytics = () => {
 
         let scouterMatches = matchEntries.filter((entry) => entry.scoutName.toLowerCase().includes(searchTerm));
 
-        if (eventType === "osf") scouterMatches = scouterMatches.filter((e) => isOSFData(e.submittedAt));
-        else if (eventType === "current") scouterMatches = scouterMatches.filter((e) => !isOSFData(e.submittedAt));
+        if (eventType !== "all") {
+            scouterMatches = scouterMatches.filter((e) => matchesSelectedEvent(e.submittedAt, eventType));
+        }
 
         if (scouterMatches.length === 0) return null;
 
@@ -662,13 +665,14 @@ const Analytics = () => {
 
                         <div className="flex items-center gap-3 py-4">
                             <span className="text-sm font-medium">Event Type:</span>
-                            <Select value={eventType} onValueChange={(v: any) => setEventType(v)}>
+                            <Select value={eventType} onValueChange={(v) => setEventType(v as EventType)}>
                                 <SelectTrigger className="w-[200px]">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All Events</SelectItem>
                                     <SelectItem value="osf">OSF ({OSF_DATE_RANGE})</SelectItem>
+                                    <SelectItem value="clack">Clack ({CLACK_DATE_RANGE})</SelectItem>
                                     <SelectItem value="current">Current Event</SelectItem>
                                 </SelectContent>
                             </Select>
