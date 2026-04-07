@@ -784,11 +784,10 @@ const Scouting = () => {
                 const key = localStorage.key(i);
                 if (key?.startsWith(`scout_draft_match:${user.id}:`)) {
                     const draft = readDraft<MatchScoutingDraft>(key);
-                        if (draft && draft.teamNumber) {
-                            // Extract matchId and teamNumber from key
-                            const parts = key.split(':');
-                            if (parts.length >= 4) {
-                                matchDraftKeyRef.current = key;
+                    if (draft && draft.teamNumber) {
+                        const parts = key.split(':');
+                        if (parts.length >= 4 && parts[2] === activeMatch?.id) {
+                            matchDraftKeyRef.current = key;
                             setTeamNumber(draft.teamNumber);
                             setAutonomousNotes(draft.autonomousNotes);
                             setAutonomousFuel(draft.autonomousFuel);
@@ -818,31 +817,34 @@ const Scouting = () => {
                 if (key?.startsWith(`scout_draft_subjective:${user.id}:`)) {
                     const draft = readDraft<SubjectiveScoutingDraft>(key);
                     if (draft && draft.subjectiveTeamNumber) {
-                        subjectiveDraftKeyRef.current = key;
-                        setSubjectiveTeamNumber(draft.subjectiveTeamNumber);
-                        setAutonomousEffectiveness(draft.autonomousEffectiveness);
-                        setCanQuicklyScore(draft.canQuicklyScore);
-                        setEstimatedBPS(draft.estimatedBPS);
-                        setCanClimb(draft.canClimb);
-                        setClimbTime(draft.climbTime);
-                        setDefensiveStrategy(draft.defensiveStrategy);
-                        setBlockingEffectiveness(draft.blockingEffectiveness);
-                        setAllyCooperation(draft.allyCooperation);
-                        setRobotReliability(draft.robotReliability);
-                        setRobotPenalties(draft.robotPenalties);
-                        setAutoFuel(draft.autoFuel);
-                        setAutoClimb1(draft.autoClimb1);
-                        setTeleopPassing(draft.teleopPassing);
-                        setGameSense(draft.gameSense);
-                        setStrengths(draft.strengths);
-                        setWeaknesses(draft.weaknesses);
-                        setIsInSubjectiveScouting(true);
-                        break;
+                        const parts = key.split(':');
+                        if (parts.length >= 4 && parts[2] === subjectiveActiveMatch?.id) {
+                            subjectiveDraftKeyRef.current = key;
+                            setSubjectiveTeamNumber(draft.subjectiveTeamNumber);
+                            setAutonomousEffectiveness(draft.autonomousEffectiveness);
+                            setCanQuicklyScore(draft.canQuicklyScore);
+                            setEstimatedBPS(draft.estimatedBPS);
+                            setCanClimb(draft.canClimb);
+                            setClimbTime(draft.climbTime);
+                            setDefensiveStrategy(draft.defensiveStrategy);
+                            setBlockingEffectiveness(draft.blockingEffectiveness);
+                            setAllyCooperation(draft.allyCooperation);
+                            setRobotReliability(draft.robotReliability);
+                            setRobotPenalties(draft.robotPenalties);
+                            setAutoFuel(draft.autoFuel);
+                            setAutoClimb1(draft.autoClimb1);
+                            setTeleopPassing(draft.teleopPassing);
+                            setGameSense(draft.gameSense);
+                            setStrengths(draft.strengths);
+                            setWeaknesses(draft.weaknesses);
+                            setIsInSubjectiveScouting(true);
+                            break;
+                        }
                     }
                 }
             }
         }
-    }, [user?.id, isInMatchScouting, isInSubjectiveScouting]);
+    }, [user?.id, isInMatchScouting, isInSubjectiveScouting, activeMatch?.id, subjectiveActiveMatch?.id]);
 
     // Auto-resume match scouting if assignment exists
     useEffect(() => {
@@ -2105,7 +2107,7 @@ const Scouting = () => {
                                             />
                                         </div>
 
-                                        <div className="space-y-3">
+                                        <div className="spacey-3">
                                             <Label htmlFor="climb-time" className="text-base font-medium">
                                                 Estimated time to climb?
                                             </Label>
@@ -2117,6 +2119,17 @@ const Scouting = () => {
                                             />
                                         </div>
 
+                                        <div className="space-y-3">
+                                            <Label htmlFor="climb-level-subjective" className="text-base font-medium">
+                                                Climb Level (Subjective)?
+                                            </Label>
+                                            <Input
+                                                id="climb-level-subjective"
+                                                placeholder="e.g., L1, L2, L3, or N/A"
+                                                value={climbLevelSubjective}
+                                                onChange={(e) => setClimbLevelSubjective(e.target.value)}
+                                            />
+                                        </div>
                                     </CardContent>
                                 </Card>
 
@@ -2136,18 +2149,18 @@ const Scouting = () => {
                                                 onChange={(e) => setTeamFocus(e.target.value)}
                                             />
                                         </div>
-                                        {/*<div className="space-y-3">*/}
-                                        {/*    <Label htmlFor="performance-under-pressure"*/}
-                                        {/*           className="text-base font-medium">*/}
-                                        {/*        Do they perform well under pressure?*/}
-                                        {/*    </Label>*/}
-                                        {/*    <Input*/}
-                                        {/*        id="performance-under-pressure"*/}
-                                        {/*        placeholder="e.g., Panicked and caused chaos, kept playing well"*/}
-                                        {/*        value={performanceUnderPressure}*/}
-                                        {/*        onChange={(e) => setPerformanceUnderPressure(e.target.value)}*/}
-                                        {/*    />*/}
-                                        {/*</div>*/}
+                                        <div className="space-y-3">
+                                            <Label htmlFor="performance-under-pressure"
+                                                   className="text-base font-medium">
+                                                Do they perform well under pressure?
+                                            </Label>
+                                            <Input
+                                                id="performance-under-pressure"
+                                                placeholder="e.g., Panicked and caused chaos, kept playing well"
+                                                value={performanceUnderPressure}
+                                                onChange={(e) => setPerformanceUnderPressure(e.target.value)}
+                                            />
+                                        </div>
                                     </CardContent>
                                 </Card>
 
