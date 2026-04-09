@@ -525,12 +525,15 @@ const Analytics = () => {
         if (eventType !== "all") {
             filtered = filtered.filter(e => matchesSelectedEvent(e.submittedAt, eventType));
         }
-        if(teamNumberInput !== "all") {
-
+        if (teamNumberInput.trim() !== "") {
+            const teamNum = parseInt(teamNumberInput, 10);
+            if (!isNaN(teamNum)) {
+                filtered = filtered.filter(e => Number(e.teamNumber) === teamNum);
+            }
         }
         
         return filtered;
-    }, [subjectiveScoutingEntries, eventType]);
+    }, [subjectiveScoutingEntries, eventType, teamNumberInput]);
 
     const scouterData = useMemo(() => {
         const searchTerm = scouterSearchInput.trim().toLowerCase();
@@ -1535,10 +1538,19 @@ const Analytics = () => {
                         </TabsContent>
 
                         <TabsContent value="subjective" className="space-y-4">
+                            <div className="flex gap-2 items-center mb-4">
+                                <Input
+                                    placeholder="Enter team number (optional)"
+                                    value={teamNumberInput}
+                                    onChange={(e) => setTeamNumberInput(e.target.value)}
+                                    className="max-w-xs"
+                                />
+                            </div>
                             <div>
                                 <p className="text-muted-foreground">Viewing {filteredSubjectiveScoutingEntries.length} subjective
                                     scouting entries</p>
                             </div>
+
 
                             {loading ? (
                                 <p>Loading subjective scouting data...</p>
