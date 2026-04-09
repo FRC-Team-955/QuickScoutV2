@@ -330,7 +330,7 @@ const Analytics = () => {
                     const pitData = pitSnap.val();
                     const allPitEntries: PitScoutingEntry[] = [];
 
-                    // pitData structure: { dateStr: { teamNumber: { userId: { teamNumber, scoutName, scoutId, submittedAt, responses } } } }
+                    // pitData structure: { dateStr: { teamNumber: { userId: { flat pit scouting fields } } } }
                     Object.entries(pitData).forEach(([dateStr, dateValue]: [string, Record<string, unknown>]) => {
                         if (!dateValue || typeof dateValue !== 'object') return;
 
@@ -340,13 +340,19 @@ const Analytics = () => {
                             Object.entries(teamValue).forEach(([userId, entryValue]: [string, Record<string, unknown>]) => {
                                 if (!entryValue || typeof entryValue !== 'object') return;
 
+                                // Separate meta fields from actual responses
+                                const META_KEYS = ["teamNumber", "scoutName", "scoutId", "submittedAt"];
+                                const responses = Object.fromEntries(
+                                    Object.entries(entryValue).filter(([key]) => !META_KEYS.includes(key))
+                                );
+
                                 allPitEntries.push({
                                     id: `${dateStr}_${teamNum}_${userId}`,
                                     dateStr,
                                     teamNumber: (entryValue.teamNumber as number) || parseInt(teamNum, 10) || 0,
                                     scoutName: (entryValue.scoutName as string) || "Unknown",
                                     scoutId: (entryValue.scoutId as string) || userId || "",
-                                    responses: (entryValue.responses as Record<string, unknown>) || {},
+                                    responses, // <-- now contains all the actual scouting data
                                     submittedAt: (entryValue.submittedAt as number) || 0,
                                 });
                             });
@@ -1377,6 +1383,7 @@ const Analytics = () => {
                                                 ? filteredPitScoutingEntries.filter(e => e.teamNumber === parseInt(pitTeamNumberInput))
                                                 : filteredPitScoutingEntries
                                         ).map((entry) => {
+                                            console.log(entry); // looks ok?
                                             const formatKey = (key: string) => {
                                                 return key
                                                     .replace(/-/g, "_")
@@ -1398,7 +1405,7 @@ const Analytics = () => {
                                             const autos = new Map<string, unknown>();
                                             const drivebase = new Map<string, unknown>();
                                             const strategyNotes = new Map<string, unknown>();
-
+                                            console.log("RAW RESPONSES:", entry.responses);
                                             Object.entries(entry.responses).forEach(([key, value]) => {
                                                 if (value === null || value === undefined || (typeof value === "boolean" && !value)) return;
 
@@ -1414,6 +1421,10 @@ const Analytics = () => {
                                                     strategyNotes.set(key, value);
                                                 }
                                             });
+
+                                            const generateTextDump = () => {
+                                                return JSON.stringify(entry, null, 2);
+                                            };
 
                                             return (
                                                 <Card key={entry.id} className="overflow-hidden">
@@ -1528,6 +1539,11 @@ const Analytics = () => {
                                                                 </div>
                                                             </div>
                                                         )}
+                                                        <div className="pt-4 border-t border-border">
+                                                            <pre className="text-xs bg-black/80 text-foreground p-3 rounded overflow-x-auto whitespace-pre-wrap">
+                                                                {generateTextDump()}
+                                                            </pre>
+                                                        </div>
                                                     </CardContent>
                                                 </Card>
                                             );
