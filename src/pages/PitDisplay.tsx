@@ -312,7 +312,7 @@ const PitDisplay = () => {
             </header>
 
             {/* Main Content */}
-            <main className="flex-1 flex flex-col overflow-hidden">
+            <main className="flex-1 flex overflow-hidden">
                 <div className="flex-1 flex gap-4 p-4 overflow-hidden">
                     {/* Left: Match Schedule */}
                     <section className="w-80 flex flex-col overflow-auto border border-border rounded-lg p-4">
@@ -402,39 +402,25 @@ const PitDisplay = () => {
                         )}
                     </section>
                 </div>
-
-                {/* Bottom: Queue */}
-                <section
-                    className="h-32 border-t border-border bg-card/50 flex items-center justify-center text-muted-foreground rounded-t-lg">
-                    <div className="text-center space-y-2 px-4">
-                        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Queue</p>
-                        {queueEntry ? (
-                            <>
-                                <p className="text-xl font-semibold text-foreground">
-                                    Team 955&apos;s next match is {queueEntry.match.label}
-                                </p>
-                                <p className="text-sm font-semibold text-muted-foreground">
-                                    {queueEntry.match.status ? `Status: ${queueEntry.match.status} · ` : ""}
-                                    Put on the {queueEntry.allianceColor} bumpers
-                                </p>
-                                <p className="text-sm font-semibold text-muted-foreground">
-                                    We will be queued in {formatCountdown(queueCountdownMs)}
-                                </p>
-                            </>
-                        ) : loading ? (
-                            <p className="text-sm">Loading queue…</p>
-                        ) : (
-                            <p className="text-sm">Team 955 doesn&apos;t have any future matches scheduled yet</p>
-                        )}
-                    </div>
-                </section>
             </main>
+
+            {/* Bottom: Queue */}
+            <section className="border-t border-border bg-card/50 flex items-center justify-center text-foreground">
+                <div className="px-4">
+                    <p className="text-3xl font-bold font-mono text-center">
+                        {queueEntry ? (
+                            `Team 955's next match is ${queueEntry.match.label}${queueEntry.match.status ? ` - ${queueEntry.match.status}` : ""} - ${queueEntry.allianceColor.charAt(0).toUpperCase() + queueEntry.allianceColor.slice(1)} Bumpers - Queued in ${formatCountdown(queueCountdownMs)}`
+                        ) : loading ? (
+                            "Loading queue…"
+                        ) : (
+                            "Team 955 doesn't have any future matches scheduled yet"
+                        )}
+                    </p>
+                </div>
+            </section>
         </div>
     );
 };
 
 export default PitDisplay;
-
-
-
 
