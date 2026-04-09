@@ -1184,8 +1184,8 @@ const PitScouting = () => {
 
 
 
-
-                {loading ? (
+                {!isActive && (
+                loading ? (
                     <Card>
                         <CardContent className="py-8">
                             <p className="text-center text-muted-foreground">Loading pit scouting
@@ -1200,34 +1200,33 @@ const PitScouting = () => {
                         </CardContent>
                     </Card>
                 ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-4 p-6">
+                        <Card>
+                        <CardHeader>
+                            <CardTitle>Unscouted Teams</CardTitle>
+                            <CardDescription>
+                                Click a team below to start scouting
+                            </CardDescription>
+                        </CardHeader>
 
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {(unscoutedTeams
-                            ).map((entry) => {
 
 
-                                return (
-                                    <Card key={entry} className="overflow-hidden">
-                                        <CardHeader
-                                            className="bg-gradient-to-r from-primary/10 to-primary/5 pb-3">
-                                            <CardTitle className="flex justify-between items-start gap-3">
-                                                <div className="flex flex-col gap-1">
-                                                                <span
-                                                                    className="text-2xl font-bold">Team {entry}</span>
-
-                                                </div>
-
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
+                                {unscoutedTeams.map((entry) => (
+                                    <Card key={entry} className="overflow-hidden cursor-pointer hover:border-primary transition-colors"
+                                          onClick={() => handleStartScouting(String(entry))}>
+                                        <CardHeader className="p-2">
+                                            <CardTitle className="flex justify-center items-center">
+                                                Team {entry}
                                             </CardTitle>
                                         </CardHeader>
-
                                     </Card>
-                                );
-                            })}
-                        </div>
+                                ))}
+                            </div>
+                        </Card>
                     </div>
-                )}
+                ))}
             </main>
         </div>
     );
