@@ -132,6 +132,7 @@ const Analytics = () => {
     const [scouterSearchInput, setScouterSearchInput] = useState("");
     const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
     const [deleting, setDeleting] = useState(false);
+    const [showJson, setShowJson] = useState(false);
 
     const isLead = !!user?.isLead;
 
@@ -1392,32 +1393,48 @@ const Analytics = () => {
                                                     .join(" ");
                                             };
 
-                                            const formatValue = (value: unknown) => {
+                                            const formatValue = (value: unknown): string => {
                                                 if (value === null || value === undefined) return "N/A";
                                                 if (typeof value === "boolean") return value ? "Yes" : "No";
-                                                if (typeof value === "object") return JSON.stringify(value);
+                                                if (Array.isArray(value)) return value.join(", "); // render arrays nicely
+                                                if (typeof value === "object") return ""; // leave objects for separate rendering
                                                 return String(value).trim();
                                             };
 
                                             // Organize responses by category
                                             const robotFunctions = new Map<string, unknown>();
                                             const robotCapabilities = new Map<string, unknown>();
-                                            const autos = new Map<string, unknown>();
+                                            const autos = new Map<string, Record<string, unknown>>(); // notice type change
                                             const drivebase = new Map<string, unknown>();
                                             const strategyNotes = new Map<string, unknown>();
-                                            console.log("RAW RESPONSES:", entry.responses);
+
                                             Object.entries(entry.responses).forEach(([key, value]) => {
                                                 if (value === null || value === undefined || (typeof value === "boolean" && !value)) return;
 
-                                                if (key.includes("intake") || key.includes("climb")) {
+                                                if (key.toLowerCase().includes("intake") || key.toLowerCase().includes("climb")) {
                                                     robotFunctions.set(key, value);
-                                                } else if (key.includes("defense") || key.includes("shooter") || key.includes("fuel-hopper") || key.includes("bps") || key.includes("under-trench") || key.includes("over-bump") || key.includes("shoot-on") || key.includes("pass-fuel")) {
+                                                } else if (
+                                                    key.toLowerCase().includes("defense") ||
+                                                    key.toLowerCase().includes("shooter") ||
+                                                    key.toLowerCase().includes("fuel-hopper") ||
+                                                    key.toLowerCase().includes("bps") ||
+                                                    key.toLowerCase().includes("under-trench") ||
+                                                    key.toLowerCase().includes("over-bump") ||
+                                                    key.toLowerCase().includes("shoot-on") ||
+                                                    key.toLowerCase().includes("pass-fuel") ||
+                                                    key.toLowerCase().includes("climb")
+                                                ) {
                                                     robotCapabilities.set(key, value);
-                                                } else if (key.includes("auto")) {
-                                                    autos.set(key, value);
-                                                } else if (key.includes("dimension") || key.includes("special-detail")) {
+                                                } else if (key.toLowerCase().startsWith("auto") && typeof value === "object") {
+                                                    autos.set(key, value as Record<string, unknown>); // store nested object
+                                                } else if (key.toLowerCase().includes("dimension") || key.toLowerCase().includes("special-detail")) {
                                                     drivebase.set(key, value);
-                                                } else if (key.includes("strength") || key.includes("weakness") || key.includes("feature") || key.includes("note")) {
+                                                } else if (
+                                                    key.toLowerCase().includes("strength") ||
+                                                    key.toLowerCase().includes("weakness") ||
+                                                    key.toLowerCase().includes("feature") ||
+                                                    key.toLowerCase().includes("note")
+                                                ) {
                                                     strategyNotes.set(key, value);
                                                 }
                                             });
@@ -1459,13 +1476,11 @@ const Analytics = () => {
                                                                 <div className="space-y-1 text-sm">
                                                                     {Array.from(robotFunctions.entries()).map(([key, value]) => (
                                                                         <div key={key}
-                                                                             className="flex items-center gap-2 py-1">
-                                                                            <div
-                                                                                className="w-2 h-2 rounded-full bg-primary flex-shrink-0"/>
+                                                                             className="flex justify-between items-center py-1 px-2 bg-secondary/40 rounded">
                                                                             <span
                                                                                 className="font-medium">{formatKey(key)}</span>
-                                                                            {typeof value === "boolean" ? null : <span
-                                                                                className="text-muted-foreground">({formatValue(value)})</span>}
+                                                                            <span
+                                                                                className="font-semibold text-primary">{formatValue(value)}</span>
                                                                         </div>
                                                                     ))}
                                                                 </div>
@@ -1493,16 +1508,24 @@ const Analytics = () => {
                                                         {autos.size > 0 && (
                                                             <div>
                                                                 <h4 className="font-semibold text-sm mb-2 text-primary">Autonomous</h4>
-                                                                <div className="space-y-1 text-sm">
-                                                                    {Array.from(autos.entries()).map(([key, value]) => (
-                                                                        <div key={key}
-                                                                             className="flex items-center gap-2 py-1">
-                                                                            <div
-                                                                                className="w-2 h-2 rounded-full bg-yellow-500 flex-shrink-0"/>
-                                                                            <span
-                                                                                className="font-medium">{formatKey(key)}</span>
-                                                                            {typeof value === "boolean" ? null : <span
-                                                                                className="text-muted-foreground ml-auto">({formatValue(value)})</span>}
+                                                                <div className="space-y-2 text-sm">
+                                                                    {Array.from(autos.entries()).map(([autoKey, autoObj]) => (
+                                                                        <div
+                                                                            key={autoKey}
+                                                                            className="p-2 bg-secondary/40 rounded space-y-1"
+                                                                        >
+                                                                            <p className="font-semibold text-primary">{formatKey(autoKey)}</p>
+                                                                            {Object.entries(autoObj).map(([subKey, subValue]) => (
+                                                                                <div
+                                                                                    key={subKey}
+                                                                                    className="flex justify-between items-center py-1 px-2 bg-secondary/20 rounded"
+                                                                                >
+                                                                                    <span className="font-medium">{formatKey(subKey)}</span>
+                                                                                    <span className="text-primary font-semibold">
+                                                                                        {Array.isArray(subValue) ? subValue.join(", ") : String(subValue)}
+                                                                                      </span>
+                                                                                </div>
+                                                                            ))}
                                                                         </div>
                                                                     ))}
                                                                 </div>
@@ -1540,9 +1563,18 @@ const Analytics = () => {
                                                             </div>
                                                         )}
                                                         <div className="pt-4 border-t border-border">
-                                                            <pre className="text-xs bg-black/80 text-foreground p-3 rounded overflow-x-auto whitespace-pre-wrap">
-                                                                {generateTextDump()}
-                                                            </pre>
+                                                            <button
+                                                                className="px-2 py-1 text-xs bg-primary text-white rounded hover:bg-primary/80"
+                                                                onClick={() => setShowJson(!showJson)}
+                                                            >
+                                                                {showJson ? "Hide JSON Dump" : "Show JSON Dump"}
+                                                            </button>
+
+                                                            {showJson && (
+                                                                <pre className="mt-2 text-xs bg-black/80 text-foreground p-3 rounded overflow-x-auto whitespace-pre-wrap">
+                                                                  {JSON.stringify(entry, null, 2)}
+                                                                </pre>
+                                                            )}
                                                         </div>
                                                     </CardContent>
                                                 </Card>
