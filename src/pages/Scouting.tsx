@@ -1143,8 +1143,8 @@ const Scouting = () => {
     ];
 
     const getTeamLabel = (teamNumber: number): string => {
-        const index = teamAssignments.indexOf(teamNumber);
-        return index !== -1 ? placeholders[index] : "Unknown Team";
+        const index = teamAssignments.indexOf(String(teamNumber));
+        return index !== -1 ? placeholders[index] : "Unknown Team Station";
     };
 
     useEffect(() => {
@@ -2103,7 +2103,7 @@ const Scouting = () => {
                                             </Label>
                                             <Input
                                                 id="quick-score"
-                                                placeholder="e.g., Yes, No, or description"
+                                                placeholder=""
                                                 value={canQuicklyScore}
                                                 onChange={(e) => setCanQuicklyScore(e.target.value)}
                                             />
