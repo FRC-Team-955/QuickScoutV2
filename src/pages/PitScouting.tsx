@@ -1,4 +1,4 @@
-import {Fragment, useEffect, useMemo, useRef, useState} from "react";
+import {Fragment, useEffect, useRef, useState} from "react";
 import {useNavigate} from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/Topbar";
@@ -110,7 +110,6 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         label: "",
         required: false
     },
-
 
 
     ///////////////// CLimb Location
@@ -622,7 +621,7 @@ const PitScouting = () => {
     useEffect(() => {
         const initData = async () => {
 
-            const teamKeys: string[] = await getEventTeams("2025orore");
+            const teamKeys: string[] = await getEventTeams("2026pncmp");
             const teamNumbers = teamKeys
                 .map(key => parseInt(key.replace("frc", ""), 10))
                 .sort((a, b) => a - b);
@@ -661,7 +660,6 @@ const PitScouting = () => {
         };
         initData();
     }, []); //  empty array means run once on mount
-
 
 
     const handleTabChange = (tab: string) => {
@@ -935,22 +933,22 @@ const PitScouting = () => {
             case "button-group":
                 return (
                     // no div?
-                        <Button
-                                    variant={
-                                        (responses[question.parent!] === question.name)? "default" : "outline"
-                                    }
-                                    onClick={() =>
-                                        handleResponseChange(question.parent!, question.name)
-                                    }
-                                    disabled={!isActive}
-                                    className="w-full"
-                                >
-                                    {question.name}
-                                </Button>
+                    <Button
+                        variant={
+                            (responses[question.parent!] === question.name) ? "default" : "outline"
+                        }
+                        onClick={() =>
+                            handleResponseChange(question.parent!, question.name)
+                        }
+                        disabled={!isActive}
+                        className="w-full"
+                    >
+                        {question.name}
+                    </Button>
 
-                    );
-            case "button-group-multi":
-                { const selected = (responses[question.parent!] as string[]) || [];
+                );
+            case "button-group-multi": {
+                const selected = (responses[question.parent!] as string[]) || [];
                 return (
                     <Button
                         variant={selected.includes(question.name!) ? "default" : "outline"}
@@ -966,7 +964,8 @@ const PitScouting = () => {
                     >
                         {question.name}
                     </Button>
-                ); }
+                );
+            }
             default:
                 return null;
         }
@@ -1057,34 +1056,43 @@ const PitScouting = () => {
                                 {Object.entries(groupedQuestions).map(([section, sectionQ]) =>
                                     section === "Autos" ? (
                                             <Fragment key={section}>
-                                                {Array.from({ length: autoCount }).map((_, index) => (
+                                                {Array.from({length: autoCount}).map((_, index) => (
                                                     <Card key={index} className="overflow-hidden">
-                                                        <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5">
+                                                        <CardHeader
+                                                            className="bg-gradient-to-r from-primary/10 to-primary/5">
                                                             <div className="flex items-center justify-between">
                                                                 <CardTitle className="text-lg text-primary">
                                                                     Auto {index + 1}
                                                                 </CardTitle>
                                                                 {(
-                                                                    <Button size="sm" variant="destructive" onClick={() => setAutoCount(prev => prev - 1)}>
-                                                                        <X className="w-4 h-4" />
+                                                                    <Button size="sm" variant="destructive"
+                                                                            onClick={() => setAutoCount(prev => prev - 1)}>
+                                                                        <X className="w-4 h-4"/>
                                                                     </Button>
                                                                 )}
                                                             </div>
                                                         </CardHeader>
                                                         <CardContent className="pt-6 space-y-6">
                                                             {sectionQ.filter(q => !q.parent).map((question) => {
-                                                                const prefixed = { ...question, id: `auto_${index}_${question.id}` };
+                                                                const prefixed = {
+                                                                    ...question,
+                                                                    id: `auto_${index}_${question.id}`
+                                                                };
                                                                 return (
                                                                     <div key={prefixed.id} className="space-y-3">
                                                                         <div className="space-y-2">
-                                                                            <Label className="text-sm font-semibold">{question.label}</Label>
-                                                                            <div className="mt-2">{renderQuestion(prefixed)}</div>
+                                                                            <Label
+                                                                                className="text-sm font-semibold">{question.label}</Label>
+                                                                            <div
+                                                                                className="mt-2">{renderQuestion(prefixed)}</div>
                                                                         </div>
                                                                         {/* Render child questions with indentation */}
                                                                         {getChildQuestions(question.label).length > 0 && (
-                                                                            <div className="ml-6 mt-4 space-y-3 border-l-2 border-primary/30 pl-4">
+                                                                            <div
+                                                                                className="ml-6 mt-4 space-y-3 border-l-2 border-primary/30 pl-4">
                                                                                 {getChildQuestions(question.label).map(child => (
-                                                                                    <div key={child.id} className="flex-1 min-w-[80px]">
+                                                                                    <div key={child.id}
+                                                                                         className="flex-1 min-w-[80px]">
                                                                                         {renderQuestion({
                                                                                             ...child,
                                                                                             id: `auto_${index}_${child.id}`,
@@ -1100,63 +1108,65 @@ const PitScouting = () => {
                                                         </CardContent>
                                                     </Card>
                                                 ))}
-                                                <Button variant="outline" className="w-full" onClick={() => setAutoCount(prev => prev + 1)}>
+                                                <Button variant="outline" className="w-full"
+                                                        onClick={() => setAutoCount(prev => prev + 1)}>
                                                     + Add Auto
                                                 </Button>
                                             </Fragment>
                                         ) :
                                         (
-                                    <Card key={section} className="overflow-hidden">
-                                        <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5">
-                                            <CardTitle className="text-lg text-primary">{section}</CardTitle>
-                                        </CardHeader>
-                                        <CardContent className="pt-6 space-y-6">
-                                            {sectionQ.filter(q => !q.parent).map((question) => (
-                                                <div key={question.id} className="space-y-3">
-                                                    <div className="space-y-2">
-                                                        <Label
-                                                            htmlFor={question.id}
-                                                            className={`text-sm font-semibold ${
-                                                                question.required ? "after:content-['_*'] after:text-destructive" : ""
-                                                            }`}
-                                                        >
-                                                            {question.label}
-                                                        </Label>
-                                                        <div className={question.type === "checkbox" ? "" : "mt-2"}>
-                                                            {renderQuestion(question)}
-                                                        </div>
-                                                    </div>
-                                                    {/* Render child questions with indentation */}
-                                                    {getChildQuestions(question.label).length > 0 && (
-                                                        <div
-                                                            className="ml-6 mt-4 space-y-3 border-l-2 border-primary/30 pl-4">
-                                                            {getChildQuestions(question.label).map((childQuestion) => (
-                                                                <div key={childQuestion.id}>
-                                                                    {childQuestion.type === "radio" ? (
-                                                                        <div className="py-2">
-                                                                            {renderQuestion(childQuestion)}
-                                                                        </div>
-                                                                    ) : (
-                                                                        <>
-                                                                            <Label htmlFor={childQuestion.id}
-                                                                                   className="text-sm font-medium">
-                                                                                {childQuestion.label}
-                                                                            </Label>
-                                                                            <div className="mt-2">
-                                                                                {renderQuestion(childQuestion)}
-                                                                            </div>
-                                                                        </>
-                                                                    )}
+                                            <Card key={section} className="overflow-hidden">
+                                                <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5">
+                                                    <CardTitle className="text-lg text-primary">{section}</CardTitle>
+                                                </CardHeader>
+                                                <CardContent className="pt-6 space-y-6">
+                                                    {sectionQ.filter(q => !q.parent).map((question) => (
+                                                        <div key={question.id} className="space-y-3">
+                                                            <div className="space-y-2">
+                                                                <Label
+                                                                    htmlFor={question.id}
+                                                                    className={`text-sm font-semibold ${
+                                                                        question.required ? "after:content-['_*'] after:text-destructive" : ""
+                                                                    }`}
+                                                                >
+                                                                    {question.label}
+                                                                </Label>
+                                                                <div
+                                                                    className={question.type === "checkbox" ? "" : "mt-2"}>
+                                                                    {renderQuestion(question)}
                                                                 </div>
-                                                            ))}
+                                                            </div>
+                                                            {/* Render child questions with indentation */}
+                                                            {getChildQuestions(question.label).length > 0 && (
+                                                                <div
+                                                                    className="ml-6 mt-4 space-y-3 border-l-2 border-primary/30 pl-4">
+                                                                    {getChildQuestions(question.label).map((childQuestion) => (
+                                                                        <div key={childQuestion.id}>
+                                                                            {childQuestion.type === "radio" ? (
+                                                                                <div className="py-2">
+                                                                                    {renderQuestion(childQuestion)}
+                                                                                </div>
+                                                                            ) : (
+                                                                                <>
+                                                                                    <Label htmlFor={childQuestion.id}
+                                                                                           className="text-sm font-medium">
+                                                                                        {childQuestion.label}
+                                                                                    </Label>
+                                                                                    <div className="mt-2">
+                                                                                        {renderQuestion(childQuestion)}
+                                                                                    </div>
+                                                                                </>
+                                                                            )}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </CardContent>
-                                    </Card>
+                                                    ))}
+                                                </CardContent>
+                                            </Card>
 
-                                ))}
+                                        ))}
 
                                 <div className="flex gap-2">
                                     <Button
@@ -1183,50 +1193,48 @@ const PitScouting = () => {
                 </div>
 
 
-
                 {!isActive && (
-                loading ? (
-                    <Card>
-                        <CardContent className="py-8">
-                            <p className="text-center text-muted-foreground">Loading pit scouting
-                                data...</p>
-                        </CardContent>
-                    </Card>
-                ) : unscoutedTeams.length === 0 ? (
-                    <Card>
-                        <CardContent className="py-8">
-                            <p className="text-center text-muted-foreground">No pit scouting data
-                                available</p>
-                        </CardContent>
-                    </Card>
-                ) : (
-                    <div className="space-y-4 p-6">
+                    loading ? (
                         <Card>
-                        <CardHeader>
-                            <CardTitle>Unscouted Teams</CardTitle>
-                            <CardDescription>
-                                Click a team below to start scouting
-                            </CardDescription>
-                        </CardHeader>
-
-
-
-
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
-                                {unscoutedTeams.map((entry) => (
-                                    <Card key={entry} className="overflow-hidden cursor-pointer hover:border-primary transition-colors"
-                                          onClick={() => handleStartScouting(String(entry))}>
-                                        <CardHeader className="p-2">
-                                            <CardTitle className="flex justify-center items-center">
-                                                Team {entry}
-                                            </CardTitle>
-                                        </CardHeader>
-                                    </Card>
-                                ))}
-                            </div>
+                            <CardContent className="py-8">
+                                <p className="text-center text-muted-foreground">Loading pit scouting
+                                    data...</p>
+                            </CardContent>
                         </Card>
-                    </div>
-                ))}
+                    ) : unscoutedTeams.length === 0 ? (
+                        <Card>
+                            <CardContent className="py-8">
+                                <p className="text-center text-muted-foreground">No pit scouting data
+                                    available</p>
+                            </CardContent>
+                        </Card>
+                    ) : (
+                        <div className="space-y-4 p-6">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Unscouted Teams</CardTitle>
+                                    <CardDescription>
+                                        Click a team below to start scouting
+                                    </CardDescription>
+                                </CardHeader>
+
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
+                                    {unscoutedTeams.map((entry) => (
+                                        <Card key={entry}
+                                              className="overflow-hidden cursor-pointer hover:border-primary transition-colors"
+                                              onClick={() => handleStartScouting(String(entry))}>
+                                            <CardHeader className="p-2">
+                                                <CardTitle className="flex justify-center items-center">
+                                                    Team {entry}
+                                                </CardTitle>
+                                            </CardHeader>
+                                        </Card>
+                                    ))}
+                                </div>
+                            </Card>
+                        </div>
+                    ))}
             </main>
         </div>
     );
