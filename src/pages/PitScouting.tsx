@@ -57,7 +57,16 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     },
     {
         id: "intake-ground-outpost",
-        name: "Outpost",
+        name: "Outpost/Human Player Station",
+        section: "Robot Functions",
+        type: "button-group-multi",
+        parent: "Intaking Locations",
+        label: "",
+        required: false
+    },
+    {
+        id: "intake-ground-depot",
+        name: "Depot",
         section: "Robot Functions",
         type: "button-group-multi",
         parent: "Intaking Locations",
@@ -433,7 +442,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         id: "auto-locations",
         label: "Cycle Path",
         section: "Autos",
-        type: "text",
+        type: "textarea",
         required: false,
         placeholder: "eg., start left trench, cycle neutral through left trench, back to alliance through left bump, repeat, stop at left side hub.",
         parent: null,
@@ -522,15 +531,6 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         placeholder: "",
         parent: null,
         label: "Estimated Fuel Scored:",
-    },
-    {
-        id: "shooting-notes",
-        section: "Autos",
-        type: "text",
-        required: false,
-        placeholder: "eg., Jams often, Shoot on the Move",
-        parent: null,
-        label: "Notes on shooting:",
     },
     {
         id: "auto-climb",
