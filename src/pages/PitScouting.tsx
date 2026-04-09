@@ -436,7 +436,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         section: "Autos",
         type: "text",
         required: false,
-        placeholder: "Please list locations along this auto's path.",
+        placeholder: "eg., start left trench, cycle neutral through left trench, back to alliance through left bump, repeat, stop at left side hub.",
         parent: null,
     },
 
