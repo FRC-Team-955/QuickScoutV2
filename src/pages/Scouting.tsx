@@ -199,7 +199,7 @@ const Scouting = () => {
 
         try {
             setImportingTeams(true);
-            const eventKey = "2026orore";
+            const eventKey = "2026pncmp";
             const qualNum = parseInt(qualificationNumber, 10);
 
             const matches = await getEventMatches(eventKey);
