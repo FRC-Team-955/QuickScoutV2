@@ -368,7 +368,6 @@ const Scouting = () => {
         setCanClimb("");
         setClimbTime("");
         setClimbLevelSubjective("");
-        setPerformanceUnderPressure("");
         setTeamFocus("");
         setDriverSynchronization("");
         setDefensiveStrategy("");
@@ -407,7 +406,6 @@ const Scouting = () => {
                         climbLevel: canClimb === "yes" ? climbLevelSubjective : null,
                     },
                     teamDynamics: {
-                        performanceUnderPressure,
                         teamFocus,
                         driverSynchronization,
                     },
@@ -451,7 +449,6 @@ const Scouting = () => {
         setCanClimb("");
         setClimbTime("");
         setClimbLevelSubjective("");
-        setPerformanceUnderPressure("");
         setTeamFocus("");
         setDriverSynchronization("");
         setDefensiveStrategy("");
@@ -502,7 +499,6 @@ const Scouting = () => {
     const [climbLevelSubjective, setClimbLevelSubjective] = useState<string>("");
 
     // Section 2: Team Dynamics
-    const [performanceUnderPressure, setPerformanceUnderPressure] = useState<string>("");
     const [teamFocus, setTeamFocus] = useState<string>("");
     const [driverSynchronization, setDriverSynchronization] = useState<string>("");
 
@@ -1117,7 +1113,6 @@ const Scouting = () => {
         setCanClimb("");
         setClimbTime("");
         setClimbLevelSubjective("");
-        setPerformanceUnderPressure("");
         setTeamFocus("");
         setDriverSynchronization("");
         setDefensiveStrategy("");
@@ -2183,18 +2178,7 @@ const Scouting = () => {
                                                 onChange={(e) => setTeamFocus(e.target.value)}
                                             />
                                         </div>
-                                        <div className="space-y-3">
-                                            <Label htmlFor="performance-under-pressure"
-                                                   className="text-base font-medium">
-                                                Do they perform well under pressure?
-                                            </Label>
-                                            <Input
-                                                id="performance-under-pressure"
-                                                placeholder="e.g., Panicked and caused chaos, kept playing well"
-                                                value={performanceUnderPressure}
-                                                onChange={(e) => setPerformanceUnderPressure(e.target.value)}
-                                            />
-                                        </div>
+
                                     </CardContent>
                                 </Card>
 
