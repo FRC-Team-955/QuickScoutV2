@@ -1133,6 +1133,20 @@ const Scouting = () => {
         isManualSessionRef.current = false;
     };
 
+    const placeholders = [
+        "Red 1",
+        "Red 2",
+        "Red 3",
+        "Blue 1",
+        "Blue 2",
+        "Blue 3",
+    ];
+
+    const getTeamLabel = (teamNumber: number): string => {
+        const index = teamAssignments.indexOf(teamNumber);
+        return index !== -1 ? placeholders[index] : "Unknown Team";
+    };
+
     useEffect(() => {
         const updateSize = () => {
             setConfettiSize({width: window.innerWidth, height: window.innerHeight});
@@ -2043,11 +2057,23 @@ const Scouting = () => {
                             </Card>
                         )}
 
+                        { /* {[0, 3, 1, 4, 2, 5].map((i) => {
+                        const placeholders = [
+                            "Red 1",
+                            "Red 2",
+                            "Red 3",
+                            "Blue 1",
+                            "Blue 2",
+                            "Blue 3",
+
+                            teamAssignments[i]
+                        ];*/}
+
                         {isInSubjectiveScouting && canScoutSubjectiveMatch && (
                             <>
                                 <Card>
-                                    <CardHeader>
-                                        <CardTitle>Subjective Scouting - Team {subjectiveTeamNumber}</CardTitle>
+                                    <CardHeader>                                                     {/* want to show here what thing they are. eg Blue 1, Red 3 */}
+                                        <CardTitle>Subjective Scouting - Team {subjectiveTeamNumber} ({getTeamLabel(Number(subjectiveTeamNumber))})</CardTitle>
                                         <CardDescription>
                                             Answer the following questions about this team's robot and strategy
                                         </CardDescription>

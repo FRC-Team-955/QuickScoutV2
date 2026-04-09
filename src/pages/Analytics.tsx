@@ -525,6 +525,9 @@ const Analytics = () => {
         if (eventType !== "all") {
             filtered = filtered.filter(e => matchesSelectedEvent(e.submittedAt, eventType));
         }
+        if(teamNumberInput !== "all") {
+
+        }
         
         return filtered;
     }, [subjectiveScoutingEntries, eventType]);
