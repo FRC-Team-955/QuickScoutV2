@@ -295,6 +295,7 @@ const Scouting = () => {
             const matchId = await start(assigned);
             const teamList = assigned.filter(t => t).join(", ");
             toast(`Match started — Teams: ${teamList}`);
+            setActiveTeamAssignments(assigned);
             setTeamAssignments(["", "", "", "", "", ""]);
         } catch (err) {
             console.error(err);
@@ -540,6 +541,8 @@ const Scouting = () => {
     const [confettiSize, setConfettiSize] = useState({width: 0, height: 0});
     const confettiTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const audioTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const [activeTeamAssignments, setActiveTeamAssignments] = useState<string[]>([]);
 
     const triggerConfetti = useCallback(() => {
         setShowConfetti(true);
@@ -1143,7 +1146,12 @@ const Scouting = () => {
     ];
 
     const getTeamLabel = (teamNumber: number): string => {
-        const index = teamAssignments.indexOf(String(teamNumber));
+        const index = activeTeamAssignments.indexOf(String(teamNumber));
+        console.log("TA:");
+        console.log(activeTeamAssignments);
+        console.log("current numbr");
+        console.log(teamNumber);
+
         return index !== -1 ? placeholders[index] : "Unknown Team Station";
     };
 
