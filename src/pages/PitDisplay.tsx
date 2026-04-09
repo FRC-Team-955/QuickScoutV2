@@ -405,7 +405,8 @@ const PitDisplay = () => {
             </main>
 
             {/* Bottom: Queue */}
-            <section className="border-t border-border bg-card/50 flex items-center justify-center text-foreground">
+            <section
+                className="border-t border-border bg-card/50 flex items-center justify-center text-foreground py-8">
                 <div className="px-4">
                     <p className="text-3xl font-bold font-mono text-center">
                         {queueEntry ? (
