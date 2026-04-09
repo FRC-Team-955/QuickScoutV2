@@ -1,4 +1,4 @@
-import {Fragment, useRef, useState} from "react";
+import {Fragment, useEffect, useMemo, useRef, useState} from "react";
 import {useNavigate} from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/Topbar";
@@ -12,8 +12,10 @@ import {Checkbox} from "@/components/ui/checkbox";
 import {useAuth} from "@/contexts/AuthContext";
 import {Play, X} from "lucide-react";
 import {toast} from "sonner";
-import {ref, serverTimestamp, set} from "firebase/database";
+import {get, ref, serverTimestamp, set} from "firebase/database";
 import {db} from "@/lib/firebase";
+import {PitScoutingEntry} from "@/pages/Analytics.tsx";
+import {getEventTeams} from "@/lib/tba.ts";
 
 interface PitScoutingQuestion {
     id: string;
@@ -615,6 +617,53 @@ const PitScouting = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState("pit-scouting");
 
+    const [unscoutedTeams, setUnscoutedTeams] = useState<number[]>([]);
+
+    useEffect(() => {
+        const initData = async () => {
+
+            const teamKeys: string[] = await getEventTeams("2025orore");
+            const teamNumbers = teamKeys
+                .map(key => parseInt(key.replace("frc", ""), 10))
+                .sort((a, b) => a - b);
+
+
+            const pitScoutingRef = ref(db, "pitScouting");
+            const pitSnap = await get(pitScoutingRef);
+            if (!pitSnap.exists()) {
+                setUnscoutedTeams([]);
+            } else {
+                const pitData = pitSnap.val();
+                const allPitEntries: PitScoutingEntry[] = [];
+                Object.entries(pitData).forEach(([dateStr, dateValue]: [string, Record<string, unknown>]) => {
+                    if (!dateValue || typeof dateValue !== 'object') return;
+                    Object.entries(dateValue).forEach(([teamNum, teamValue]: [string, Record<string, unknown>]) => {
+                        if (!teamValue || typeof teamValue !== 'object') return;
+                        Object.entries(teamValue).forEach(([userId, entryValue]: [string, Record<string, unknown>]) => {
+                            if (!entryValue || typeof entryValue !== 'object') return;
+                            allPitEntries.push({
+                                id: `${dateStr}_${teamNum}_${userId}`,
+                                dateStr,
+                                teamNumber: (entryValue.teamNumber as number) || parseInt(teamNum, 10) || 0,
+                                scoutName: (entryValue.scoutName as string) || "Unknown",
+                                scoutId: (entryValue.scoutId as string) || userId || "",
+                                responses: (entryValue.responses as Record<string, unknown>) || {},
+                                submittedAt: (entryValue.submittedAt as number) || 0,
+                            });
+                        });
+                    });
+                });
+                const scoutedSet = new Set(allPitEntries.map(e => e.teamNumber));
+                const unscouted = teamNumbers.filter(t => !scoutedSet.has(t));
+
+                setUnscoutedTeams(unscouted);
+            }
+        };
+        initData();
+    }, []); //  empty array means run once on mount
+
+
+
     const handleTabChange = (tab: string) => {
         setActiveTab(tab);
         if (tab === "dashboard") {
@@ -1132,6 +1181,52 @@ const PitScouting = () => {
                         )}
                     </div>
                 </div>
+
+
+
+                {!isActive && (
+                loading ? (
+                    <Card>
+                        <CardContent className="py-8">
+                            <p className="text-center text-muted-foreground">Loading pit scouting
+                                data...</p>
+                        </CardContent>
+                    </Card>
+                ) : unscoutedTeams.length === 0 ? (
+                    <Card>
+                        <CardContent className="py-8">
+                            <p className="text-center text-muted-foreground">No pit scouting data
+                                available</p>
+                        </CardContent>
+                    </Card>
+                ) : (
+                    <div className="space-y-4 p-6">
+                        <Card>
+                        <CardHeader>
+                            <CardTitle>Unscouted Teams</CardTitle>
+                            <CardDescription>
+                                Click a team below to start scouting
+                            </CardDescription>
+                        </CardHeader>
+
+
+
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
+                                {unscoutedTeams.map((entry) => (
+                                    <Card key={entry} className="overflow-hidden cursor-pointer hover:border-primary transition-colors"
+                                          onClick={() => handleStartScouting(String(entry))}>
+                                        <CardHeader className="p-2">
+                                            <CardTitle className="flex justify-center items-center">
+                                                Team {entry}
+                                            </CardTitle>
+                                        </CardHeader>
+                                    </Card>
+                                ))}
+                            </div>
+                        </Card>
+                    </div>
+                ))}
             </main>
         </div>
     );
