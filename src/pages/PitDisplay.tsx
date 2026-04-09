@@ -411,14 +411,13 @@ const PitDisplay = () => {
                         {queueEntry ? (
                             <>
                                 <p className="text-xl font-semibold text-foreground">
-                                    Team 955&apos;s next match is {queueEntry.match.label}
+                                    Team 955&apos;s next match is {queueEntry.match.label} -
+                                    - {queueEntry.match.status ? `Status: ${queueEntry.match.status} · ` : ""}
+                                    Put on {queueEntry.allianceColor} bumpers -
+                                    - We will be queuing in {formatCountdown(queueCountdownMs)}
                                 </p>
                                 <p className="text-sm text-muted-foreground">
-                                    {queueEntry.match.status ? `Status: ${queueEntry.match.status} · ` : ""}
-                                    Put on the {queueEntry.allianceColor} bumpers
-                                </p>
-                                <p className="text-sm text-muted-foreground">
-                                    We will be queued in {formatCountdown(queueCountdownMs)}
+
                                 </p>
                             </>
                         ) : loading ? (
