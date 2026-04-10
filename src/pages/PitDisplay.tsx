@@ -242,7 +242,7 @@ const PitDisplay = () => {
 
     const streamUrl = useMemo(() => {
         if (!webcasts.length) return null;
-        const webcast = webcasts[0];
+        const webcast = webcasts[2];
         const url = buildStreamUrl(webcast);
         if (!url) return null;
 
