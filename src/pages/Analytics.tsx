@@ -97,6 +97,8 @@ export type SubjectiveScoutingEntry = {
         autoClimb?: string;
         teleopPassing?: string;
         gameSense?: string;
+        strengths?: string;
+        weaknesses?: string;
     };
     submittedAt: number;
 };
@@ -431,6 +433,8 @@ const Analytics = () => {
                                       autoClimb: (misc.autoClimb as string) || (misc.autoClimb1 as string) || "",
                                       teleopPassing: (misc.teleopPassing as string) || "",
                                       gameSense: (misc.gameSense as string) || "",
+                                      strengths: (misc.strengths as string) || "",
+                                      weaknesses: (misc.weaknesses as string) || ""
                                   },
                                 submittedAt: (participantValue.submittedAt as number) || 0,
                             });
@@ -843,6 +847,14 @@ const Analytics = () => {
                                                                 <p className="font-semibold">Game Sense</p>
                                                                 <p className="text-foreground mt-1">{entry.misc.gameSense || "N/A"}</p>
                                                             </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Strengths</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.strengths || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Weaknesses</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.weaknesses || "N/A - none found"}</p>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 )}
@@ -1209,6 +1221,14 @@ const Analytics = () => {
                                                             <div className="p-3 bg-muted rounded border border-border">
                                                                 <p className="font-semibold">Game Sense</p>
                                                                 <p className="text-foreground mt-1">{entry.misc.gameSense || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Strengths</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.strengths || "N/A - none found"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Weaknesses</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.weaknesses || "N/A - none found"}</p>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2098,6 +2118,14 @@ const Analytics = () => {
                                                             <div className="p-3 bg-muted rounded border border-border">
                                                                 <p className="font-semibold">Game Sense</p>
                                                                 <p className="text-foreground mt-1">{entry.misc.gameSense || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Strengths</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.strengths || "N/A - not found"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Weaknesses</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.weaknesses || "N/A - not found"}</p>
                                                             </div>
                                                         </div>
                                                     </div>
