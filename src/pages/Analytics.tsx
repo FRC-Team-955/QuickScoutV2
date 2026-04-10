@@ -1068,10 +1068,380 @@ const Analytics = () => {
                             ) : (
                                 <div className="flex items-center justify-center h-64">
                                     <p className="text-muted-foreground">
-                                        {teamNumberInput ? "No data found for this team" : "Enter a team number to view analytics"}
+                                        {teamNumberInput ? "No match data found for this team" : "Enter a team number to view analytics"}
                                     </p>
                                 </div>
                             )}
+                            <h3 className="font-semibold text-lg mb-3">Subjective Scouting Data</h3>
+                            {loading ? (
+                                <p>Loading subjective scouting data...</p>
+                            ) : teamNumberInput === "" ? (
+                                    <div className="flex items-center justify-center h-64">
+                                <p className="text-muted-foreground">
+                                    Enter a team number to view team subjective data
+                                </p>
+                                    </div>
+                            ) : filteredSubjectiveScoutingEntries.length === 0 ? (
+                                <p className="text-muted-foreground">
+                                    No subjective scouting data found
+                                </p>
+                            ) : (
+                                <div className="grid grid-cols-2 gap-4">
+                                    {filteredSubjectiveScoutingEntries.map((entry) => (
+                                        <Card key={entry.id} className="overflow-hidden border-l-4 border-l-accent">
+                                            <CardHeader className="bg-gradient-to-r from-accent/10 to-accent/5 pb-3">
+                                                <CardTitle className="flex justify-between items-start gap-3">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span
+                                                            className="text-2xl font-bold">Team {entry.teamNumber}</span>
+                                                        <span
+                                                            className="text-xs text-muted-foreground">Scout: {entry.scoutName}</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <div className="bg-secondary px-3 py-1 rounded text-xs font-mono">
+                                                            {new Date(entry.submittedAt).toLocaleDateString([], {timeZone: "America/Los_Angeles"})}
+                                                        </div>
+                                                        {renderDeleteButton({
+                                                            kind: "subjective",
+                                                            id: entry.id,
+                                                            path: `subjectiveMatches/${entry.matchId}/participants/${entry.userId}`,
+                                                            label: `Team ${entry.teamNumber} • Subjective scouting`,
+                                                        })}
+                                                    </div>
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="pt-4 space-y-4">
+                                                {/* Section 1: Robot Performance and Strategy */}
+                                                <div className="border-b pb-4">
+                                                    <h4 className="font-semibold text-sm mb-3 text-primary">Section 1:
+                                                        Robot Performance and Strategy</h4>
+                                                    <div className="space-y-2 text-sm">
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Autonomous Effectiveness</p>
+                                                            <p className="text-foreground mt-1">{entry.robotPerformance.autonomousEffectiveness || "N/A"}</p>
+                                                        </div>
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Can Quickly Score Fuels</p>
+                                                            <p className="text-foreground mt-1">{entry.robotPerformance.canQuicklyScore || "N/A"}</p>
+                                                        </div>
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Can Climb</p>
+                                                            <div className="text-foreground mt-1">
+                                                                <p>{entry.robotPerformance.canClimb || "N/A"}</p>
+                                                                {entry.robotPerformance.climbLevel && (
+                                                                    <p className="text-xs text-muted-foreground mt-1">Level: {entry.robotPerformance.climbLevel}</p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Section 2: Team Dynamics */}
+                                                <div className="border-b pb-4">
+                                                    <h4 className="font-semibold text-sm mb-3 text-primary">Section 2:
+                                                        Team Dynamics</h4>
+                                                    <div className="space-y-2 text-sm">
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Performance Under Pressure</p>
+                                                            <p className="text-foreground mt-1">{entry.teamDynamics.performanceUnderPressure || "N/A"}</p>
+                                                        </div>
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Team Focus</p>
+                                                            <p className="text-foreground mt-1">{entry.teamDynamics.teamFocus || "N/A"}</p>
+                                                        </div>
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Driver Synchronization</p>
+                                                            <p className="text-foreground mt-1">{entry.teamDynamics.driverSynchronization || "N/A"}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Section 3: Tactical Insights */}
+                                                <div>
+                                                    <h4 className="font-semibold text-sm mb-3 text-primary">Section 3:
+                                                        Tactical Insights</h4>
+                                                    <div className="space-y-2 text-sm">
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Defensive Strategy</p>
+                                                            <p className="text-foreground mt-1">{entry.tacticalInsights.defensiveStrategy || "N/A"}</p>
+                                                        </div>
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Blocking Effectiveness</p>
+                                                            <p className="text-foreground mt-1">{entry.tacticalInsights.blockingEffectiveness || "N/A"}</p>
+                                                        </div>
+                                                        <div className="p-3 bg-muted rounded border border-border">
+                                                            <p className="font-semibold">Ally Cooperation</p>
+                                                            <p className="text-foreground mt-1">{entry.tacticalInsights.allyCooperation || "N/A"}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {/* Section 4: Misc (new subjective prompts) */}
+                                                {entry.misc && (
+                                                    <div className="pt-4 border-t border-border">
+                                                        <h4 className="font-semibold text-sm mb-3 text-primary">Section 4: Misc</h4>
+                                                        <div className="space-y-2 text-sm">
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Defensive Skill</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.defensiveSkill || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Robot Reliability</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.robotReliability || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Robot Penalties</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.robotPenalties || "N/A"}</p>
+                                                            </div>
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                <div className="p-3 bg-muted rounded border border-border">
+                                                                    <p className="font-semibold">Auto Fuel</p>
+                                                                    <p className="text-foreground mt-1">{entry.misc.autoFuel || "N/A"}</p>
+                                                                </div>
+                                                                <div className="p-3 bg-muted rounded border border-border">
+                                                                    <p className="font-semibold">Auto Climb</p>
+                                                                    <p className="text-foreground mt-1">{entry.misc.autoClimb || "N/A"}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Teleop Passing</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.teleopPassing || "N/A"}</p>
+                                                            </div>
+                                                            <div className="p-3 bg-muted rounded border border-border">
+                                                                <p className="font-semibold">Game Sense</p>
+                                                                <p className="text-foreground mt-1">{entry.misc.gameSense || "N/A"}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
+                            )}
+
+                            <h3 className="font-semibold text-lg mb-3">Pit Scouting Data</h3>
+
+                            {loading ? (
+                                <p>Loading pit scouting data...</p>
+                            ) : teamNumberInput === "" ? (
+                                <div className="flex items-center justify-center h-64">
+                                    <p className="text-muted-foreground">
+                                        Enter a team number to view team pit data
+                                    </p>
+                                </div>
+                            ) : filteredPitScoutingEntries.length === 0 ? (
+                                <p className="text-muted-foreground">
+                                    No subjective scouting data found
+                                </p>
+                            ) : (
+                                <div className="space-y-4">
+
+
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                        {(teamNumberInput
+                                                ? filteredPitScoutingEntries.filter(e => e.teamNumber === parseInt(teamNumberInput))
+                                                : filteredPitScoutingEntries
+                                        ).map((entry) => {
+                                            console.log(entry); // looks ok?
+                                            const formatKey = (key: string) => {
+                                                return key
+                                                    .replace(/-/g, "_")
+                                                    .split("_")
+                                                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                                                    .join(" ");
+                                            };
+
+                                            const formatValue = (value: unknown): string => {
+                                                if (value === null || value === undefined) return "N/A";
+                                                if (typeof value === "boolean") return value ? "Yes" : "No";
+                                                if (Array.isArray(value)) return value.join(", "); // render arrays nicely
+                                                if (typeof value === "object") return ""; // leave objects for separate rendering
+                                                return String(value).trim();
+                                            };
+
+                                            // Organize responses by category
+                                            const robotFunctions = new Map<string, unknown>();
+                                            const robotCapabilities = new Map<string, unknown>();
+                                            const autos = new Map<string, Record<string, unknown>>(); // notice type change
+                                            const drivebase = new Map<string, unknown>();
+                                            const strategyNotes = new Map<string, unknown>();
+
+                                            Object.entries(entry.responses).forEach(([key, value]) => {
+                                                if (value === null || value === undefined || (typeof value === "boolean" && !value)) return;
+
+                                                if (key.toLowerCase().includes("intake") || key.toLowerCase().includes("climb")) {
+                                                    robotFunctions.set(key, value);
+                                                } else if (
+                                                    key.toLowerCase().includes("defense") ||
+                                                    key.toLowerCase().includes("shooter") ||
+                                                    key.toLowerCase().includes("fuel-hopper") ||
+                                                    key.toLowerCase().includes("bps") ||
+                                                    key.toLowerCase().includes("under-trench") ||
+                                                    key.toLowerCase().includes("over-bump") ||
+                                                    key.toLowerCase().includes("shoot-on") ||
+                                                    key.toLowerCase().includes("pass-fuel") ||
+                                                    key.toLowerCase().includes("climb")
+                                                ) {
+                                                    robotCapabilities.set(key, value);
+                                                } else if (key.toLowerCase().startsWith("auto") && typeof value === "object") {
+                                                    autos.set(key, value as Record<string, unknown>); // store nested object
+                                                } else if (key.toLowerCase().includes("dimension") || key.toLowerCase().includes("special-detail")) {
+                                                    drivebase.set(key, value);
+                                                } else if (
+                                                    key.toLowerCase().includes("strength") ||
+                                                    key.toLowerCase().includes("weakness") ||
+                                                    key.toLowerCase().includes("feature") ||
+                                                    key.toLowerCase().includes("note")
+                                                ) {
+                                                    strategyNotes.set(key, value);
+                                                }
+                                            });
+
+                                            const generateTextDump = () => {
+                                                return JSON.stringify(entry, null, 2);
+                                            };
+
+                                            return (
+                                                <Card key={entry.id} className="overflow-hidden">
+                                                    <CardHeader
+                                                        className="bg-gradient-to-r from-primary/10 to-primary/5 pb-3">
+                                                        <CardTitle className="flex justify-between items-start gap-3">
+                                                            <div className="flex flex-col gap-1">
+                                                                <span
+                                                                    className="text-2xl font-bold">Team {entry.teamNumber}</span>
+                                                                <span
+                                                                    className="text-xs text-muted-foreground">Scout: {entry.scoutName}</span>
+                                                            </div>
+                                                            <div className="flex items-start gap-2">
+                                                                <div
+                                                                    className="bg-secondary px-3 py-1 rounded text-xs font-mono">
+                                                                    {new Date(entry.submittedAt).toLocaleDateString([], {timeZone: "America/Los_Angeles"})}
+                                                                </div>
+                                                                {renderDeleteButton({
+                                                                    kind: "pit",
+                                                                    id: entry.id,
+                                                                    path: `pitScouting/${entry.dateStr}/${entry.teamNumber}/${entry.scoutId}`,
+                                                                    label: `Team ${entry.teamNumber} • Pit scouting`,
+                                                                })}
+                                                            </div>
+                                                        </CardTitle>
+                                                    </CardHeader>
+                                                    <CardContent className="pt-4 space-y-4">
+                                                        {robotFunctions.size > 0 && (
+                                                            <div>
+                                                                <h4 className="font-semibold text-sm mb-2 text-primary">Robot
+                                                                    Functions</h4>
+                                                                <div className="space-y-1 text-sm">
+                                                                    {Array.from(robotFunctions.entries()).map(([key, value]) => (
+                                                                        <div key={key}
+                                                                             className="flex justify-between items-center py-1 px-2 bg-secondary/40 rounded">
+                                                                            <span
+                                                                                className="font-medium">{formatKey(key)}</span>
+                                                                            <span
+                                                                                className="font-semibold text-primary">{formatValue(value)}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {robotCapabilities.size > 0 && (
+                                                            <div>
+                                                                <h4 className="font-semibold text-sm mb-2 text-primary">Robot
+                                                                    Capabilities</h4>
+                                                                <div className="space-y-1 text-sm">
+                                                                    {Array.from(robotCapabilities.entries()).map(([key, value]) => (
+                                                                        <div key={key}
+                                                                             className="flex justify-between items-center py-1 px-2 bg-secondary/40 rounded">
+                                                                            <span
+                                                                                className="font-medium">{formatKey(key)}</span>
+                                                                            <span
+                                                                                className="font-semibold text-primary">{formatValue(value)}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {autos.size > 0 && (
+                                                            <div>
+                                                                <h4 className="font-semibold text-sm mb-2 text-primary">Autonomous</h4>
+                                                                <div className="space-y-2 text-sm">
+                                                                    {Array.from(autos.entries()).map(([autoKey, autoObj]) => (
+                                                                        <div
+                                                                            key={autoKey}
+                                                                            className="p-2 bg-secondary/40 rounded space-y-1"
+                                                                        >
+                                                                            <p className="font-semibold text-primary">{formatKey(autoKey)}</p>
+                                                                            {Object.entries(autoObj).map(([subKey, subValue]) => (
+                                                                                <div
+                                                                                    key={subKey}
+                                                                                    className="flex justify-between items-center py-1 px-2 bg-secondary/20 rounded"
+                                                                                >
+                                                                                    <span className="font-medium">{formatKey(subKey)}</span>
+                                                                                    <span className="text-primary font-semibold">
+                                                                                        {Array.isArray(subValue) ? subValue.join(", ") : String(subValue)}
+                                                                                      </span>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {drivebase.size > 0 && (
+                                                            <div>
+                                                                <h4 className="font-semibold text-sm mb-2 text-primary">Drivebase</h4>
+                                                                <div className="space-y-2 text-sm">
+                                                                    {Array.from(drivebase.entries()).map(([key, value]) => (
+                                                                        <div key={key}
+                                                                             className="p-3 bg-muted rounded border border-border">
+                                                                            <p className="font-semibold text-foreground">{formatKey(key)}</p>
+                                                                            <p className="text-foreground mt-2">{formatValue(value)}</p>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {strategyNotes.size > 0 && (
+                                                            <div className="pt-2 border-t border-border">
+                                                                <h4 className="font-semibold text-sm mb-2 text-primary">Strategy
+                                                                    & Notes</h4>
+                                                                <div className="space-y-2 text-sm">
+                                                                    {Array.from(strategyNotes.entries()).map(([key, value]) => (
+                                                                        <div key={key}
+                                                                             className="p-3 bg-muted rounded border border-border">
+                                                                            <p className="font-semibold text-foreground">{formatKey(key)}</p>
+                                                                            <p className="text-foreground mt-2 whitespace-pre-wrap">{formatValue(value)}</p>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        <div className="pt-4 border-t border-border">
+                                                            <button
+                                                                className="px-2 py-1 text-xs bg-primary text-white rounded hover:bg-primary/80"
+                                                                onClick={() => setShowJson(!showJson)}
+                                                            >
+                                                                {showJson ? "Hide JSON Dump" : "Show JSON Dump"}
+                                                            </button>
+
+                                                            {showJson && (
+                                                                <pre className="mt-2 text-xs bg-black/80 text-foreground p-3 rounded overflow-x-auto whitespace-pre-wrap">
+                                                                  {JSON.stringify(entry, null, 2)}
+                                                                </pre>
+                                                            )}
+                                                        </div>
+                                                    </CardContent>
+                                                </Card>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
                         </TabsContent>
 
                         <TabsContent value="scouter" className="space-y-4">
