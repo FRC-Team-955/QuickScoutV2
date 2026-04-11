@@ -454,6 +454,8 @@ const Analytics = () => {
         fetchData();
     }, []);
 
+
+
     const sortedAndFiltered = useMemo(() => {
         let filtered = matchEntries;
         
@@ -721,6 +723,12 @@ const Analytics = () => {
         link.click();
         document.body.removeChild(link);
     };
+
+    const sortedEntries = useMemo(() => {
+        return [...filteredSubjectiveScoutingEntries].sort(
+            (a, b) => b.submittedAt - a.submittedAt
+        );
+    }, [filteredSubjectiveScoutingEntries]);
 
     return (
         <div className="min-h-screen bg-background">
@@ -1996,7 +2004,7 @@ const Analytics = () => {
                                 <p className="text-muted-foreground">No subjective scouting data found</p>
                             ) : (
                                 <div className="grid grid-cols-1 gap-4">
-                                        {filteredSubjectiveScoutingEntries.map((entry) => (
+                                    {sortedEntries.map((entry) =>  (
                                         <Card key={entry.id} className="overflow-hidden border-l-4 border-l-accent">
                                             <CardHeader className="bg-gradient-to-r from-accent/10 to-accent/5 pb-3">
                                                 <CardTitle className="flex justify-between items-start gap-3">
