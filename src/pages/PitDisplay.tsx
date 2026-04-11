@@ -242,16 +242,16 @@ const PitDisplay = () => {
 
     const streamUrl = useMemo(() => {
         if (!webcasts.length) return null;
-        const webcast = webcasts[5];
+        const webcast = webcasts[4];
         const url = buildStreamUrl(webcast);
         if (!url) return null;
 
         // Add YouTube embed parameters if it's a YouTube URL
-        // if (webcast.type === "youtube") {
-        //     return `${url}?autoplay=1&playsinline=1&mute=0&rel=0&modestbranding=1`;
-        // }
+        if (webcast.type === "youtube") {
+            return `${url}?autoplay=1&playsinline=1&mute=0&rel=0&modestbranding=1`;
+        }
 
-        return `https://player.twitch.tv/?channel=firstwa_blue1&parent=${window.location.hostname}`//;
+        return url;
     }, [webcasts]);
 
     const isEmbeddable = useMemo(() => {
