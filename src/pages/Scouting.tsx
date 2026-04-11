@@ -423,6 +423,8 @@ const Scouting = () => {
                         autoClimb: autoClimb1,
                         teleopPassing,
                         gameSense,
+                        strengths,
+                        weaknesses
                     },
                 });
                 await remove(ref(db, `users/${user.id}/currentSubjectiveAssignment`));

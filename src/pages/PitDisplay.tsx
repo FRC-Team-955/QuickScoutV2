@@ -4,7 +4,7 @@ import {useNavigate} from "react-router-dom";
 import {Button} from "@/components/ui/button";
 import {Badge} from "@/components/ui/badge";
 import {cn} from "@/lib/utils";
-import {buildStreamUrl, getEventMatches, getEventStatus, getEventWebcasts, getPlayoffMatchLabel} from "@/lib/tba";
+import {getEventMatches, getEventStatus, getEventWebcasts, getPlayoffMatchLabel} from "@/lib/tba";
 import {getEventLiveStatus, type NexusEventStatusResponse} from "@/lib/nexus";
 import {useAuth} from "@/contexts/AuthContext";
 
@@ -242,14 +242,14 @@ const PitDisplay = () => {
 
     const streamUrl = useMemo(() => {
         if (!webcasts.length) return null;
-        const webcast = webcasts[2];
-        const url = buildStreamUrl(webcast);
+        const webcast = webcasts[0];
+        const url = "https://player.twitch.tv/?channel=firstwa_blue1&parent=localhost"//buildStreamUrl(webcast);
         if (!url) return null;
 
         // Add YouTube embed parameters if it's a YouTube URL
-        if (webcast.type === "youtube") {
-            return `${url}?autoplay=1&playsinline=1&mute=0&rel=0&modestbranding=1`;
-        }
+        // if (webcast.type === "youtube") {
+        //     return `${url}?autoplay=1&playsinline=1&mute=0&rel=0&modestbranding=1`;
+        // }
 
         return url;
     }, [webcasts]);
