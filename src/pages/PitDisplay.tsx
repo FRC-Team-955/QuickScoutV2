@@ -243,7 +243,7 @@ const PitDisplay = () => {
     const streamUrl = useMemo(() => {
         if (!webcasts.length) return null;
         const webcast = webcasts[0];
-        const url = "https://player.twitch.tv/?channel=firstwa_blue1&parent=localhost"//buildStreamUrl(webcast);
+        const url = "https://player.twitch.tv/?channel=firstwa_blue1&parent=frc-team-955.github.io"//buildStreamUrl(webcast);
         if (!url) return null;
 
         // Add YouTube embed parameters if it's a YouTube URL
