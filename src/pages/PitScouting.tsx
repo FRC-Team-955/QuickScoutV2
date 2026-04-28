@@ -38,47 +38,13 @@ interface PitScoutingResponse {
 const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
 
     ///////////// Intake Type
-    {
-        id: "intake-type",
-        label: "Intaking Locations",
-        section: "Robot Functions",
-        type: "label",
-        parent: null,
-        required: false
-    },
-    {
-        id: "intake-ground-neutral-zone",
-        name: "Neutral Zone",
-        section: "Robot Functions",
-        type: "button-group-multi",
-        parent: "Intaking Locations",
-        label: "",
-        required: false
-    },
-    {
-        id: "intake-ground-outpost",
-        name: "Outpost/Human Player Station",
-        section: "Robot Functions",
-        type: "button-group-multi",
-        parent: "Intaking Locations",
-        label: "",
-        required: false
-    },
-    {
-        id: "intake-ground-depot",
-        name: "Depot",
-        section: "Robot Functions",
-        type: "button-group-multi",
-        parent: "Intaking Locations",
-        label: "",
-        required: false
-    },
+
 
     /////////////////////////////////////////// Climb
     {
         id: "climb-level",
         label: "Climb",
-        section: "Robot Functions",
+        section: "Robot Capabilities",
         type: "label",
         parent: null,
         required: false
@@ -86,7 +52,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "climb-level-l1",
         name: "L1",
-        section: "Robot Functions",
+        section: "Robot Capabilities",
         type: "button-group",
         parent: "Climb",
         label: "",
@@ -95,7 +61,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "climb-level-l2",
         name: "L2",
-        section: "Robot Functions",
+        section: "Robot Capabilities",
         type: "button-group",
         parent: "Climb",
         label: "",
@@ -104,7 +70,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "climb-level-l3",
         name: "L3",
-        section: "Robot Functions",
+        section: "Robot Capabilities",
         type: "button-group",
         parent: "Climb",
         label: "",
@@ -113,7 +79,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "climb-level-none",
         name: "Nah",
-        section: "Robot Functions",
+        section: "Robot Capabilities",
         type: "button-group",
         parent: "Climb",
         label: "",
@@ -122,63 +88,11 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
 
 
     ///////////////// CLimb Location
-    {
-        id: "climb-location",
-        label: "Climb location",
-        section: "Robot Functions",
-        type: "label",
-        required: false,
-        parent: null,
-    },
-    {
-        id: "climb-location-side",
-        name: "Side",
-        section: "Robot Functions",
-        type: "button-group-multi",
-        required: false,
-        parent: "Climb location",
-        label: ""
-    },
-    {
-        id: "climb-location-middle",
-        name: "Middle",
-        section: "Robot Functions",
-        type: "button-group-multi",
-        required: false,
-        parent: "Climb location",
-        label: ""
-    },
-    {
-        id: "climb-location-straddling",
-        name: "Straddling the Upright",
-        section: "Robot Functions",
-        type: "button-group-multi",
-        required: false,
-        parent: "Climb location",
-        label: ""
-    },
-    {
-        id: "climb-location-backflip",
-        name: "Backflip",
-        section: "Robot Functions",
-        type: "button-group-multi",
-        required: false,
-        parent: "Climb location",
-        label: ""
-    },
-    {
-        id: "climb-location-other",
-        name: "Nah",
-        section: "Robot Functions",
-        type: "button-group-multi",
-        required: false,
-        parent: "Climb location",
-        label: ""
-    },
+
     {
         id: "size-constraints",
         label: "Size Constraints",
-        section: "Robot capabilities",
+        section: "Robot Capabilities",
         type: "label",
         required: false,
         parent: null,
@@ -186,7 +100,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "under-trench-height",
         name: "Under Trench height (22.25\")",
-        section: "Robot capabilities",
+        section: "Robot Capabilities",
         type: "button-group-multi",
         required: false,
         parent: "Size Constraints",
@@ -195,7 +109,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "over-bump",
         name: "Over the Bump",
-        section: "Robot capabilities",
+        section: "Robot Capabilities",
         type: "button-group-multi",
         required: false,
         parent: "Size Constraints",
@@ -204,7 +118,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "shooting-capabilities",
         label: "Shooting Capabilities",
-        section: "Robot capabilities",
+        section: "Robot Capabilities",
         type: "label",
         required: false,
         parent: null,
@@ -212,7 +126,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "shoot-on-move",
         name: "Shoot on the Move",
-        section: "Robot capabilities",
+        section: "Robot Capabilities",
         type: "button-group-multi",
         required: false,
         parent: "Shooting Capabilities",
@@ -221,7 +135,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "pass-fuel",
         name: "Pass Fuel to Alliance Zone",
-        section: "Robot capabilities",
+        section: "Robot Capabilities",
         type: "button-group-multi",
         required: false,
         parent: "Shooting Capabilities",
@@ -230,7 +144,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "defense-rating",
         label: "Defense rating (1-5):",
-        section: "Robot capabilities",
+        section: "Robot Capabilities",
         type: "label",
         required: false,
         parent: null,
@@ -238,7 +152,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "defense-rating-1",
         name: "1",
-        section: "Robot capabilities",
+        section: "Robot Capabilities",
         type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
@@ -247,7 +161,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "defense-rating-2",
         name: "2",
-        section: "Robot capabilities",
+        section: "Robot Capabilities",
         type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
@@ -256,7 +170,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "defense-rating-3",
         name: "3",
-        section: "Robot capabilities",
+        section: "Robot Capabilities",
         type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
@@ -265,7 +179,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "defense-rating-4",
         name: "4",
-        section: "Robot capabilities",
+        section: "Robot Capabilities",
         type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
@@ -274,7 +188,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "defense-rating-5",
         name: "5",
-        section: "Robot capabilities",
+        section: "Robot Capabilities",
         type: "button-group",
         required: false,
         parent: "Defense rating (1-5):",
@@ -284,7 +198,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         id: "fuel-hopper",
         label: "Approximate max fuel in hopper:",
         placeholder: "",
-        section: "Robot capabilities",
+        section: "Robot Capabilities",
         type: "text",
         required: false,
         parent: null,
@@ -293,7 +207,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "shooter-type",
         label: "Shooter type:",
-        section: "Robot capabilities",
+        section: "Robot Capabilities",
         type: "text",
         required: false,
         placeholder: "eg., turret, drum shooter, hooded, fixed",
@@ -302,7 +216,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "bps",
         label: "BPS (balls per sec):",
-        section: "Robot capabilities",
+        section: "Robot Capabilities",
         type: "text",
         required: false,
         placeholder: "",
@@ -321,7 +235,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "modify-autos-cannot",
         name: "Can't change at comp",
-        section: "Robot Functions",
+        section: "Robot Capabilities",
         type: "button-group",
         parent: "How easily can they modify autos (on the spot)?",
         label: "",
@@ -330,7 +244,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "modify-autos-hard",
         name: "Hard to change",
-        section: "Robot Functions",
+        section: "Robot Capabilities",
         type: "button-group",
         parent: "How easily can they modify autos (on the spot)?",
         label: "",
@@ -339,7 +253,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "modify-autos-medium",
         name: "Medium",
-        section: "Robot Functions",
+        section: "Robot Capabilities",
         type: "button-group",
         parent: "How easily can they modify autos (on the spot)?",
         label: "",
@@ -348,7 +262,7 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     {
         id: "modify-autos-easy",
         name: "Easy to change",
-        section: "Robot Functions",
+        section: "Robot Capabilities",
         type: "button-group",
         parent: "How easily can they modify autos (on the spot)?",
         label: "",
@@ -539,36 +453,9 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
         type: "label", // yea just cuz
         required: false,
         parent: null,
-    }, // this one duplicates the climb options from robot capabilities section
+    }, // this one duplicates the climb options from Robot Capabilities section
 
-    ///// Drivebase
-    {
-        id: "dimensions",
-        label: "Dimensions (with bumpers):",
-        section: "Drivebase",
-        type: "text",
-        required: false,
-        placeholder: "ex. 31\"x28\"",
-        parent: null,
-    },
-    {
-        id: "weight",
-        label: "Weight (with bumpers/battery):",
-        section: "Drivebase",
-        type: "text",
-        required: false,
-        placeholder: "ex. 74.9 lbs",
-        parent: null,
-    },
-    {
-        id: "special-details",
-        label: "Any special details:",
-        section: "Drivebase",
-        type: "text",
-        required: false,
-        placeholder: "eg., swerve type, gearing",
-        parent: null,
-    },
+
     {
         id: "robot-strengths",
         label: "Robot Strengths",
