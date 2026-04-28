@@ -1,5 +1,6 @@
 import {Fragment, useEffect, useRef, useState} from "react";
 import {useNavigate} from "react-router-dom";
+import {useTranslation} from "react-i18next";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/Topbar";
 import {Button} from "@/components/ui/button";
@@ -498,10 +499,67 @@ const PIT_SCOUTING_QUESTIONS: PitScoutingQuestion[] = [
     },
 ];
 
+const getTranslationKey = (label: string): string => {
+    const labelToKeyMap: Record<string, string> = {
+        "Climb": "climb",
+        "L1": "climbL1",
+        "L2": "climbL2",
+        "L3": "climbL3",
+        "Nah": "climbNone",
+        "Size Constraints": "sizeConstraints",
+        "Under Trench height (22.25\")": "underTrenchHeight",
+        "Over the Bump": "overBump",
+        "Shooting Capabilities": "shootingCapabilities",
+        "Shoot on the Move": "shootOnMove",
+        "Pass Fuel to Alliance Zone": "passFuel",
+        "Defense rating (1-5):": "defenseRating",
+        "1": "defenseRating1",
+        "2": "defenseRating2",
+        "3": "defenseRating3",
+        "4": "defenseRating4",
+        "5": "defenseRating5",
+        "Approximate max fuel in hopper:": "approxMaxFuel",
+        "Shooter type:": "shooterType",
+        "BPS (balls per sec):": "bps",
+        "How easily can they modify autos (on the spot)?": "modifyAutos",
+        "Can't change at comp": "cantChangeAtComp",
+        "Hard to change": "hardToChange",
+        "Medium": "medium",
+        "Easy to change": "easyToChange",
+        "Auto Description": "autoDescription",
+        "Starting Location": "startingLocation",
+        "Center (in front of hub)": "centerHub",
+        "Left Trench": "leftTrench",
+        "Right Trench": "rightTrench",
+        "Left Bump": "leftBump",
+        "Right Bump": "rightBump",
+        "Other": "other",
+        "Other starting location:": "otherStartingLocation",
+        "Cycle Path": "cyclePath",
+        "Preloaded Fuel": "preloadedFuel",
+        "Shoot": "shoot",
+        "No shoot (races to neutral zone)": "noShootNeutralZone",
+        "No shoot (can't shoot)": "noShootCantShoot",
+        "Estimated Fuel Scored:": "estimatedFuel",
+        "Robot Strengths": "robotStrengths",
+        "Robot Weaknesses": "robotWeaknesses",
+        "Notable Features": "notableFeatures",
+        "Driver Experience": "driverExperience",
+        "Additional Notes": "additionalNotes",
+        "Robot Capabilities": "robotCapabilities",
+        "Auto Capabilities": "autoCapabilities",
+        "Autos": "autos",
+        "Strategy & Notes": "strategyNotes",
+    };
+    return labelToKeyMap[label] || label;
+};
+
 const PitScouting = () => {
     const {user} = useAuth();
     const navigate = useNavigate();
+    const {t, i18n} = useTranslation();
     const [activeTab, setActiveTab] = useState("pit-scouting");
+    const [language, setLanguage] = useState(i18n.language);
 
     const [unscoutedTeams, setUnscoutedTeams] = useState<number[]>([]);
 
@@ -564,6 +622,11 @@ const PitScouting = () => {
         } else if (tab === "leaderboard") {
             navigate("/leaderboard");
         }
+    };
+
+    const handleLanguageChange = (lang: string) => {
+        setLanguage(lang);
+        i18n.changeLanguage(lang);
     };
 
     const [questions] = useState<PitScoutingQuestion[]>(PIT_SCOUTING_QUESTIONS);
@@ -758,7 +821,7 @@ const PitScouting = () => {
                             disabled={!isActive}
                             className="flex-1"
                         >
-                            Yes
+                            {t('yes')}
                         </Button>
                         <Button
                             variant={value === "no" ? "default" : "outline"}
@@ -766,7 +829,7 @@ const PitScouting = () => {
                             disabled={!isActive}
                             className="flex-1"
                         >
-                            No
+                            {t('no')}
                         </Button>
                     </div>
                 );
@@ -830,7 +893,7 @@ const PitScouting = () => {
                         disabled={!isActive}
                         className="w-full"
                     >
-                        {question.name}
+                        {t(getTranslationKey(question.name!))}
                     </Button>
 
                 );
@@ -849,7 +912,7 @@ const PitScouting = () => {
                         disabled={!isActive}
                         className="w-full"
                     >
-                        {question.name}
+                        {t(getTranslationKey(question.name!))}
                     </Button>
                 );
             }
@@ -870,22 +933,42 @@ const PitScouting = () => {
 
                 <div className="p-6">
                     <div className="space-y-6">
+                        {/* Language Selector */}
+                        <div className="flex justify-end mb-4">
+                            <div className="flex items-center gap-2">
+                                <Label htmlFor="language-select" className="font-semibold">{t('language')}:</Label>
+                                <Select value={language} onValueChange={handleLanguageChange}>
+                                    <SelectTrigger id="language-select" className="w-32">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="en">English</SelectItem>
+                                        <SelectItem value="zh">中文</SelectItem>
+                                        <SelectItem value="es">Español</SelectItem>
+                                        <SelectItem value="tr">Türkçe</SelectItem>
+                                        <SelectItem value="he">עברית</SelectItem>
+                                        <SelectItem value="pt">Português</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
                         {!isActive && (
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Start Pit Scouting Session</CardTitle>
+                                    <CardTitle>{t('startPitScouting')}</CardTitle>
                                     <CardDescription>
-                                        Enter the team number you're scouting
+                                        {t('enterTeamNumber')}
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
                                     <div className="space-y-2">
-                                        <Label htmlFor="pit-team-number">Team Number</Label>
+                                        <Label htmlFor="pit-team-number">{t('teamNumber')}</Label>
                                         <Input
                                             id="pit-team-number"
                                             type="text"
                                             inputMode="numeric"
-                                            placeholder="Enter team number"
+                                            placeholder={t('teamNumberPlaceholder')}
                                             value={teamNumber}
                                             onChange={(e) => setTeamNumber(e.target.value)}
                                         />
@@ -898,7 +981,7 @@ const PitScouting = () => {
                                         disabled={!teamNumber.trim()}
                                     >
                                         <Play className="w-4 h-4 mr-2"/>
-                                        Start Pit Scouting
+                                        {t('startPitScoutingButton')}
                                     </Button>
                                 </CardContent>
                             </Card>
@@ -909,9 +992,9 @@ const PitScouting = () => {
                                 <CardHeader>
                                     <div className="flex items-center justify-between">
                                         <div>
-                                            <CardTitle>Pit Scouting - Team {teamNumber}</CardTitle>
+                                            <CardTitle>{t('pitScoutingTeam', { team: teamNumber })}</CardTitle>
                                             <CardDescription>
-                                                Answer all fields
+                                                {t('answerAllFields')}
                                             </CardDescription>
                                         </div>
                                         <Button
@@ -929,8 +1012,8 @@ const PitScouting = () => {
                       </span>
                                             <span className="flex-1 min-w-0">
                         {cancelConfirm
-                            ? "Are you sure? Click again to cancel"
-                            : "Cancel"}
+                            ? t('cancelConfirm')
+                            : t('cancel')}
                       </span>
                                         </Button>
                                     </div>
@@ -949,7 +1032,7 @@ const PitScouting = () => {
                                                             className="bg-gradient-to-r from-primary/10 to-primary/5">
                                                             <div className="flex items-center justify-between">
                                                                 <CardTitle className="text-lg text-primary">
-                                                                    Auto {index + 1}
+                                                                    {t('auto', { number: index + 1 })}
                                                                 </CardTitle>
                                                                 {(
                                                                     <Button size="sm" variant="destructive"
@@ -969,7 +1052,7 @@ const PitScouting = () => {
                                                                     <div key={prefixed.id} className="space-y-3">
                                                                         <div className="space-y-2">
                                                                             <Label
-                                                                                className="text-sm font-semibold">{question.label}</Label>
+                                                                                className="text-sm font-semibold">{t(getTranslationKey(question.label))}</Label>
                                                                             <div
                                                                                 className="mt-2">{renderQuestion(prefixed)}</div>
                                                                         </div>
@@ -997,14 +1080,14 @@ const PitScouting = () => {
                                                 ))}
                                                 <Button variant="outline" className="w-full"
                                                         onClick={() => setAutoCount(prev => prev + 1)}>
-                                                    + Add Auto
+                                                    {t('addAuto')}
                                                 </Button>
                                             </Fragment>
                                         ) :
                                         (
                                             <Card key={section} className="overflow-hidden">
                                                 <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5">
-                                                    <CardTitle className="text-lg text-primary">{section}</CardTitle>
+                                                    <CardTitle className="text-lg text-primary">{t(getTranslationKey(section))}</CardTitle>
                                                 </CardHeader>
                                                 <CardContent className="pt-6 space-y-6">
                                                     {sectionQ.filter(q => !q.parent).map((question) => (
@@ -1016,7 +1099,7 @@ const PitScouting = () => {
                                                                         question.required ? "after:content-['_*'] after:text-destructive" : ""
                                                                     }`}
                                                                 >
-                                                                    {question.label}
+                                                                    {t(getTranslationKey(question.label))}
                                                                 </Label>
                                                                 <div
                                                                     className={question.type === "checkbox" ? "" : "mt-2"}>
@@ -1037,7 +1120,7 @@ const PitScouting = () => {
                                                                                 <>
                                                                                     <Label htmlFor={childQuestion.id}
                                                                                            className="text-sm font-medium">
-                                                                                        {childQuestion.label}
+                                                                                        {t(getTranslationKey(childQuestion.label))}
                                                                                     </Label>
                                                                                     <div className="mt-2">
                                                                                         {renderQuestion(childQuestion)}
@@ -1061,7 +1144,7 @@ const PitScouting = () => {
                                         className="flex-1"
                                         size="lg"
                                     >
-                                        Submit Pit Scouting
+                                        {t('submitPitScouting')}
                                     </Button>
                                 </div>
                             </>
@@ -1071,7 +1154,7 @@ const PitScouting = () => {
                             <Card>
                                 <CardContent className="pt-6">
                                     <p className="text-muted-foreground">
-                                        Loading pit scouting form...
+                                        {t('loadingPitForm')}
                                     </p>
                                 </CardContent>
                             </Card>
@@ -1084,24 +1167,22 @@ const PitScouting = () => {
                     loading ? (
                         <Card>
                             <CardContent className="py-8">
-                                <p className="text-center text-muted-foreground">Loading pit scouting
-                                    data...</p>
+                                <p className="text-center text-muted-foreground">{t('loadingPitData')}</p>
                             </CardContent>
                         </Card>
                     ) : unscoutedTeams.length === 0 ? (
                         <Card>
                             <CardContent className="py-8">
-                                <p className="text-center text-muted-foreground">No pit scouting data
-                                    available</p>
+                                <p className="text-center text-muted-foreground">{t('noPitData')}</p>
                             </CardContent>
                         </Card>
                     ) : (
                         <div className="space-y-4 p-6">
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Unscouted Teams</CardTitle>
+                                    <CardTitle>{t('unscouted')}</CardTitle>
                                     <CardDescription>
-                                        Click a team below to start scouting
+                                        {t('unscouted_description')}
                                     </CardDescription>
                                 </CardHeader>
 
