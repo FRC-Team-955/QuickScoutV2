@@ -1,6 +1,9 @@
+import { NEXUS_EVENT_KEY } from "@/lib/nexusConfig";
+
 const NEXUS_BASE = "https://frc.nexus/api/v1";
 
 export const NEXUS_API_KEY = atob("SGxvLU9sUjduLWRMUHlTYlB2cFMtcEhCRzFB");
+export const NEXUS_EVENT_KEY = "2026pncmp";
 
 export const nexusFetch = async <T = unknown>(path: string, init: RequestInit = {}): Promise<T> => {
 	const res = await fetch(`${NEXUS_BASE}${path}`, {
@@ -39,18 +42,26 @@ export type NexusEventStatusResponse = {
 	partsRequests?: unknown[];
 };
 
-export const getEventLiveStatus = async (eventKey: string): Promise<NexusEventStatusResponse> => {
+export const getEventLiveStatus = async (eventKey: string = NEXUS_EVENT_KEY): Promise<NexusEventStatusResponse> => {
 	return nexusFetch<NexusEventStatusResponse>(`/event/${eventKey}`);
 };
 
-export const getCurrentQueuingMatch = async (eventKey: string): Promise<string | null> => {
-	const status = await nexus.getEventLiveStatus(eventKey);
+export const getCurrentQueuingMatch = async (eventKey: string = NEXUS_EVENT_KEY): Promise<string | null> => {
+	const status = await getEventLiveStatus(eventKey);
 	return status.nowQueuing ?? null;
 };
 
-export const nexus = {
+export const nexus: {
+	base: string;
+	apiKey: string;
+	eventKey: string;
+	fetch: typeof nexusFetch;
+	getEventLiveStatus: typeof getEventLiveStatus;
+	getCurrentQueuingMatch: typeof getCurrentQueuingMatch;
+} = {
 	base: NEXUS_BASE,
 	apiKey: NEXUS_API_KEY,
+	eventKey: NEXUS_EVENT_KEY,
 	fetch: nexusFetch,
 	getEventLiveStatus,
 	getCurrentQueuingMatch,

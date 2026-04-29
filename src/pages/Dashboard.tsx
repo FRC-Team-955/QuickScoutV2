@@ -5,7 +5,7 @@ import TeamCard from "../components/TeamCard";
 import MatchesTable from "../components/MatchesTable";
 import AllianceComparison from "../components/AllianceComparison";
 import {useNavigate} from "react-router-dom";
-import {getEventMatches} from "@/lib/tba";
+import {TBA_EVENT_KEY, getEventMatches} from "@/lib/tba";
 import {db} from "@/lib/firebase";
 import {get, ref} from "firebase/database";
 
@@ -43,15 +43,20 @@ type TeamStat = {
     status: "online" | "offline" | "pending";
 };
 
-const extractScoutingEntries = (matchesData: Record<string, any>) => {
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null;
+
+const extractScoutingEntries = (matchesData: Record<string, unknown>) => {
     const entries: ScoutingEntry[] = [];
 
     Object.values(matchesData).forEach((matchValue) => {
-        const participantsRoot = matchValue?.participants || matchValue;
-        if (!participantsRoot || typeof participantsRoot !== "object") return;
+        const participantsRoot = isRecord(matchValue) && "participants" in matchValue
+            ? matchValue.participants
+            : matchValue;
+        if (!isRecord(participantsRoot)) return;
 
-        Object.values(participantsRoot as Record<string, any>).forEach((data) => {
-            if (!data || typeof data !== "object") return;
+        Object.values(participantsRoot).forEach((data) => {
+            if (!isRecord(data)) return;
 
             const hasSubmission =
                 data.teamNumber != null ||
@@ -64,11 +69,13 @@ const extractScoutingEntries = (matchesData: Record<string, any>) => {
             const teamNumber = Number.parseInt(String(data.teamNumber), 10);
             if (!Number.isFinite(teamNumber)) return;
 
-            const autoPoints =
-                Number(data.autonomous?.score) || Number(data.autonomous?.fuel) || 0;
-            const teleopPoints =
-                Number(data.teleop?.score) || Number(data.teleop?.fuel) || 0;
-            const didClimb = Boolean(data.endGame?.didClimb);
+            const autonomous = isRecord(data.autonomous) ? data.autonomous : undefined;
+            const teleop = isRecord(data.teleop) ? data.teleop : undefined;
+            const endGame = isRecord(data.endGame) ? data.endGame : undefined;
+
+            const autoPoints = Number(autonomous?.score) || Number(autonomous?.fuel) || 0;
+            const teleopPoints = Number(teleop?.score) || Number(teleop?.fuel) || 0;
+            const didClimb = Boolean(endGame?.didClimb);
             const submittedAt =
                 typeof data.submittedAt === "number"
                     ? data.submittedAt
@@ -89,7 +96,6 @@ const extractScoutingEntries = (matchesData: Record<string, any>) => {
 
 const Dashboard = () => {
     const navigate = useNavigate();
-    const eventKey = "2026pncmp";
     const [tbaMatches, setTbaMatches] = useState<TbaMatch[]>([]);
     const [tbaLoading, setTbaLoading] = useState(false);
     const [scoutingEntries, setScoutingEntries] = useState<ScoutingEntry[]>([]);
@@ -99,7 +105,7 @@ const Dashboard = () => {
         const fetchMatches = async () => {
             setTbaLoading(true);
             try {
-                const data = await getEventMatches(eventKey);
+                const data = await getEventMatches(TBA_EVENT_KEY);
                 setTbaMatches(data || []);
             } catch (err) {
                 console.error("Failed to load TBA matches", err);
@@ -110,7 +116,7 @@ const Dashboard = () => {
         };
 
         fetchMatches();
-    }, [eventKey]);
+    }, []);
 
     useEffect(() => {
         const fetchScouting = async () => {
@@ -273,7 +279,7 @@ const Dashboard = () => {
                     change={tbaLoading ? undefined : `${matchesRemaining} remaining`}
                     changeType="neutral"
                     icon={Trophy}
-                    subtitle={tbaLoading ? "Event matches" : `Event ${eventKey}`}
+                    subtitle={tbaLoading ? "Event matches" : `Event ${TBA_EVENT_KEY}`}
                 />
                 <StatCard
                     title="Avg Match Score"
