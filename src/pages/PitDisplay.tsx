@@ -4,8 +4,16 @@ import {useNavigate} from "react-router-dom";
 import {Button} from "@/components/ui/button";
 import {Badge} from "@/components/ui/badge";
 import {cn} from "@/lib/utils";
-import {buildStreamUrl, getEventMatches, getEventStatus, getEventWebcasts, getPlayoffMatchLabel} from "@/lib/tba";
+import {
+    buildStreamUrl,
+    getEventMatches,
+    getEventStatus,
+    getEventWebcasts,
+    getPlayoffMatchLabel,
+    TBA_EVENT_KEY
+} from "@/lib/tba";
 import {getEventLiveStatus, type NexusEventStatusResponse} from "@/lib/nexus";
+import {NEXUS_EVENT_KEY} from "@/lib/nexusConfig";
 import {useAuth} from "@/contexts/AuthContext";
 
 type TbaMatch = {
@@ -21,7 +29,6 @@ type TbaMatch = {
     time?: number;
 };
 
-const EVENT_KEY = "2026pncmp";
 const TEAM_NUMBER = "955";
 
 const compLevelOrder: Record<string, number> = {
@@ -160,15 +167,15 @@ const PitDisplay = () => {
         const load = async () => {
             setLoading(true);
             try {
-                const nexusPromise = getEventLiveStatus(EVENT_KEY).catch((error) => {
+                const nexusPromise = getEventLiveStatus(NEXUS_EVENT_KEY).catch((error) => {
                     console.warn("Failed to load Nexus queue data", error);
                     return null;
                 });
 
                 const [matchData, statusData, webcastData, queueData] = await Promise.all([
-                    getEventMatches(EVENT_KEY),
-                    getEventStatus(EVENT_KEY),
-                    getEventWebcasts(EVENT_KEY),
+                    getEventMatches(TBA_EVENT_KEY),
+                    getEventStatus(TBA_EVENT_KEY),
+                    getEventWebcasts(TBA_EVENT_KEY),
                     nexusPromise,
                 ]);
 
@@ -242,7 +249,7 @@ const PitDisplay = () => {
 
     const streamUrl = useMemo(() => {
         if (!webcasts.length) return null;
-        const webcast = webcasts[4];
+        const webcast = webcasts[0];
         const url = buildStreamUrl(webcast);
         if (!url) return null;
 
@@ -298,7 +305,7 @@ const PitDisplay = () => {
                                 })}
                             </p>
                         </div>
-                        <p className="text-lg text-muted-foreground">Event: {EVENT_KEY}</p>
+                        <p className="text-lg text-muted-foreground">Event: {TBA_EVENT_KEY}</p>
                     </div>
                     <Button
                         variant="outline"

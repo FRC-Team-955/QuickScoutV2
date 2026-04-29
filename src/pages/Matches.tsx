@@ -6,7 +6,7 @@ import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {Calendar} from "lucide-react";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue,} from "@/components/ui/select";
 
-import {getEventMatches} from "@/lib/tba";
+import {TBA_EVENT_KEY, getEventMatches} from "@/lib/tba";
 
 type TbaMatch = {
     key: string;
@@ -23,7 +23,7 @@ const Matches = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState("matches");
 
-    const [eventKey, setEventKey] = useState("2026pncmp");
+    const [eventKey, setEventKey] = useState(TBA_EVENT_KEY);
     const [loading, setLoading] = useState(false);
     const [matches, setMatches] = useState<TbaMatch[]>([]);
     const [filter, setFilter] = useState<string>("all");

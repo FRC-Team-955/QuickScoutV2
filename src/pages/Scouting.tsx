@@ -23,7 +23,7 @@ import {get, getDatabase, onValue, ref, remove, serverTimestamp, set,} from "fir
 import successAudio from "/partyblower.mp3";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select.tsx";
 import {toast} from "sonner";
-import {getEventMatches} from "@/lib/tba";
+import {TBA_EVENT_KEY, getEventMatches} from "@/lib/tba";
 
 // Draft persistence types and helpers
 type MatchScoutingDraft = {
@@ -199,10 +199,9 @@ const Scouting = () => {
 
         try {
             setImportingTeams(true);
-            const eventKey = "2026pncmp";
             const qualNum = parseInt(qualificationNumber, 10);
 
-            const matches = await getEventMatches(eventKey);
+            const matches = await getEventMatches(TBA_EVENT_KEY);
 
             if (!matches || matches.length === 0) {
                 toast("No matches found");

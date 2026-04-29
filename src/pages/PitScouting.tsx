@@ -16,7 +16,7 @@ import {toast} from "sonner";
 import {get, ref, serverTimestamp, set} from "firebase/database";
 import {db} from "@/lib/firebase";
 import {PitScoutingEntry} from "@/pages/Analytics.tsx";
-import {getEventTeams} from "@/lib/tba.ts";
+import {TBA_EVENT_KEY, getEventTeams} from "@/lib/tba.ts";
 
 interface PitScoutingQuestion {
     id: string;
@@ -566,7 +566,7 @@ const PitScouting = () => {
     useEffect(() => {
         const initData = async () => {
 
-            const teamKeys: string[] = await getEventTeams("2026pncmp");
+            const teamKeys: string[] = await getEventTeams(TBA_EVENT_KEY);
             const teamNumbers = teamKeys
                 .map(key => parseInt(key.replace("frc", ""), 10))
                 .sort((a, b) => a - b);

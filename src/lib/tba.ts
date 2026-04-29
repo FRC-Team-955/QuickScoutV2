@@ -1,5 +1,7 @@
 const TBA_BASE = "https://www.thebluealliance.com/api/v3";
 
+export const TBA_EVENT_KEY = "2026joh";
+
 export const getEventMatches = async (eventKey: string) => {
     const res = await fetch(`${TBA_BASE}/event/${eventKey}/matches`, {
         headers: {
@@ -119,7 +121,9 @@ export const getEventWebcasts = async (eventKey: string) => {
     return event.webcasts ?? [];
 };
 
-export const buildStreamUrl = (webcast: { type: string; channel: string; file?: string }): string | null => {
+export const buildStreamUrl = (webcast?: { type: string; channel: string; file?: string } | null): string | null => {
+    if (!webcast) return null;
+
     switch (webcast.type) {
         case "twitch":
             return `https://player.twitch.tv/?channel=${webcast.channel}&parent=${window.location.hostname}`;
@@ -136,9 +140,9 @@ export const getPlayoffMatchLabel = (matchKey: string, compLevel: string): strin
     // Match key format: eventkey_sf1m1 (semifinal round 1, match 1)
     const parts = matchKey.split("_");
     if (parts.length < 2) return compLevel;
-    
+
     const levelPart = parts[1];
-    
+
     if (compLevel === "sf") {
         // sf1m1 -> SF Round 1
         const sfMatch = levelPart.match(/sf(\d+)m(\d+)/);
@@ -158,7 +162,7 @@ export const getPlayoffMatchLabel = (matchKey: string, compLevel: string): strin
             return `QF Round ${qfMatch[1]}`;
         }
     }
-    
+
     return compLevel;
 };
 
