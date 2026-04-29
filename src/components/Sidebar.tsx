@@ -17,6 +17,7 @@ const navItems = [
     {id: "scouting", label: "Scouting", icon: ClipboardList},
     {id: "pit-scouting", label: "Pit Scouting", icon: Bot},
     {id: "analytics", label: "Analytics", icon: BarChart3},
+    {id: "opr", label: "OPR", icon: Zap},
     {id: "leaderboard", label: "Leaderboard", icon: Trophy},
 ];
 

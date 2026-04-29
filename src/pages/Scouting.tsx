@@ -112,6 +112,8 @@ const Scouting = () => {
             navigate("/analytics");
         } else if (tab === "matches") {
             navigate("/matches");
+        } else if (tab === "opr") {
+            navigate("/opr");
         } else if (tab === "leaderboard") {
             navigate("/leaderboard");
         }

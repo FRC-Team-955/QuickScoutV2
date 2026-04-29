@@ -19,9 +19,9 @@ type TbaMatch = {
     time?: number;
 };
 
-const Matches = () => {
+const OPR = () => {
     const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState("matches");
+    const [activeTab, setActiveTab] = useState("opr");
 
     const [eventKey, setEventKey] = useState(TBA_EVENT_KEY);
     const [loading, setLoading] = useState(false);
@@ -149,4 +149,4 @@ const Matches = () => {
     );
 };
 
-export default Matches;
+export default OPR;
