@@ -11,7 +11,7 @@ import {AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, A
 import {useAuth} from "@/contexts/AuthContext";
 import {get, ref, remove} from "firebase/database";
 import {db} from "@/lib/firebase";
-import {CLACK_DATE_RANGE, getDataLabel, OSF_DATE_RANGE} from "@/lib/dateUtils";
+import {CLACK_DATE_RANGE, DCMP_DATE_RANGE, getDataLabel, isDCMPData, OSF_DATE_RANGE} from "@/lib/dateUtils";
 import {
     CartesianGrid,
     Legend,
@@ -36,7 +36,7 @@ type Filters = {
         | "best_defense";
 };
 
-type EventType = "all" | "osf" | "clack" | "current";
+type EventType = "all" | "osf" | "clack" | "dcmp" | "current";
 
 export type MatchEntry = {
     id: string;
@@ -107,6 +107,7 @@ const matchesSelectedEvent = (timestamp: number, eventType: EventType): boolean 
     const dataLabel = getDataLabel(timestamp);
     if (eventType === "osf") return dataLabel === "OSF";
     if (eventType === "clack") return dataLabel === "Clack";
+    if (eventType === "dcmp") return dataLabel === "DCMP";
     if (eventType === "current") return dataLabel === "Current";
     return true;
 };
@@ -763,6 +764,7 @@ const Analytics = () => {
                                     <SelectItem value="all">All Events</SelectItem>
                                     <SelectItem value="osf">OSF ({OSF_DATE_RANGE})</SelectItem>
                                     <SelectItem value="clack">Clack ({CLACK_DATE_RANGE})</SelectItem>
+                                    <SelectItem value="dcmp">DCMP ({DCMP_DATE_RANGE})</SelectItem>
                                     <SelectItem value="current">Current Event</SelectItem>
                                 </SelectContent>
                             </Select>

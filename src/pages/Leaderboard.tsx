@@ -8,7 +8,7 @@ import {useAuth} from "@/contexts/AuthContext";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@/components/ui/table";
 import {get, ref} from "firebase/database";
 import {db} from "@/lib/firebase";
-import {CLACK_DATE_RANGE, filterByEventType, isClackData, isOSFData, OSF_DATE_RANGE} from "@/lib/dateUtils";
+import {CLACK_DATE_RANGE, DCMP_DATE_RANGE, filterByEventType, isClackData, isDCMPData, isOSFData, OSF_DATE_RANGE} from "@/lib/dateUtils";
 
 type LeaderboardRow = {
     key: string;
@@ -18,7 +18,7 @@ type LeaderboardRow = {
     submittedAt: number;
 };
 
-type EventType = "all" | "osf" | "clack" | "current";
+type EventType = "all" | "osf" | "clack" | "dcmp" | "current";
 
 const Leaderboard = () => {
     const {user} = useAuth();
@@ -28,6 +28,7 @@ const Leaderboard = () => {
     const [loading, setLoading] = useState(false);
     const [osfRows, setOsfRows] = useState<LeaderboardRow[]>([]);
     const [clackRows, setClackRows] = useState<LeaderboardRow[]>([]);
+    const [dcmpRows, setDcmpRows] = useState<LeaderboardRow[]>([]);
     const [currentRows, setCurrentRows] = useState<LeaderboardRow[]>([]);
 
     const handleTabChange = (tab: string) => {
@@ -179,11 +180,12 @@ const Leaderboard = () => {
                 // Aggregate submissions by event type
                 const osfTally = new Map<string, LeaderboardRow>();
                 const clackTally = new Map<string, LeaderboardRow>();
+                const dcmpTally = new Map<string, LeaderboardRow>();
                 const currentTally = new Map<string, LeaderboardRow>();
 
                 submissions.forEach((subList, key) => {
                     const scoutName = subList[0]?.scoutName || "";
-                    const {osf: osfSubs, clack: clackSubs, current: currentSubs} = filterByEventType(subList);
+                    const {osf: osfSubs, clack: clackSubs, dcmp: dcmpSubs, current: currentSubs} = filterByEventType(subList);
 
                     // For OSF
                     if (osfSubs.length > 0) {
@@ -209,6 +211,18 @@ const Leaderboard = () => {
                         });
                     }
 
+                    // For DCMP
+                    if (dcmpSubs.length > 0) {
+                        const lastSubmitted = Math.max(...dcmpSubs.map(s => s.submittedAt));
+                        dcmpTally.set(key, {
+                            key,
+                            scoutName,
+                            matches: dcmpSubs.length,
+                            lastSubmitted,
+                            submittedAt: lastSubmitted,
+                        });
+                    }
+
                     // For Current
                     if (currentSubs.length > 0) {
                         const lastSubmitted = Math.max(...currentSubs.map(s => s.submittedAt));
@@ -229,17 +243,22 @@ const Leaderboard = () => {
                 const clackRows = Array.from(clackTally.values()).sort(
                     (a, b) => b.matches - a.matches || b.lastSubmitted - a.lastSubmitted
                 );
+                const dcmpRows = Array.from(dcmpTally.values()).sort(
+                    (a, b) => b.matches - a.matches || b.lastSubmitted - a.lastSubmitted
+                );
                 const currentRows = Array.from(currentTally.values()).sort(
                     (a, b) => b.matches - a.matches || b.lastSubmitted - a.lastSubmitted
                 );
 
                 setOsfRows(osfRows);
                 setClackRows(clackRows);
+                setDcmpRows(dcmpRows);
                 setCurrentRows(currentRows);
             } catch (error) {
                 console.error("Error fetching leaderboard data:", error);
                 setOsfRows([]);
                 setClackRows([]);
+                setDcmpRows([]);
                 setCurrentRows([]);
             } finally {
                 setLoading(false);
@@ -270,7 +289,7 @@ const Leaderboard = () => {
                             </p>
                         </div>
                         <div className="text-sm text-muted-foreground">
-                            {loading ? "Loading…" : `${osfRows.length + clackRows.length + currentRows.length} scouts`}
+                            {loading ? "Loading…" : `${osfRows.length + clackRows.length + dcmpRows.length + currentRows.length} scouts`}
                         </div>
                     </div>
 
@@ -284,6 +303,7 @@ const Leaderboard = () => {
                                 <SelectItem value="all">All Events</SelectItem>
                                 <SelectItem value="osf">OSF ({OSF_DATE_RANGE})</SelectItem>
                                 <SelectItem value="clack">Clack ({CLACK_DATE_RANGE})</SelectItem>
+                                <SelectItem value="dcmp">DCMP ({DCMP_DATE_RANGE})</SelectItem>
                                 <SelectItem value="current">Current Event</SelectItem>
                             </SelectContent>
                         </Select>
@@ -295,7 +315,7 @@ const Leaderboard = () => {
                                 Loading leaderboard…
                             </CardContent>
                         </Card>
-                    ) : (osfRows.length === 0 && currentRows.length === 0) ? (
+                    ) : (osfRows.length === 0 && clackRows.length === 0 && dcmpRows.length === 0 && currentRows.length === 0) ? (
                         <Card>
                             <CardContent className="p-6 text-sm text-muted-foreground">
                                 No submitted scouting data found yet.
@@ -314,6 +334,10 @@ const Leaderboard = () => {
                                         renderLeaderboardCard(`Clack Scout Activity (${CLACK_DATE_RANGE})`, clackRows)
                                     )}
 
+                                    {dcmpRows.length > 0 && (
+                                        renderLeaderboardCard(`DCMP Scout Activity (${DCMP_DATE_RANGE})`, dcmpRows)
+                                    )}
+
                                     {currentRows.length > 0 && (
                                         renderLeaderboardCard("Current Event Scout Activity", currentRows)
                                     )}
@@ -330,6 +354,11 @@ const Leaderboard = () => {
                                 renderLeaderboardCard(`Clack Scout Activity (${CLACK_DATE_RANGE})`, clackRows)
                             )}
 
+                            {/* DCMP Only */}
+                            {eventType === "dcmp" && dcmpRows.length > 0 && (
+                                renderLeaderboardCard(`DCMP Scout Activity (${DCMP_DATE_RANGE})`, dcmpRows)
+                            )}
+
                             {/* OSF selected but no data */}
                             {eventType === "osf" && osfRows.length === 0 && (
                                 <Card>
@@ -344,6 +373,15 @@ const Leaderboard = () => {
                                 <Card>
                                     <CardContent className="p-6 text-sm text-muted-foreground">
                                         No Clack scouting data found.
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                            {/* DCMP selected but no data */}
+                            {eventType === "dcmp" && dcmpRows.length === 0 && (
+                                <Card>
+                                    <CardContent className="p-6 text-sm text-muted-foreground">
+                                        No DCMP scouting data found.
                                     </CardContent>
                                 </Card>
                             )}
