@@ -1,6 +1,6 @@
 const TBA_BASE = "https://www.thebluealliance.com/api/v3";
 
-export const TBA_EVENT_KEY = "2026joh";
+export const TBA_EVENT_KEY = "2026pncmp";
 
 export const getEventMatches = async (eventKey: string) => {
     const res = await fetch(`${TBA_BASE}/event/${eventKey}/matches`, {

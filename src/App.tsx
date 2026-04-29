@@ -14,6 +14,7 @@ import NotFound from "./pages/NotFound";
 import Analytics from "./pages/Analytics";
 import Matches from "./pages/Matches";
 import Leaderboard from "./pages/Leaderboard";
+import OPR from "./pages/OPR";
 import {toast} from "sonner";
 
 const queryClient = new QueryClient();
@@ -207,6 +208,12 @@ const AppContent = () => {
                 return (
                     <ProtectedRoute>
                         <Leaderboard/>
+                    </ProtectedRoute>
+                );
+            case "/opr":
+                return (
+                    <ProtectedRoute>
+                        <OPR/>
                     </ProtectedRoute>
                 );
             default:

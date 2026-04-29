@@ -146,6 +146,7 @@ const Analytics = () => {
         if (tab === "analytics") navigate("/analytics");
         if (tab === "pit-scouting") navigate("/pit-scouting");
         if (tab === "matches") navigate("/matches");
+        if (tab === "opr") navigate("/opr");
         if (tab === "leaderboard") navigate("/leaderboard");
     };
 

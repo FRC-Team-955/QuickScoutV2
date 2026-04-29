@@ -36,6 +36,7 @@ const Matches = () => {
         if (tab === "pit-scouting") navigate("/pit-scouting");
         if (tab === "analytics") navigate("/analytics");
         if (tab === "matches") navigate("/matches");
+        if (tab === "opr") navigate("/opr");
         if (tab === "leaderboard") navigate("/leaderboard");
     };
 
