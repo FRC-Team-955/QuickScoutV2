@@ -2,7 +2,7 @@ const NEXUS_BASE = "https://frc.nexus/api/v1";
 
 export const NEXUS_API_KEY = atob("SGxvLU9sUjduLWRMUHlTYlB2cFMtcEhCRzFB");
 // When switching events, also update TBA_EVENT_KEY in tba.ts.
-export const NEXUS_EVENT_KEY = "2026johnson";
+export const NEXUS_EVENT_KEY = "2026orwil1";
 
 export const nexusFetch = async <T = unknown>(path: string, init: RequestInit = {}): Promise<T> => {
 	const res = await fetch(`${NEXUS_BASE}${path}`, {

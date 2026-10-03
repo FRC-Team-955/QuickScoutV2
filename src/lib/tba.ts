@@ -2,7 +2,7 @@ const TBA_BASE = "https://www.thebluealliance.com/api/v3";
 const TBA_AUTH_KEY = atob("MlhFTW10MWpDeTVpUFZFS2k5RXZCVDFYMmlKeEZGUUFZWVlsZ0I1N05hbGJQa0FCMTVsYmZiOVBUTjdvd3NaYQ==");
 
 // When switching events, also update NEXUS_EVENT_KEY in nexus.ts.
-export const TBA_EVENT_KEY = "2026joh";
+export const TBA_EVENT_KEY = "2026orgg";
 
 export type TbaMatch = {
     key: string;
