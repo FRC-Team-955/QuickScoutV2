@@ -1,124 +1,20 @@
-import {BarChart3, Bot, ClipboardList, LayoutDashboard, Trophy, Zap} from "lucide-react";
+import {Bot, Zap} from "lucide-react";
 import {cn} from "@/lib/utils";
-import {useEffect, useState} from "react";
-import {get, ref} from "firebase/database";
-import {checkTBAHealth} from "@/lib/tba";
-import {auth, db} from "@/lib/firebase";
-import {onAuthStateChanged} from "firebase/auth";
+import {navItems, overallStatus, SystemStatus, useSystemStatus} from "@/components/nav";
 
 interface MobileSidebarContentProps {
     activeTab: string;
     onTabChange: (tab: string) => void;
 }
 
-const navItems = [
-    {id: "dashboard", label: "Dashboard", icon: LayoutDashboard},
-    {id: "matches", label: "Match Schedule", icon: Trophy},
-    {id: "scouting", label: "Scouting", icon: ClipboardList},
-    {id: "pit-scouting", label: "Pit Scouting", icon: Bot},
-    {id: "analytics", label: "Analytics", icon: BarChart3},
-    {id: "leaderboard", label: "Leaderboard", icon: Trophy},
-];
+const statusColor = {ok: "bg-success", degraded: "bg-yellow-400", down: "bg-destructive"};
+const statusText = {ok: "All systems operational", degraded: "Partial system outage", down: "System issues detected"};
+const textColor = (s: SystemStatus | null) => (s === "ok" ? "text-success" : s === "down" ? "text-destructive" : "");
 
-type SystemStatus = "ok" | "degraded" | "down";
-
-const MobileSidebarContent = ({
-                                  activeTab,
-                                  onTabChange,
-                              }: MobileSidebarContentProps) => {
-    const [firebaseStatus, setFirebaseStatus] = useState<SystemStatus>("down");
-    const [tbaStatus, setTbaStatus] = useState<SystemStatus>("down");
-
-    // ---- Firebase check ----
-    useEffect(() => {
-        let mounted = true;
-
-        const checkFirebase = async () => {
-            if (!mounted) return;
-            // If unauthenticated, avoid calling DB (rules likely block read) and mark as degraded
-            if (!auth?.currentUser) {
-                setFirebaseStatus("degraded");
-            } else {
-                try {
-                    await get(ref(db, "__healthcheck"));
-                    setFirebaseStatus("ok");
-                } catch (err: unknown) {
-                    // fallback try users/{uid}
-                    try {
-                        await get(ref(db, `users/${auth.currentUser!.uid}`));
-                        setFirebaseStatus("ok");
-                    } catch (fallbackErr: unknown) {
-                        const errObj = fallbackErr as { code?: string; message?: string };
-                        const codeStr = String(errObj.code || "").toLowerCase();
-                        const msg = String(errObj.message || "");
-                        if (
-                            codeStr.includes("permission") ||
-                            /permission denied/i.test(msg) ||
-                            /permission-denied/i.test(codeStr)
-                        ) {
-                            setFirebaseStatus("degraded");
-                        } else {
-                            console.debug("__healthcheck read failed and fallback failed:", errObj);
-                            setFirebaseStatus("down");
-                        }
-                    }
-                }
-            }
-
-            try {
-                await checkTBAHealth();
-                setTbaStatus("ok");
-            } catch {
-                setTbaStatus("down");
-            }
-        };
-
-        checkFirebase();
-
-        const unsub = onAuthStateChanged(auth, () => {
-            checkFirebase().catch((e) => console.debug('mobile checkFirebase after auth change failed', e));
-        });
-
-        return () => {
-            mounted = false;
-            unsub();
-        };
-    }, []);
-
-    // ---- TBA check ----
-    useEffect(() => {
-        const checkTBA = async () => {
-            try {
-                await checkTBAHealth();
-                setTbaStatus("ok");
-            } catch {
-                setTbaStatus("down");
-            }
-        };
-
-        checkTBA();
-    }, []);
-
-    const overallStatus =
-        firebaseStatus === "ok" && tbaStatus === "ok"
-            ? "ok"
-            : firebaseStatus === "down" || tbaStatus === "down"
-                ? "down"
-                : "degraded";
-
-    const statusColor =
-        overallStatus === "ok"
-            ? "bg-success"
-            : overallStatus === "down"
-                ? "bg-destructive"
-                : "bg-yellow-400";
-
-    const statusText =
-        overallStatus === "ok"
-            ? "All systems operational"
-            : overallStatus === "down"
-                ? "System issues detected"
-                : "Checking systems…";
+const MobileSidebarContent = ({activeTab, onTabChange}: MobileSidebarContentProps) => {
+    const {firebase, tba} = useSystemStatus();
+    const overall = overallStatus(firebase, tba);
+    const checking = !firebase || !tba;
 
     return (
         <div className="flex flex-col h-full">
@@ -136,17 +32,6 @@ const MobileSidebarContent = ({
                     </div>
                 </div>
             </div>
-
-            {/* Search */}
-            {/* <div className="p-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search teams, matches, data..."
-            className="pl-10"
-          />
-        </div>
-      </div> */}
 
             {/* Nav */}
             <div
@@ -184,38 +69,18 @@ const MobileSidebarContent = ({
                         </div>
 
                         <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${statusColor}`}/>
-                            <span className="text-xs text-muted-foreground">{statusText}</span>
+                            <div className={`w-2 h-2 rounded-full ${checking ? "bg-yellow-400" : statusColor[overall]}`}/>
+                            <span className="text-xs text-muted-foreground">
+                                {checking ? "Checking systems…" : statusText[overall]}
+                            </span>
                         </div>
 
                         <div className="text-xs text-muted-foreground space-y-1 pl-4">
                             <div>
-                                Firebase:{" "}
-                                <span
-                                    className={
-                                        firebaseStatus === "ok"
-                                            ? "text-success"
-                                            : firebaseStatus === "down"
-                                                ? "text-destructive"
-                                                : ""
-                                    }
-                                >
-                  {firebaseStatus}
-                </span>
+                                Firebase: <span className={textColor(firebase)}>{firebase ?? "…"}</span>
                             </div>
                             <div>
-                                TBA API:{" "}
-                                <span
-                                    className={
-                                        tbaStatus === "ok"
-                                            ? "text-success"
-                                            : tbaStatus === "down"
-                                                ? "text-destructive"
-                                                : ""
-                                    }
-                                >
-                  {tbaStatus}
-                </span>
+                                TBA API: <span className={textColor(tba)}>{tba ?? "…"}</span>
                             </div>
                         </div>
                     </div>

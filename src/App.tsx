@@ -3,7 +3,7 @@ import {Toaster as Sonner} from "@/components/ui/sonner";
 import {TooltipProvider} from "@/components/ui/tooltip";
 import {QueryClient, QueryClientProvider} from "@tanstack/react-query";
 import {BrowserRouter, Navigate, useLocation, useNavigate} from "react-router-dom";
-import {useEffect, useRef, useState} from "react";
+import {ComponentType, useEffect, useRef, useState} from "react";
 import {AuthProvider, useAuth} from "@/contexts/AuthContext";
 import Index from "./components/Index";
 import Login from "./pages/Login";
@@ -19,23 +19,25 @@ import {toast} from "sonner";
 
 const queryClient = new QueryClient();
 
-const ProtectedRoute = ({children}: { children: React.ReactNode }) => {
-    const {isAuthenticated} = useAuth();
-    return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace/>;
+const protectedPages: Record<string, ComponentType> = {
+    "/dashboard": Index,
+    "/scouting": Scouting,
+    "/pit-scouting": PitScouting,
+    "/analytics": Analytics,
+    "/matches": Matches,
+    "/leaderboard": Leaderboard,
+    "/opr": OPR,
 };
 
-const PublicRoute = ({children}: { children: React.ReactNode }) => {
-    const {isAuthenticated} = useAuth();
-    return !isAuthenticated ? <>{children}</> : <Navigate to="/dashboard" replace/>;
-};
+const COMMITS_URL = "https://api.github.com/repos/FRC-Team-955/QuickScoutV2/commits/main";
 
 const RedirectHandler = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        const redirect = params.get("redirect");
-        if (redirect) {
+        const redirect = new URLSearchParams(window.location.search).get("redirect");
+        // "//host" would be a cross-origin pushState and throw
+        if (redirect?.startsWith("/") && !redirect.startsWith("//")) {
             navigate(redirect, {replace: true});
         }
     }, [navigate]);
@@ -43,31 +45,64 @@ const RedirectHandler = () => {
     return null;
 };
 
+// Polls GitHub for new commits on main and nags the user to reload once main moves.
+const useUpdateNag = () => {
+    useEffect(() => {
+        let baselineSha: string | null = null;
+        let pausedUntil = 0;
+        let stopped = false;
+        let nagInterval: ReturnType<typeof setInterval> | undefined;
+
+        const checkForUpdates = async () => {
+            // Unauthenticated GitHub API allows 60 req/hr per IP, shared by every device on the venue network.
+            if (stopped || nagInterval || document.hidden || Date.now() < pausedUntil) return;
+            try {
+                const response = await fetch(COMMITS_URL, {headers: {Accept: "application/vnd.github+json"}});
+                if (!response.ok) {
+                    // 403/429 when rate limited: back off until the reset time (or 10 min)
+                    const reset = Number(response.headers.get("x-ratelimit-reset"));
+                    pausedUntil = reset ? reset * 1000 : Date.now() + 600000;
+                    return;
+                }
+                const sha = (await response.json())?.sha;
+                if (stopped || typeof sha !== "string") return;
+                baselineSha ??= sha;
+                if (sha !== baselineSha) {
+                    const showAlert = () => toast("Update available. Please reload the page.");
+                    showAlert();
+                    nagInterval = setInterval(showAlert, 10000);
+                }
+            } catch (err) {
+                console.warn("Update check failed", err);
+            }
+        };
+
+        checkForUpdates();
+        const pollInterval = setInterval(checkForUpdates, 60000);
+        return () => {
+            clearInterval(pollInterval);
+            clearInterval(nagInterval);
+            stopped = true;
+        };
+    }, []);
+};
+
 const AppContent = () => {
     const {isAuthenticated, loading, user} = useAuth();
     const location = useLocation();
     const navigate = useNavigate();
-    const [currentView, setCurrentView] = useState(
-        location.pathname === "/dashboard" ? "/dashboard" : location.pathname,
-    );
+    const [currentView, setCurrentView] = useState(location.pathname);
     const lastPathRef = useRef(location.pathname);
     const suppressRootSyncRef = useRef(false);
-    const latestShaRef = useRef<string | null>(null);
-    const updateDetectedRef = useRef(false);
-    const updateAlertIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const isPitDisplay = user?.role === 'pitDisplay';
 
-    // Force pitDisplay user to pit-display page
-    useEffect(() => {
-        if (user?.role === 'pitDisplay' && location.pathname !== "/pit-display") {
-            navigate("/pit-display", {replace: true});
-        }
-    }, [user?.role, location.pathname, navigate]);
+    useUpdateNag();
 
     useEffect(() => {
         const path = location.pathname;
 
         // PitDisplay users can only access pit-display
-        if (user?.role === 'pitDisplay') {
+        if (isPitDisplay) {
             setCurrentView("/pit-display");
             if (path !== "/pit-display") {
                 navigate("/pit-display", {replace: true});
@@ -79,16 +114,14 @@ const AppContent = () => {
             setCurrentView(path);
             suppressRootSyncRef.current = true;
             navigate("/", {replace: true});
-        } else {
-            if (suppressRootSyncRef.current) {
-                suppressRootSyncRef.current = false;
-            } else if (lastPathRef.current !== "/dashboard") {
-                setCurrentView("/dashboard");
-            }
+        } else if (suppressRootSyncRef.current) {
+            suppressRootSyncRef.current = false;
+        } else if (lastPathRef.current !== "/dashboard") {
+            setCurrentView("/dashboard");
         }
 
         lastPathRef.current = path;
-    }, [location.pathname, navigate, user?.role]);
+    }, [location.pathname, navigate, isPitDisplay]);
 
     useEffect(() => {
         if (loading) return;
@@ -100,125 +133,15 @@ const AppContent = () => {
         }
     }, [currentView, isAuthenticated, loading]);
 
-    useEffect(() => {
-        let isMounted = true;
-
-        const fetchLatestSha = async () => {
-            try {
-                const response = await fetch(
-                    "https://api.github.com/repos/FRC-Team-955/QuickScoutV2/commits/main",
-                    {
-                        headers: {
-                            Accept: "application/vnd.github+json",
-                        },
-                    },
-                );
-                if (!response.ok) return null;
-                const data = await response.json();
-                return typeof data?.sha === "string" ? data.sha : null;
-            } catch (err) {
-                console.warn("Update check failed", err);
-                return null;
-            }
-        };
-
-        const triggerUpdateSpam = () => {
-            if (updateDetectedRef.current) return;
-            updateDetectedRef.current = true;
-            const showAlert = () => {
-                toast("Update available. Please reload the page.");
-            };
-            showAlert();
-            updateAlertIntervalRef.current = setInterval(showAlert, 10000);
-        };
-
-        const checkForUpdates = async () => {
-            const latestSha = await fetchLatestSha();
-            if (!isMounted || !latestSha) return;
-
-            if (!latestShaRef.current) {
-                latestShaRef.current = latestSha;
-                return;
-            }
-
-            if (latestShaRef.current !== latestSha) {
-                triggerUpdateSpam();
-            }
-        };
-
-        checkForUpdates();
-        const intervalId = setInterval(checkForUpdates, 60000);
-
-        return () => {
-            isMounted = false;
-            clearInterval(intervalId);
-            if (updateAlertIntervalRef.current) {
-                clearInterval(updateAlertIntervalRef.current);
-                updateAlertIntervalRef.current = null;
-            }
-        };
-    }, []);
-
     const renderPage = () => {
         // PitDisplay users can only see the pit display page
-        if (user?.role === 'pitDisplay') {
-            return <PitDisplay/>;
-        }
-
-        switch (currentView) {
-            case "/login":
-                return (
-                    <PublicRoute>
-                        <Login/>
-                    </PublicRoute>
-                );
-            case "/dashboard":
-                return (
-                    <ProtectedRoute>
-                        <Index/>
-                    </ProtectedRoute>
-                );
-            case "/scouting":
-                return (
-                    <ProtectedRoute>
-                        <Scouting/>
-                    </ProtectedRoute>
-                );
-            case "/pit-scouting":
-                return (
-                    <ProtectedRoute>
-                        <PitScouting/>
-                    </ProtectedRoute>
-                );
-            case "/pit-display":
-                return <PitDisplay/>;
-            case "/analytics":
-                return (
-                    <ProtectedRoute>
-                        <Analytics/>
-                    </ProtectedRoute>
-                );
-            case "/matches":
-                return (
-                    <ProtectedRoute>
-                        <Matches/>
-                    </ProtectedRoute>
-                );
-            case "/leaderboard":
-                return (
-                    <ProtectedRoute>
-                        <Leaderboard/>
-                    </ProtectedRoute>
-                );
-            case "/opr":
-                return (
-                    <ProtectedRoute>
-                        <OPR/>
-                    </ProtectedRoute>
-                );
-            default:
-                return <NotFound/>;
-        }
+        if (isPitDisplay || currentView === "/pit-display") return <PitDisplay/>;
+        // Wait for auth so a deep link isn't bounced to /login (and then /dashboard) before the session restores
+        if (loading) return null;
+        if (currentView === "/login") return isAuthenticated ? <Navigate to="/dashboard" replace/> : <Login/>;
+        const Page = protectedPages[currentView];
+        if (!Page) return <NotFound/>;
+        return isAuthenticated ? <Page/> : <Navigate to="/login" replace/>;
     };
 
     return (

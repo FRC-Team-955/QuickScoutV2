@@ -1,8 +1,7 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
-import { auth, db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 import { setUserPresence, clearUserPresence, removeUserCompletely, leaveQueue, setSuppressPresenceOnUnload, shouldSuppressPresenceOnUnload, removeUserLastActive } from "@/lib/queue";
-import { get, ref } from "firebase/database";
 
 interface User {
   id: string;
@@ -21,8 +20,23 @@ interface AuthContextType {
   loading: boolean;
 }
 
-const isLeadGmail = (email?: string) => {
-  return typeof email === "string" && email.toLowerCase().endsWith("@gmail.com");
+const PIT_DISPLAY_EMAIL = "pitdisplay@gmail.com";
+
+export const isPitDisplayEmail = (email?: string) => email?.trim().toLowerCase() === PIT_DISPLAY_EMAIL;
+// Leads sign in with a @gmail.com account; the pit display kiosk account is never a lead.
+export const isLeadEmail = (email?: string) =>
+  !!email?.trim().toLowerCase().endsWith("@gmail.com") && !isPitDisplayEmail(email);
+
+export const mapFirebaseUser = (u: { uid: string; email?: string | null; displayName?: string | null }): User => {
+  const name = u.displayName || u.email?.split("@")[0] || "User";
+  return {
+    id: u.uid,
+    name: name.split(".").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" "),
+    email: u.email || undefined,
+    teamNumber: 955,
+    isLead: isLeadEmail(u.email),
+    role: isPitDisplayEmail(u.email) ? 'pitDisplay' : 'scouter',
+  };
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,37 +45,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const name =
-            firebaseUser.displayName ||
-            firebaseUser.email?.split("@")[0]||
-            "User";
-        const formatName =
-            name.split(".").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
-        const isPitDisplay = firebaseUser.email?.toLowerCase() === "pitdisplay@gmail.com";
-        const mappedUser: User = {
-          id: firebaseUser.uid,
-          name: formatName,
-          email: firebaseUser.email || undefined,
-          teamNumber: 955,
-          isLead: isLeadGmail(firebaseUser.email || undefined),
-          role: isPitDisplay ? 'pitDisplay' : 'scouter',
-        };
-        setUser(mappedUser);
-        if (!isPitDisplay) {
-          setUserPresence(mappedUser).catch(console.error);
-        }
-      } else {
-        setUser(null);
-      }
-
-      setLoading(false);
-    });
-
-    return unsubscribe;
-  }, []);
+  useEffect(() => onAuthStateChanged(auth, (firebaseUser) => {
+    const mapped = firebaseUser ? mapFirebaseUser(firebaseUser) : null;
+    setUser(mapped);
+    if (mapped && mapped.role !== 'pitDisplay') {
+      setUserPresence(mapped).catch(console.error);
+    }
+    setLoading(false);
+  }), []);
 
   useEffect(() => {
     const handler = () => {
@@ -76,59 +67,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [user]);
 
   const login = async (email: string, password: string) => {
-    try {
-      // Special handling for local pitDisplay user
-      if (email.trim().toLowerCase() === "pitdisplay@gmail.com" && password === "123456") {
-        const localUser: User = {
-          id: "pit-display-local",
-          name: "Pit Display",
-          email: "pitdisplay@gmail.com",
-          teamNumber: 955,
-          isLead: false,
-          role: 'pitDisplay',
-        };
-        setUser(localUser);
-        return;
-      }
-
-      const cred = await signInWithEmailAndPassword(auth, email, password);
-      const signed = cred.user || auth.currentUser;
-      if (!signed) throw new Error("Login failed");
-
-      const userSnap = await get(ref(db, `users`));
-      if (userSnap.exists()) {
-        const users = userSnap.val();
-        const found = Object.values(users).find((u) => (u as any).email === email) as any;
-
-        // Only block if explicitly marked online (not just lastActive)
-        if (found?.isOnline === true) {
-          await signOut(auth);
-          throw new Error("This user is already logged in elsewhere. Please log out from other devices first.");
-        }
-      }
-
-      const name = signed.displayName || signed.email?.split("@")[0] || "User";
-      const formatName = name.split(".").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
-
-      const mapped: User = {
-        id: signed.uid,
-        name: formatName,
-        email: signed.email || undefined,
+    email = email.trim();
+    // Local pit display kiosk: no Firebase account involved
+    if (isPitDisplayEmail(email) && password === "123456") {
+      setUser({
+        id: "pit-display-local",
+        name: "Pit Display",
+        email: PIT_DISPLAY_EMAIL,
         teamNumber: 955,
-        isLead: isLeadGmail(signed.email || undefined),
-      };
-      setUser(mapped);
-      console.debug("Auth.login: calling setUserPresence for", mapped.id);
-      await setUserPresence(mapped);
-      console.debug("Auth.login: setUserPresence complete");
-
-      // notify other listeners (sidebar healthchecks) that auth changed
-      try {
-        window.dispatchEvent(new CustomEvent('qs:auth-changed', { detail: { userId: mapped.id } }));
-      } catch (e) {
-        console.debug('qs:auth-changed dispatch failed', e);
-      }
+        isLead: false,
+        role: 'pitDisplay',
+      });
       return;
+    }
+
+    try {
+      // onAuthStateChanged also fires and writes presence; set the user here too so callers see it immediately.
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      setUser(mapFirebaseUser(cred.user));
     } catch (error) {
       console.error("Login error:", error);
       throw error;
@@ -137,32 +93,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = async () => {
     try {
-      // pitDisplay local user doesn't need database cleanup
-      if (user?.role === 'pitDisplay') {
-        setUser(null);
-        return;
-      }
-
-      if (user?.id) {
+      // pitDisplay has no presence/queue entries to clean up
+      if (user?.id && user.role !== 'pitDisplay') {
         // prevent the unload handler during explicit logout cleanup
         setSuppressPresenceOnUnload(true);
-
         try {
           await removeUserCompletely(user.id);
         } catch (err) {
           console.warn("removeUserCompletely failed on logout — attempting targeted cleanup", err);
-          // Don't call clearUserPresence here (that writes lastActive). Instead try to
-          // remove the lastActive field and any queue entries. These are best-effort.
-          try {
-            await removeUserLastActive(user.id);
-          } catch (er) {
-            console.debug("removeUserLastActive also failed", er);
-          }
-          try {
-            await leaveQueue(user.id);
-          } catch (er) {
-            console.debug("leaveQueue failed during logout cleanup", er);
-          }
+          // Don't call clearUserPresence here (that writes lastActive); best-effort cleanup instead.
+          await removeUserLastActive(user.id).catch(console.debug);
+          await leaveQueue(user.id).catch(console.debug);
         } finally {
           // small delay to reduce races where other presence writers might run
           await new Promise((r) => setTimeout(r, 50));
@@ -170,19 +111,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       }
 
-      // sign out any authenticated user (anonymous or email)
       if (auth.currentUser) {
         await signOut(auth);
       }
-
       setUser(null);
-
-      // notify others of logout
-      try {
-        window.dispatchEvent(new CustomEvent('qs:auth-changed', { detail: { userId: null } }));
-      } catch (e) {
-        console.debug('qs:auth-changed dispatch failed', e);
-      }
     } catch (error) {
       console.error("Logout error:", error);
       throw error;

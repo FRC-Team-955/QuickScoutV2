@@ -1,5 +1,5 @@
 import {useEffect, useState} from "react";
-import {useAuth} from "@/contexts/AuthContext";
+import {isPitDisplayEmail, useAuth} from "@/contexts/AuthContext";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
@@ -8,65 +8,36 @@ import {Bot} from "lucide-react";
 const DEFAULT_PASSWORD = "123456";
 const PITDISPLAY_PASSWORD = "123456";
 
-const isLeadGmail = (email: string) => {
-    return email.trim().toLowerCase().endsWith("@gmail.com");
-};
-
-const isPitDisplay = (email: string) => {
-    return email.trim().toLowerCase() === "pitdisplay@gmail.com";
-};
+// Any @gmail.com (leads and the pit display) must type a password; everyone else uses the default.
+const needsPassword = (email: string) => email.trim().toLowerCase().endsWith("@gmail.com");
 
 const Login = () => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState(DEFAULT_PASSWORD);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
-    const {login, user, isAuthenticated} = useAuth();
-    const isLead = isLeadGmail(email);
-    const isPitDisplayUser = isPitDisplay(email);
+    const {login} = useAuth();
+    const isLead = needsPassword(email);
+    const isPitDisplayUser = isPitDisplayEmail(email);
 
     useEffect(() => {
-        if (!isLead && !isPitDisplayUser) {
-            setPassword(DEFAULT_PASSWORD);
-        } else {
-            setPassword("");
-        }
-    }, [isLead, isPitDisplayUser]);
+        setPassword(isLead ? "" : DEFAULT_PASSWORD);
+    }, [isLead]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!email.trim()) return setError("Please enter your email");
+        if (isLead && !password) return setError("Please enter your password");
+        if (isPitDisplayUser && password !== PITDISPLAY_PASSWORD) return setError("Incorrect password for pit display");
+
         setError("");
         setLoading(true);
-
         try {
-            if (!email.trim()) {
-                setError("Please enter your email");
-                setLoading(false);
-                return;
-            }
-
-            if (isLead && !password) {
-                setError("Please enter your password");
-                setLoading(false);
-                return;
-            }
-
-            if (isPitDisplayUser && password !== PITDISPLAY_PASSWORD) {
-                setError("Incorrect password for pit display");
-                setLoading(false);
-                return;
-            }
-
             await login(email, password || DEFAULT_PASSWORD);
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : "Login failed";
-            if (errorMessage.includes("auth/wrong-password") || errorMessage.includes("password")) {
-                setError("Incorrect email or password.");
-            } else if (errorMessage.includes("already logged in")) {
-                setError(errorMessage);
-            } else {
-                setError(errorMessage);
-            }
+            // invalid-credential is what Firebase returns for a bad password when email enumeration protection is on
+            setError(/password|invalid-credential/.test(errorMessage) ? "Incorrect email or password." : errorMessage);
         } finally {
             setLoading(false);
         }
@@ -85,12 +56,6 @@ const Login = () => {
                     <CardDescription>Team 955 / 749 - Scout Login</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {isAuthenticated && user && (
-                        <div className="p-3 bg-primary/10 text-primary text-sm rounded-md mb-4">
-                            You are already logged in as <b>{user.name}</b> ({user.email}). Please log out before
-                            logging in again.
-                        </div>
-                    )}
                     <form onSubmit={handleSubmit} className="space-y-4">
                         {error && (
                             <div className="p-3 bg-destructive/10 text-destructive text-sm rounded-md">
@@ -108,7 +73,7 @@ const Login = () => {
                                 placeholder="School Email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                disabled={loading || isAuthenticated}
+                                disabled={loading}
                                 className="w-full"
                             />
                         </div>
@@ -123,7 +88,7 @@ const Login = () => {
                                     placeholder="Enter password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    disabled={loading || isAuthenticated}
+                                    disabled={loading}
                                     className="w-full"
                                 />
                             </div>
@@ -131,7 +96,7 @@ const Login = () => {
                         <Button
                             type="submit"
                             className="w-full"
-                            disabled={loading || !email.trim() || (isLead && !password) || (isPitDisplayUser && !password) || isAuthenticated}
+                            disabled={loading || !email.trim() || (isLead && !password)}
                         >
                             {loading ? "Logging in..." : "Login"}
                         </Button>

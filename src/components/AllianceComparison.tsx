@@ -12,13 +12,22 @@ type TbaMatch = {
   };
 };
 
-interface AllianceStats {
-  avgScore: number;
-  autoPoints: number;
-  teleopPoints: number;
-  endgamePoints: number;
-  winRate: number;
-}
+type Side = "red" | "blue";
+
+const EMPTY = { avgScore: 0, autoPoints: 0, teleopPoints: 0, winRate: 0 };
+
+// Per-alliance averages over played matches (TBA marks unplayed scores as -1).
+export const allianceStats = (matches: TbaMatch[]) => {
+  const played = matches.filter((m) => m.alliances.red.score >= 0 && m.alliances.blue.score >= 0);
+  const n = played.length;
+  const side = (s: Side, o: Side) => n ? {
+    avgScore: Math.round(played.reduce((t, m) => t + m.alliances[s].score, 0) / n),
+    autoPoints: Math.round(played.reduce((t, m) => t + (m.score_breakdown?.[s]?.autoPoints || 0), 0) / n),
+    teleopPoints: Math.round(played.reduce((t, m) => t + (m.score_breakdown?.[s]?.teleopPoints || 0), 0) / n),
+    winRate: Math.round((played.filter((m) => m.alliances[s].score > m.alliances[o].score).length / n) * 100),
+  } : EMPTY;
+  return { red: side("red", "blue"), blue: side("blue", "red") };
+};
 
 const ComparisonBar = ({
   label,
@@ -82,64 +91,9 @@ const AllianceComparison = ({
   matches: TbaMatch[];
   loading?: boolean;
 }) => {
-  const { red, blue } = useMemo(() => {
-    const played = matches.filter(
-      (m) => m.alliances.red.score >= 0 && m.alliances.blue.score >= 0,
-    );
-    if (!played.length) {
-      return {
-        red: { avgScore: 0, autoPoints: 0, teleopPoints: 0, endgamePoints: 0, winRate: 0 },
-        blue: { avgScore: 0, autoPoints: 0, teleopPoints: 0, endgamePoints: 0, winRate: 0 },
-      };
-    }
-
-    let redScore = 0;
-    let blueScore = 0;
-    let redAuto = 0;
-    let blueAuto = 0;
-    let redTeleop = 0;
-    let blueTeleop = 0;
-    let redEnd = 0;
-    let blueEnd = 0;
-    let redWins = 0;
-    let blueWins = 0;
-
-    played.forEach((match) => {
-      redScore += match.alliances.red.score;
-      blueScore += match.alliances.blue.score;
-
-      redAuto += match.score_breakdown?.red?.autoPoints || 0;
-      blueAuto += match.score_breakdown?.blue?.autoPoints || 0;
-      redTeleop += match.score_breakdown?.red?.teleopPoints || 0;
-      blueTeleop += match.score_breakdown?.blue?.teleopPoints || 0;
-      redEnd += match.score_breakdown?.red?.endGamePoints || 0;
-      blueEnd += match.score_breakdown?.blue?.endGamePoints || 0;
-
-      if (match.alliances.red.score > match.alliances.blue.score) redWins += 1;
-      if (match.alliances.blue.score > match.alliances.red.score) blueWins += 1;
-    });
-
-    const count = played.length;
-    return {
-      red: {
-        avgScore: Math.round(redScore / count),
-        autoPoints: Math.round(redAuto / count),
-        teleopPoints: Math.round(redTeleop / count),
-        endgamePoints: Math.round(redEnd / count),
-        winRate: Math.round((redWins / count) * 100),
-      },
-      blue: {
-        avgScore: Math.round(blueScore / count),
-        autoPoints: Math.round(blueAuto / count),
-        teleopPoints: Math.round(blueTeleop / count),
-        endgamePoints: Math.round(blueEnd / count),
-        winRate: Math.round((blueWins / count) * 100),
-      },
-    };
-  }, [matches]);
-
-  const redAlliance = loading ? { avgScore: 0, autoPoints: 0, teleopPoints: 0, endgamePoints: 0, winRate: 0 } : red;
-  const blueAlliance = loading ? { avgScore: 0, autoPoints: 0, teleopPoints: 0, endgamePoints: 0, winRate: 0 } : blue;
+  const { red, blue } = useMemo(() => allianceStats(matches), [matches]);
+  const redAlliance = loading ? EMPTY : red;
+  const blueAlliance = loading ? EMPTY : blue;
 
   return (
     <div className="stat-card animate-fade-in">

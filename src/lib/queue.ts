@@ -11,9 +11,10 @@ import {
     remove,
     serverTimestamp,
     set,
+    update,
 } from "firebase/database";
 import {db} from "@/lib/firebase";
-import {slugifyName} from "@/lib/utils";
+import {STATIONS} from "@/pages/scouting/logic";
 
 export type QueueEntry = {
     id?: string;
@@ -22,14 +23,35 @@ export type QueueEntry = {
     joinedAt?: any;
 };
 
-export const setUserPresence = async (user: {
-    id: string;
-    name: string;
-    email?: string;
-}) => {
+export type CurrentAssignment = {
+    matchId: string;
+    teamNumber: string;
+    assignedAt?: number | null;
+    station?: string | null; // "Red 1".."Blue 3"; absent on assignments made before this field existed
+};
+export type CurrentSubjectiveAssignment = CurrentAssignment;
+
+type User = { id: string; name?: string };
+type TeamAssignments = Array<string | number | null>;
+
+// The objective and subjective flows share one implementation; these are their real differences.
+type Flow = {
+    queue: string;
+    matches: string;
+    assignment: string; // field under users/{id}
+    label: string; // used in error messages
+    limit: number; // both flows take the top 6 (the lead can only assign 6 teams)
+    keyed: boolean; // participants stored as array (objective) or object keyed by userId (subjective)
+};
+const OBJECTIVE: Flow = {queue: "queue", matches: "matches", assignment: "currentAssignment", label: "", limit: 6, keyed: false};
+const SUBJECTIVE: Flow = {queue: "subjectiveQueue", matches: "subjectiveMatches", assignment: "currentSubjectiveAssignment", label: "subjective ", limit: 6, keyed: true};
+
+// ---------- presence ----------
+
+export const setUserPresence = async (user: { id: string; name: string; email?: string }) => {
     try {
-        const userRef = ref(db, `users/${user.id}`);
-        await set(userRef, {
+        // update, not set: a reload mid-match must not wipe currentAssignment / currentSubjectiveAssignment
+        await update(ref(db, `users/${user.id}`), {
             id: user.id,
             name: user.name,
             email: user.email || null,
@@ -43,7 +65,6 @@ export const setUserPresence = async (user: {
 
 export const clearUserPresence = async (userId: string) => {
     try {
-        const userRef = ref(db, `users/${userId}`);
         await set(ref(db, `users/${userId}/lastActive`), serverTimestamp());
     } catch (err) {
         console.error("clearUserPresence error", err);
@@ -57,818 +78,219 @@ export const setSuppressPresenceOnUnload = (v: boolean) => {
 };
 export const shouldSuppressPresenceOnUnload = () => _suppressPresenceOnUnload;
 
-/**
- * Try to remove only the lastActive field for a user (best-effort, silent failures).
- */
+/** Try to remove only the lastActive field for a user (best-effort, silent failures). */
 export const removeUserLastActive = async (userId: string) => {
     try {
         await remove(ref(db, `users/${userId}/lastActive`));
     } catch (err) {
-        // ignore - caller will handle fallback/logging
         console.debug("removeUserLastActive failed", err);
     }
 };
 
-export const joinQueue = async (user: { id: string; name: string }) => {
-    try {
-        const q = query(ref(db, "queue"), orderByChild("userId"), equalTo(user.id));
-        const snap = await get(q);
-        if (snap.exists()) return;
-        const byName = query(
-            ref(db, "queue"),
-            orderByChild("name"),
-            equalTo(user.name),
-        );
-        const snapByName = await get(byName);
-        snapByName.forEach((child) => {
-            if (child.val()?.userId && child.val().userId !== user.id) {
-                remove(ref(db, `queue/${child.key}`)).catch(console.error);
-            }
-        });
-
-        const pushed = await push(ref(db, "queue"), {
-            userId: user.id,
-            name: user.name,
-            joinedAt: serverTimestamp(),
-        });
-        try {
-            await onDisconnect(ref(db, `queue/${pushed.key}`)).remove();
-        } catch (err) {
-            console.warn("onDisconnect for queue entry failed:", err);
-        }
-
-        return pushed.key;
-    } catch (err) {
-        console.error("joinQueue error", err);
-        throw err;
-    }
+/** Remove a user node and any of their queue entries (used on logout) */
+export const removeUserCompletely = async (userId: string) => {
+    await remove(ref(db, `users/${userId}`));
+    await removeQueueEntries(OBJECTIVE.queue, "userId", userId, () => true);
 };
 
-export const leaveQueue = async (userId: string) => {
-    try {
-        await removeQueueEntriesForUser("queue", userId);
-        await remove(ref(db, `users/${userId}/currentAssignment`)).catch(() => {});
-    } catch (err) {
-        console.error("leaveQueue error", err);
-        throw err;
-    }
-};
+// ---------- shared helpers ----------
 
-const removeQueueEntriesForUser = async (queuePath: string, userId: string) => {
-    const q = query(ref(db, queuePath), orderByChild("userId"), equalTo(userId));
-    const snap = await get(q);
+const removeQueueEntries = async (
+    queuePath: string,
+    field: "userId" | "name",
+    value: string,
+    keep: (v: any) => boolean,
+) => {
+    const snap = await get(query(ref(db, queuePath), orderByChild(field), equalTo(value)));
     const removes: Promise<void>[] = [];
-    snap.forEach((child) => {
-        removes.push(remove(ref(db, `${queuePath}/${child.key}`)));
+    snap.forEach((c) => {
+        if (keep(c.val())) removes.push(remove(ref(db, `${queuePath}/${c.key}`)));
     });
     await Promise.all(removes);
 };
 
-export const subscribeToQueue = (cb: (entries: QueueEntry[]) => void) => {
-    const q = query(ref(db, "queue"), orderByChild("joinedAt"));
-    const unsub = onValue(q, (snap) => {
-        const entries: QueueEntry[] = [];
-        snap.forEach((child) => {
-            entries.push({id: child.key || undefined, ...(child.val() as any)});
-        });
-        // ensure order by joinedAt (RTDB query already orders but ensure numeric sort)
-        entries.sort((a, b) => Number(a.joinedAt || 0) - Number(b.joinedAt || 0));
-        cb(entries);
-    });
-    return unsub;
-};
-
-export const getTopN = async (n = 6) => {
-    const q = query(ref(db, "queue"), orderByChild("joinedAt"), limitToFirst(n));
-    const snap = await get(q);
+const toEntries = (snap: any): QueueEntry[] => {
     const out: QueueEntry[] = [];
-    snap.forEach((child) => {
-        out.push({id: child.key, ...(child.val() as any)});
+    snap.forEach((c: any) => {
+        out.push({id: c.key || undefined, ...c.val()});
     });
-    return out;
+    // RTDB already orders by joinedAt, but ensure a numeric sort
+    return out.sort((a, b) => Number(a.joinedAt || 0) - Number(b.joinedAt || 0));
 };
 
-/**
- * Generate a readable, collision-resistant local id for a name.
- * Format: local:alice-smith or local:alice-smith-7xkq
- */
-export const getOrCreateLocalId = async (name: string) => {
-    const base = `local:${slugifyName(name)}`;
-    let candidate = base;
-    let attempt = 0;
-    // try to reuse existing entry with same name
-    while (true) {
-        const snap = await get(ref(db, `users/${candidate}`));
-        if (!snap.exists()) {
-            return candidate;
-        }
-        const data = snap.val();
-        if (data?.name === name) return candidate; // reuse
-
-        // collision with different name -> append short suffix
-        attempt += 1;
-        candidate = `${base}-${Math.random().toString(36).slice(2, 6)}`;
-        if (attempt > 6) return `${base}-${Date.now().toString(36)}`;
-    }
-};
-
-/**
- * Find an unused ID in the range A1..A25 and return it.
- * Returns null if none available.
- * This is intended for local / fallback users only (client-side IDs).
- */
-export const isNameInUse = async (
-    name: string,
-    excludeUserId?: string,
-    graceMs = 2 * 60 * 1000,
-): Promise<{ userId: string; lastActive: number | null } | null> => {
-    // Find any /users entry with this name that appears "active".
-    // Active = lastActive within graceMs OR no lastActive timestamp present.
-    const q = query(ref(db, "users"), orderByChild("name"), equalTo(name));
-    const snap = await get(q);
-    let found: { userId: string; lastActive: number | null } | null = null;
-    const now = Date.now();
-    snap.forEach((child) => {
-        const key = child.key;
-        if (!key || (excludeUserId && key === excludeUserId)) return;
-        const val = child.val() as any;
-        const la =
-            typeof val?.lastActive === "number" ? Number(val.lastActive) : null;
-        if (la === null) {
-            // no timestamp — treat as active
-            found = {userId: key, lastActive: null};
-            return;
-        }
-        if (now - la <= graceMs) {
-            found = {userId: key, lastActive: la};
-            return;
+const findActive = (snap: any) => {
+    let found: any = null;
+    snap.forEach((c: any) => {
+        const v = c.val();
+        if (v?.status === "active") {
+            found = {id: c.key, ...v};
+            return true;
         }
     });
     return found;
 };
 
-/**
- * Find an unused ID in the range A1..A25 and return it.
- * Returns null if none available.
- * This is intended for local / fallback users only (client-side IDs).
- */
-export const getAvailableAId = async (): Promise<string | null> => {
-    const usersSnap = await get(ref(db, `users`));
-    const used = new Set<string>();
-    usersSnap.forEach((c) => {
-        const k = c.key;
-        if (typeof k === "string" && /^A(?:[1-9]|1\d|2[0-5])$/.test(k)) used.add(k);
+// Dedupe concurrent joins from the same client (double-tap) — the read-then-push below is not atomic.
+// ponytail: cross-device duplicates still possible; a transaction would need a queue keyed by userId.
+const pendingJoins = new Map<string, Promise<string | undefined>>();
+
+const join = (f: Flow, user: { id: string; name: string }) => {
+    const k = `${f.queue}/${user.id}`;
+    if (!pendingJoins.has(k)) {
+        pendingJoins.set(k, doJoin(f, user).finally(() => pendingJoins.delete(k)));
+    }
+    return pendingJoins.get(k)!;
+};
+
+const doJoin = async (f: Flow, user: { id: string; name: string }) => {
+    const existing = await get(query(ref(db, f.queue), orderByChild("userId"), equalTo(user.id)));
+    if (existing.exists()) return undefined;
+    await removeQueueEntries(f.queue, "name", user.name, (v) => v?.userId && v.userId !== user.id).catch(
+        console.error,
+    );
+    const pushed = await push(ref(db, f.queue), {userId: user.id, name: user.name, joinedAt: serverTimestamp()});
+    try {
+        await onDisconnect(ref(db, `${f.queue}/${pushed.key}`)).remove();
+    } catch (err) {
+        console.warn("onDisconnect for queue entry failed:", err);
+    }
+    return pushed.key;
+};
+
+const leave = async (f: Flow, userId: string) => {
+    await removeQueueEntries(f.queue, "userId", userId, () => true);
+    await remove(ref(db, `users/${userId}/${f.assignment}`)).catch(() => {});
+};
+
+const subscribeQueue = (f: Flow, cb: (entries: QueueEntry[]) => void) =>
+    onValue(query(ref(db, f.queue), orderByChild("joinedAt")), (snap) => cb(toEntries(snap)));
+
+const subscribeActive = (f: Flow, cb: (m: any | null) => void) =>
+    onValue(ref(db, f.matches), (snap) => cb(findActive(snap)));
+
+const start = async (f: Flow, lead: { id: string; name: string }, teamAssignments?: TeamAssignments) => {
+    if (findActive(await get(ref(db, f.matches)))) {
+        throw new Error(`Another ${f.label}match is already running`);
+    }
+    const q = query(ref(db, f.queue), orderByChild("joinedAt"));
+    const entries = toEntries(await get(query(q, limitToFirst(f.limit))));
+    if (entries.length === 0) throw new Error(`No users in ${f.label}queue`);
+
+    const team = (i: number) => teamAssignments?.[i] ?? null;
+    const roster = entries.map((t, i) => ({
+        userId: t.userId,
+        name: t.name,
+        assignedTeam: team(i) != null ? String(team(i)) : null,
+        station: STATIONS[i] ?? null,
+    }));
+    const participants = f.keyed ? Object.fromEntries(roster.map((p) => [p.userId, p])) : roster;
+
+    const matchRef = await push(ref(db, f.matches), {
+        startedBy: lead.id,
+        startedByName: lead.name,
+        participants,
+        startedAt: serverTimestamp(),
+        status: "active",
     });
 
-    for (let i = 1; i <= 25; i++) {
-        const candidate = `A${i}`;
-        if (!used.has(candidate)) return candidate;
-    }
-    return null;
+    await Promise.all(
+        entries.flatMap((u, i) =>
+            team(i) == null
+                ? []
+                : set(ref(db, `users/${u.userId}/${f.assignment}`), {
+                      matchId: matchRef.key,
+                      teamNumber: String(team(i)),
+                      station: STATIONS[i] ?? null,
+                      assignedAt: serverTimestamp(),
+                  }),
+        ),
+    );
+
+    // remove only the participants from the queue (not everyone)
+    await Promise.all(entries.map((t) => removeQueueEntries(f.queue, "userId", t.userId, () => true)));
+    return matchRef.key;
 };
 
-/**
- * Allocate an A# id and create a users/{id} node atomically (best-effort client-side).
- * Returns the allocated id (or null if allocation failed).
- */
-export const allocateAId = async (name: string) => {
-    for (let attempt = 0; attempt < 6; attempt++) {
-        const candidate = (await getAvailableAId()) || null;
-        if (!candidate) return null;
-        const snap = await get(ref(db, `users/${candidate}`));
-        if (snap.exists()) {
-            // race — try again
-            await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
-            continue;
-        }
-
-        // create the user node
-        try {
-            await set(ref(db, `users/${candidate}`), {
-                id: candidate,
-                name,
-                email: null,
-                lastActive: serverTimestamp(),
-                source: "local",
-            });
-            return candidate;
-        } catch (err) {
-            console.warn("allocateAId set failed, retrying", err);
-            await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
-        }
-    }
-    return null;
-};
-
-/**
- * Migrate a user's DB records from oldId -> newId (users node + queue entries).
- * If newId already has data, entries for oldId will be moved and removed.
- */
-export const migrateUserId = async (
-    oldId: string,
-    newId: string,
-    name?: string,
-) => {
-    if (!oldId || !newId || oldId === newId) return;
-    try {
-        const oldUserSnap = await get(ref(db, `users/${oldId}`));
-        if (oldUserSnap.exists()) {
-            const oldData = oldUserSnap.val();
-            await set(ref(db, `users/${newId}`), {
-                ...oldData,
-                id: newId,
-                name: name || oldData.name,
-            });
-            await remove(ref(db, `users/${oldId}`));
-        }
-
-        // move queue entries
-        const q = query(ref(db, "queue"), orderByChild("userId"), equalTo(oldId));
-        const snap = await get(q);
-        const ops: Promise<any>[] = [];
-        snap.forEach((child) => {
-            const data = child.val();
-            data.userId = newId;
-            if (name) data.name = name;
-            ops.push(set(ref(db, `queue/${child.key}`), data));
-        });
-        await Promise.all(ops);
-
-        // remove any duplicate-name entries that belong to other ids
-        if (name) {
-            const byName = query(
-                ref(db, "queue"),
-                orderByChild("name"),
-                equalTo(name),
-            );
-            const byNameSnap = await get(byName);
-            byNameSnap.forEach((child) => {
-                const val = child.val();
-                if (val?.userId && val.userId !== newId) {
-                    remove(ref(db, `queue/${child.key}`)).catch(console.error);
-                }
-            });
-        }
-    } catch (err) {
-        console.error("migrateUserId error", err);
-        throw err;
-    }
-};
-
-/** Return the entire queue ordered by joinedAt */
-export const getAllQueue = async (): Promise<QueueEntry[]> => {
-    const q = query(ref(db, "queue"), orderByChild("joinedAt"));
-    const snap = await get(q);
-    const out: QueueEntry[] = [];
-    snap.forEach((child) => {
-        out.push({id: child.key, ...(child.val() as any)});
-    });
-    out.sort((a, b) => Number(a.joinedAt || 0) - Number(b.joinedAt || 0));
-    return out;
-};
-
-export const startMatch = async (
-    lead: { id: string; name: string },
-    teamAssignments?: Array<string | number | null>,
-) => {
-    try {
-        // enforce single active match: fail fast if another active match exists
-        const active = await getActiveMatch();
-        if (active) throw new Error("Another match is already running");
-
-        // Get top 6 from queue (only those who should be scouting)
-        const topSix = await getTopN(6);
-        if (topSix.length === 0) throw new Error("No users in queue");
-
-        // build participants — attach assignedTeam for the entries when provided
-        const participants = topSix.map((t, idx) => {
-            const assigned =
-                Array.isArray(teamAssignments) && idx < (teamAssignments || []).length
-                    ? teamAssignments![idx]
-                    : null;
-            return {
-                userId: t.userId,
-                name: t.name,
-                assignedTeam: assigned != null ? String(assigned) : null,
-            };
-        });
-
-        const matchesRef = ref(db, "matches");
-        const matchRef = await push(matchesRef);
-        await set(ref(db, `matches/${matchRef.key}`), {
-            startedBy: lead.id,
-            startedByName: lead.name,
-            participants,
-            startedAt: serverTimestamp(),
-            status: "active",
-        });
-
-        // persist per-user currentAssignment for those assigned
-        const ops: Promise<any>[] = [];
-        for (let i = 0; i < topSix.length; i++) {
-            const user = topSix[i];
-            const team = Array.isArray(teamAssignments) ? teamAssignments[i] : null;
-            if (team != null) {
-                ops.push(
-                    set(ref(db, `users/${user.userId}/currentAssignment`), {
-                        matchId: matchRef.key,
-                        teamNumber: String(team),
-                        assignedAt: serverTimestamp(),
-                    }),
-                );
-            }
-        }
-
-        // apply per-user assignment writes (fire-and-forget but await to fail early)
-        if (ops.length) await Promise.all(ops);
-
-        // remove only the top 6 participants from queue (not everyone)
-        await Promise.all(
-            topSix.map((t) => removeQueueEntriesForUser("queue", t.userId)),
-        );
-
-        return matchRef.key;
-    } catch (err) {
-        console.error("startMatch error", err);
-        throw err;
-    }
-};
-
-/**
- * Return the currently active match (first match with status === 'active') or null.
- */
-export const getActiveMatch = async () => {
-    try {
-        const snap = await get(ref(db, `matches`));
-        let found: any = null;
-        snap.forEach((child) => {
-            const v = child.val();
-            if (v?.status === "active") {
-                found = {id: child.key, ...v};
-                return true; // stop iteration
-            }
-        });
-        return found;
-    } catch (err) {
-        console.error("getActiveMatch error", err);
-        return null;
-    }
-};
-
-/**
- * Subscribe to the active match (invokes cb with match object or null). Returns unsubscribe.
- */
-export const subscribeToActiveMatch = (cb: (m: any | null) => void) => {
-    const r = ref(db, `matches`);
-    const unsub = onValue(r, (snap) => {
-        let found: any = null;
-        snap.forEach((child) => {
-            const v = child.val();
-            if (v?.status === "active") {
-                found = {id: child.key, ...v};
-                return true;
-            }
-        });
-        cb(found);
-    });
-    return () => unsub();
-};
-
-/**
- * End an active match: mark status/endedAt and clear users' currentAssignment for that match.
- */
-export const endMatch = async (
-    matchId: string,
-    endedBy?: { id: string; name?: string },
-) => {
+/** Load an active match, or return null if it has already ended. Throws if missing. */
+const loadActive = async (f: Flow, matchId: string) => {
     if (!matchId) throw new Error("matchId required");
-    try {
-        const matchSnap = await get(ref(db, `matches/${matchId}`));
-        if (!matchSnap.exists()) throw new Error("Match not found");
-        const match = matchSnap.val();
-        if (match.status !== "active") return;
-
-        // mark match ended
-        await set(ref(db, `matches/${matchId}/status`), "ended");
-        await set(ref(db, `matches/${matchId}/endedAt`), serverTimestamp());
-        if (endedBy?.id)
-            await set(ref(db, `matches/${matchId}/endedBy`), endedBy.id);
-
-        // clear per-user currentAssignment where it matches this match
-        const participantsObj = match.participants || {};
-        const ops: Promise<any>[] = [];
-        Object.entries(participantsObj).forEach(([userId, p]: [string, any]) => {
-            ops.push(
-                get(ref(db, `users/${userId}/currentAssignment`)).then((snap) => {
-                    if (!snap.exists()) return;
-                    const val = snap.val();
-                    if (String(val.matchId) === String(matchId)) {
-                        return remove(ref(db, `users/${userId}/currentAssignment`)).catch(
-                            console.warn,
-                        );
-                    }
-                }),
-            );
-        });
-
-        await Promise.all(ops);
-    } catch (err) {
-        console.error("endMatch error", err);
-        throw err;
-    }
+    const snap = await get(ref(db, `${f.matches}/${matchId}`));
+    if (!snap.exists()) throw new Error("Match not found");
+    const match = snap.val();
+    return match.status === "active" ? match : null;
 };
 
-export const signalMatchEnd = async (
-    matchId: string,
-    signalledBy?: { id: string; name?: string },
-) => {
-    if (!matchId) throw new Error("matchId required");
-    try {
-        const matchSnap = await get(ref(db, `matches/${matchId}`));
-        if (!matchSnap.exists()) throw new Error("Match not found");
-        const match = matchSnap.val();
-        if (match.status !== "active") return;
+const end = async (f: Flow, matchId: string, endedBy?: User) => {
+    const match = await loadActive(f, matchId);
+    if (!match) return;
 
-        // Mark that lead has signaled end (but don't actually end the match)
-        await set(ref(db, `matches/${matchId}/leadSignaledEnd`), true);
-        await set(ref(db, `matches/${matchId}/leadSignaledAt`), serverTimestamp());
-        if (signalledBy?.id)
-            await set(ref(db, `matches/${matchId}/leadSignaledBy`), signalledBy.id);
-    } catch (err) {
-        console.error("signalMatchEnd error", err);
-        throw err;
-    }
-};
+    await update(ref(db, `${f.matches}/${matchId}`), {
+        status: "ended",
+        endedAt: serverTimestamp(),
+        ...(endedBy?.id && {endedBy: endedBy.id}),
+    });
 
-/**
- * Remove any queue entries that match `name` but belong to other userIds.
- * Useful when a user logs in and we want to avoid duplicate-name entries.
- */
-export const cleanupDuplicateNames = async (userId: string, name: string) => {
-    try {
-        const q = query(ref(db, "queue"), orderByChild("name"), equalTo(name));
-        const snap = await get(q);
-        const removes: Promise<void>[] = [];
-        snap.forEach((child) => {
-            const val = child.val();
-            if (val?.userId && val.userId !== userId) {
-                removes.push(remove(ref(db, `queue/${child.key}`)));
+    // Objective participants are an array (keys "0".."5") plus submissions keyed by userId,
+    // so take the userId from the entry rather than the key.
+    const userIds = new Set(Object.entries(match.participants || {}).map(([k, p]: [string, any]) => p?.userId ?? k));
+    await Promise.all(
+        [...userIds].map(async (userId) => {
+            const r = ref(db, `users/${userId}/${f.assignment}`);
+            const snap = await get(r);
+            if (snap.exists() && String(snap.val().matchId) === String(matchId)) {
+                await remove(r).catch(console.warn);
             }
-        });
-        await Promise.all(removes);
-    } catch (err) {
-        console.error("cleanupDuplicateNames error", err);
-        throw err;
-    }
+        }),
+    );
 };
 
-/**
- * Remove a user node and any of their queue entries (used on logout)
- */
-export const removeUserCompletely = async (userId: string) => {
-    try {
-        await remove(ref(db, `users/${userId}`));
-        await Promise.all([
-            remove(ref(db, `users/${userId}/currentAssignment`)).catch(() => {}),
-            remove(ref(db, `users/${userId}/currentSubjectiveAssignment`)).catch(() => {}),
-        ]);
-        const q = query(ref(db, "queue"), orderByChild("userId"), equalTo(userId));
-        const snap = await get(q);
-        const removes: Promise<void>[] = [];
-        snap.forEach((child) => {
-            removes.push(remove(ref(db, `queue/${child.key}`)));
-        });
-        await Promise.all(removes);
-    } catch (err) {
-        console.error("removeUserCompletely error", err);
-        throw err;
-    }
+/** Mark that the lead has signaled end (but don't actually end the match). */
+const signal = async (f: Flow, matchId: string, signalledBy?: User) => {
+    if (!(await loadActive(f, matchId))) return;
+    await update(ref(db, `${f.matches}/${matchId}`), {
+        leadSignaledEnd: true,
+        leadSignaledAt: serverTimestamp(),
+        ...(signalledBy?.id && {leadSignaledBy: signalledBy.id}),
+    });
 };
 
-export type CurrentAssignment = {
-    matchId: string;
-    teamNumber: string;
-    assignedAt?: number | null;
-};
-
-/**
- * Subscribe to /users/{userId}/currentAssignment and invoke callback with the value (or null).
- * Returns an unsubscribe function.
- */
-export const subscribeToUserAssignment = (
-    userId: string,
-    cb: (a: CurrentAssignment | null) => void,
-) => {
-    const r = ref(db, `users/${userId}/currentAssignment`);
-    const unsub = onValue(r, (snap) => {
+const subscribeAssignment = (f: Flow, userId: string, cb: (a: CurrentAssignment | null) => void) =>
+    onValue(ref(db, `users/${userId}/${f.assignment}`), (snap) => {
         if (!snap.exists()) return cb(null);
         const val = snap.val();
-        const assignedAt =
-            typeof val.assignedAt === "number" ? Number(val.assignedAt) : null;
         cb({
             matchId: String(val.matchId),
             teamNumber: String(val.teamNumber),
-            assignedAt,
+            assignedAt: typeof val.assignedAt === "number" ? val.assignedAt : null,
+            station: val.station ?? null,
         });
     });
-    return () => unsub();
-};
 
-export const cleanupStaleUsers = async (
-    maxAgeMs = 10 * 60 * 1000 // 10 minutes
-) => {
-    try {
-        const usersSnap = await get(ref(db, "users"));
-        if (!usersSnap.exists()) return;
+// ---------- objective (match) scouting ----------
 
-        const now = Date.now();
-        const ops: Promise<any>[] = [];
+export const joinQueue = (user: { id: string; name: string }) => join(OBJECTIVE, user);
+export const leaveQueue = (userId: string) => leave(OBJECTIVE, userId);
+export const subscribeToQueue = (cb: (entries: QueueEntry[]) => void) => subscribeQueue(OBJECTIVE, cb);
+export const startMatch = (lead: { id: string; name: string }, teamAssignments?: TeamAssignments) =>
+    start(OBJECTIVE, lead, teamAssignments);
+export const subscribeToActiveMatch = (cb: (m: any | null) => void) => subscribeActive(OBJECTIVE, cb);
+export const endMatch = (matchId: string, endedBy?: User) => end(OBJECTIVE, matchId, endedBy);
+export const subscribeToUserAssignment = (userId: string, cb: (a: CurrentAssignment | null) => void) =>
+    subscribeAssignment(OBJECTIVE, userId, cb);
 
-        usersSnap.forEach((child) => {
-            const userId = child.key!;
-            const val = child.val();
-            const lastActive =
-                typeof val?.lastActive === "number" ? val.lastActive : null;
+export const signalMatchEnd = (matchId: string, signalledBy?: User) => signal(OBJECTIVE, matchId, signalledBy);
 
-            if (!lastActive || now - lastActive > maxAgeMs) {
-                // remove user
-                ops.push(remove(ref(db, `users/${userId}`)));
+// ---------- subjective scouting ----------
 
-                // remove queue entries
-                ops.push(
-                    get(
-                        query(ref(db, "queue"), orderByChild("userId"), equalTo(userId))
-                    ).then((snap) => {
-                        const removes: Promise<void>[] = [];
-                        snap.forEach((c) => {
-                            removes.push(remove(ref(db, `queue/${c.key}`)));
-                        });
-                        return Promise.all(removes);
-                    })
-                );
-            }
-        });
-
-        await Promise.all(ops);
-    } catch (err) {
-        console.error("cleanupStaleUsers error", err);
-    }
-};
-
-// ============ SUBJECTIVE QUEUE FUNCTIONS ============
-
-export const joinSubjectiveQueue = async (user: { id: string; name: string }) => {
-    try {
-        const q = query(ref(db, "subjectiveQueue"), orderByChild("userId"), equalTo(user.id));
-        const snap = await get(q);
-        if (snap.exists()) return;
-        const byName = query(
-            ref(db, "subjectiveQueue"),
-            orderByChild("name"),
-            equalTo(user.name),
-        );
-        const snapByName = await get(byName);
-        snapByName.forEach((child) => {
-            if (child.val()?.userId && child.val().userId !== user.id) {
-                remove(ref(db, `subjectiveQueue/${child.key}`)).catch(console.error);
-            }
-        });
-
-        const pushed = await push(ref(db, "subjectiveQueue"), {
-            userId: user.id,
-            name: user.name,
-            joinedAt: serverTimestamp(),
-        });
-        try {
-            await onDisconnect(ref(db, `subjectiveQueue/${pushed.key}`)).remove();
-        } catch (err) {
-            console.warn("onDisconnect for subjective queue entry failed:", err);
-        }
-
-        return pushed.key;
-    } catch (err) {
-        console.error("joinSubjectiveQueue error", err);
-        throw err;
-    }
-};
-
-export const leaveSubjectiveQueue = async (userId: string) => {
-    try {
-        await removeQueueEntriesForUser("subjectiveQueue", userId);
-        await remove(ref(db, `users/${userId}/currentSubjectiveAssignment`)).catch(() => {});
-    } catch (err) {
-        console.error("leaveSubjectiveQueue error", err);
-        throw err;
-    }
-};
-
-export const subscribeToSubjectiveQueue = (cb: (entries: QueueEntry[]) => void) => {
-    const q = query(ref(db, "subjectiveQueue"), orderByChild("joinedAt"));
-    const unsub = onValue(q, (snap) => {
-        const entries: QueueEntry[] = [];
-        snap.forEach((child) => {
-            entries.push({id: child.key || undefined, ...(child.val() as any)});
-        });
-        // ensure order by joinedAt (RTDB query already orders but ensure numeric sort)
-        entries.sort((a, b) => Number(a.joinedAt || 0) - Number(b.joinedAt || 0));
-        cb(entries);
-    });
-    return () => unsub();
-};
-
-export const getAllSubjectiveQueue = async (): Promise<QueueEntry[]> => {
-    const q = query(ref(db, "subjectiveQueue"), orderByChild("joinedAt"));
-    const snap = await get(q);
-    const out: QueueEntry[] = [];
-    snap.forEach((child) => {
-        out.push({id: child.key, ...(child.val() as any)});
-    });
-    out.sort((a, b) => Number(a.joinedAt || 0) - Number(b.joinedAt || 0));
-    return out;
-};
-
-export const startSubjectiveMatch = async (
-    lead: { id: string; name: string },
-    teamAssignments?: Array<string | number | null>,
-) => {
-    try {
-        // enforce single active subjective match: fail fast if another active subjective match exists
-        const active = await getActiveSubjectiveMatch();
-        if (active) throw new Error("Another subjective match is already running");
-
-        // include the entire subjective queue when starting a match
-        const all = await getAllSubjectiveQueue();
-        if (all.length === 0) throw new Error("No users in subjective queue");
-
-        // build participants object keyed by userId — attach assignedTeam for those assigned
-        const participants: Record<string, unknown> = {};
-        all.forEach((t, idx) => {
-            const assigned =
-                Array.isArray(teamAssignments) && idx < (teamAssignments || []).length
-                    ? teamAssignments![idx]
-                    : null;
-            participants[t.userId] = {
-                userId: t.userId,
-                name: t.name,
-                assignedTeam: assigned != null ? String(assigned) : null,
-            };
-        });
-
-        const matchesRef = ref(db, "subjectiveMatches");
-        const matchRef = await push(matchesRef);
-        await set(ref(db, `subjectiveMatches/${matchRef.key}`), {
-            startedBy: lead.id,
-            startedByName: lead.name,
-            participants,
-            startedAt: serverTimestamp(),
-            status: "active",
-        });
-
-        // persist per-user currentSubjectiveAssignment for those assigned (first 6)
-        const ops: Promise<any>[] = [];
-        const maxAssign = Math.min(
-            6,
-            all.length,
-            Array.isArray(teamAssignments) ? teamAssignments.length : 0,
-        );
-        for (let i = 0; i < maxAssign; i++) {
-            const user = all[i];
-            const team = teamAssignments![i];
-            if (team != null) {
-                ops.push(
-                    set(ref(db, `users/${user.userId}/currentSubjectiveAssignment`), {
-                        matchId: matchRef.key,
-                        teamNumber: String(team),
-                        assignedAt: serverTimestamp(),
-                    }),
-                );
-            }
-        }
-
-        // apply per-user assignment writes (fire-and-forget but await to fail early)
-        if (ops.length) await Promise.all(ops);
-
-        // remove all participants from subjective queue
-        await Promise.all(
-            all.map((t) => removeQueueEntriesForUser("subjectiveQueue", t.userId)),
-        );
-
-        return matchRef.key;
-    } catch (err) {
-        console.error("startSubjectiveMatch error", err);
-        throw err;
-    }
-};
-
-/**
- * Return the currently active subjective match (first match with status === 'active') or null.
- */
-export const getActiveSubjectiveMatch = async () => {
-    try {
-        const snap = await get(ref(db, `subjectiveMatches`));
-        let found: any = null;
-        snap.forEach((child) => {
-            const v = child.val();
-            if (v?.status === "active") {
-                found = {id: child.key, ...v};
-                return true; // stop iteration
-            }
-        });
-        return found;
-    } catch (err) {
-        console.error("getActiveSubjectiveMatch error", err);
-        return null;
-    }
-};
-
-/**
- * Subscribe to the active subjective match (invokes cb with match object or null). Returns unsubscribe.
- */
-export const subscribeToActiveSubjectiveMatch = (cb: (m: any | null) => void) => {
-    const r = ref(db, `subjectiveMatches`);
-    const unsub = onValue(r, (snap) => {
-        let found: any = null;
-        snap.forEach((child) => {
-            const v = child.val();
-            if (v?.status === "active") {
-                found = {id: child.key, ...v};
-                return true;
-            }
-        });
-        cb(found);
-    });
-    return () => unsub();
-};
-
-/**
- * End an active subjective match: mark status/endedAt and clear users' currentSubjectiveAssignment for that match.
- */
-export const endSubjectiveMatch = async (
-    matchId: string,
-    endedBy?: { id: string; name?: string },
-) => {
-    if (!matchId) throw new Error("matchId required");
-    try {
-        const matchSnap = await get(ref(db, `subjectiveMatches/${matchId}`));
-        if (!matchSnap.exists()) throw new Error("Match not found");
-        const match = matchSnap.val();
-        if (match.status !== "active") return;
-
-        // mark match ended
-        await set(ref(db, `subjectiveMatches/${matchId}/status`), "ended");
-        await set(ref(db, `subjectiveMatches/${matchId}/endedAt`), serverTimestamp());
-        if (endedBy?.id)
-            await set(ref(db, `subjectiveMatches/${matchId}/endedBy`), endedBy.id);
-
-        // clear per-user currentSubjectiveAssignment where it matches this match
-        const participantsObj = match.participants || {};
-        const ops: Promise<any>[] = [];
-        Object.entries(participantsObj).forEach(([userId, p]: [string, any]) => {
-            ops.push(
-                get(ref(db, `users/${userId}/currentSubjectiveAssignment`)).then((snap) => {
-                    if (!snap.exists()) return;
-                    const val = snap.val();
-                    if (String(val.matchId) === String(matchId)) {
-                        return remove(ref(db, `users/${userId}/currentSubjectiveAssignment`)).catch(
-                            console.warn,
-                        );
-                    }
-                }),
-            );
-        });
-
-        await Promise.all(ops);
-    } catch (err) {
-        console.error("endSubjectiveMatch error", err);
-        throw err;
-    }
-};
-
-export type CurrentSubjectiveAssignment = {
-    matchId: string;
-    teamNumber: string;
-    assignedAt?: number | null;
-};
-
-/**
- * Subscribe to /users/{userId}/currentSubjectiveAssignment and invoke callback with the value (or null).
- * Returns an unsubscribe function.
- */
+export const joinSubjectiveQueue = (user: { id: string; name: string }) => join(SUBJECTIVE, user);
+export const leaveSubjectiveQueue = (userId: string) => leave(SUBJECTIVE, userId);
+export const subscribeToSubjectiveQueue = (cb: (entries: QueueEntry[]) => void) => subscribeQueue(SUBJECTIVE, cb);
+export const startSubjectiveMatch = (lead: { id: string; name: string }, teamAssignments?: TeamAssignments) =>
+    start(SUBJECTIVE, lead, teamAssignments);
+export const subscribeToActiveSubjectiveMatch = (cb: (m: any | null) => void) => subscribeActive(SUBJECTIVE, cb);
+export const endSubjectiveMatch = (matchId: string, endedBy?: User) => end(SUBJECTIVE, matchId, endedBy);
+export const signalSubjectiveMatchEnd = (matchId: string, signalledBy?: User) => signal(SUBJECTIVE, matchId, signalledBy);
 export const subscribeToUserSubjectiveAssignment = (
     userId: string,
     cb: (a: CurrentSubjectiveAssignment | null) => void,
-) => {
-    const r = ref(db, `users/${userId}/currentSubjectiveAssignment`);
-    const unsub = onValue(r, (snap) => {
-        if (!snap.exists()) return cb(null);
-        const val = snap.val();
-        const assignedAt =
-            typeof val.assignedAt === "number" ? Number(val.assignedAt) : null;
-        cb({
-            matchId: String(val.matchId),
-            teamNumber: String(val.teamNumber),
-            assignedAt,
-        });
-    });
-    return () => unsub();
-};
+) => subscribeAssignment(SUBJECTIVE, userId, cb);

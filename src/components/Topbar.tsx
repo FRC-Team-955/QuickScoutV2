@@ -1,10 +1,10 @@
 import { ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
 import MobileSidebarContent from "@/components/MobileSidebarContent";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { LogOut, Menu, User } from "lucide-react";
+import { toast } from "sonner";
 
 type TopBarProps = {
   activeTab: string;
@@ -15,12 +15,8 @@ type TopBarProps = {
 
 const TopBar = ({ activeTab, onTabChange, topContent, leftContent }: TopBarProps) => {
   const { user, logout } = useAuth();
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
-  };
+  // App routes to /login once the user is cleared; navigating before logout resolves bounced back to /dashboard.
+  const handleLogout = () => logout().catch(() => toast.error("Logout failed"));
 
   return (
     <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border px-6 py-4">

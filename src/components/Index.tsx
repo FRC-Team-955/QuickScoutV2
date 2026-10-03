@@ -1,103 +1,27 @@
-import {useEffect, useState} from "react";
-import {useLocation, useNavigate} from "react-router-dom";
+import {useNavigate} from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
 import Dashboard from "@/pages/Dashboard";
-import {useAuth} from "@/contexts/AuthContext";
 import TopBar from "./Topbar";
 
+// Only rendered for the "/dashboard" view; other tabs are separate pages routed by App.
 const Index = () => {
-    const location = useLocation();
-    const [activeTab, setActiveTab] = useState("dashboard");
-    const {user, logout} = useAuth();
     const navigate = useNavigate();
-
-    useEffect(() => {
-        // Update active tab based on current route
-        if (location.pathname === "/scouting") {
-            setActiveTab("scouting");
-        } else if (location.pathname === "/pit-scouting") {
-            setActiveTab("pit-scouting");
-        } else if (location.pathname === "/dashboard") {
-            setActiveTab("dashboard");
-        } else if (location.pathname === "/analytics") {
-            setActiveTab("analytics");
-        } else if (location.pathname === "/matches") {
-            setActiveTab("matches");
-        } else if (location.pathname === "/opr") {
-            setActiveTab("opr");
-        } else if (location.pathname === "/leaderboard") {
-            setActiveTab("leaderboard");
-        }
-    }, [location.pathname]);
-
-    const handleLogout = () => {
-        logout();
-        navigate("/login");
-    };
-
-    const handleTabChange = (tab: string) => {
-        setActiveTab(tab);
-        if (tab === "scouting") {
-            navigate("/scouting");
-        } else if (tab === "pit-scouting") {
-            navigate("/pit-scouting");
-        } else if (tab === "dashboard") {
-            navigate("/dashboard");
-        } else if (tab === "analytics") {
-            navigate("/analytics");
-        } else if (tab === "matches") {
-            navigate("/matches");
-        } else if (tab === "opr") {
-            navigate("/opr");
-        } else if (tab === "leaderboard") {
-            navigate("/leaderboard");
-        }
-    };
+    const handleTabChange = (tab: string) => navigate(`/${tab}`);
 
     return (
         <div className="min-h-screen bg-background">
-            <Sidebar activeTab={activeTab} onTabChange={handleTabChange}/>
+            <Sidebar activeTab="dashboard" onTabChange={handleTabChange}/>
 
             {/* Main Content */}
             <main
                 className="md:ml-64 min-h-screen max-h-screen overflow-auto touch-pan-y"
                 style={{WebkitOverflowScrolling: "touch"}}
             >
-                <TopBar activeTab={activeTab} onTabChange={handleTabChange}/>
+                <TopBar activeTab="dashboard" onTabChange={handleTabChange}/>
 
                 {/* Page Content */}
                 <div className="p-6">
-                    {activeTab === "dashboard" && <Dashboard/>}
-                    {activeTab === "matches" && (
-                        <div className="stat-card">
-                            <h2 className="font-mono font-bold text-foreground text-xl">
-                                Matches
-                            </h2>
-                            <p className="text-muted-foreground mt-2">
-                                Match schedule coming soon...
-                            </p>
-                        </div>
-                    )}
-                    {activeTab === "scouting" && (
-                        <div className="stat-card">
-                            <h2 className="font-mono font-bold text-foreground text-xl">
-                                Scouting
-                            </h2>
-                            <p className="text-muted-foreground mt-2">
-                                Redirecting to scouting page...
-                            </p>
-                        </div>
-                    )}
-                    {activeTab === "analytics" && (
-                        <div className="stat-card">
-                            <h2 className="font-mono font-bold text-foreground text-xl">
-                                Analytics
-                            </h2>
-                            <p className="text-muted-foreground mt-2">
-                                Advanced analytics coming soon...
-                            </p>
-                        </div>
-                    )}
+                    <Dashboard/>
                 </div>
             </main>
         </div>

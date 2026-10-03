@@ -1,104 +1,91 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { QueueEntry } from "@/lib/queue";
 import {
   subscribeToQueue,
-  joinQueue as apiJoin,
-  leaveQueue as apiLeave,
-  getTopN,
-  startMatch as apiStartMatch,
-  subscribeToActiveMatch as apiSubscribeToActiveMatch,
-  endMatch as apiEndMatch,
-  signalMatchEnd as apiSignalMatchEnd,
+  joinQueue,
+  leaveQueue,
+  startMatch,
+  subscribeToActiveMatch,
+  endMatch,
+  signalMatchEnd,
 } from "@/lib/queue";
 
-export const useQueue = (currentUser: { id: string; name: string } | null) => {
+type CurrentUser = { id: string; name: string } | null;
+type Unsub = () => void;
+
+const needId = (matchId: string) => {
+  if (!matchId) throw new Error("matchId required");
+};
+
+// Shared by useQueue and useSubjectiveQueue; `api` is one flow's functions from @/lib/queue.
+export const useQueueFlow = (
+  currentUser: CurrentUser,
+  api: {
+    subscribeQueue: (cb: (e: QueueEntry[]) => void) => Unsub;
+    subscribeActive: (cb: (m: any) => void) => Unsub;
+    join: (u: { id: string; name: string }) => Promise<unknown>;
+    leave: (userId: string) => Promise<unknown>;
+    start: (lead: { id: string; name: string }, teams?: Array<string | number | null>) => Promise<string>;
+    end: (matchId: string, by: { id: string; name: string }) => Promise<unknown>;
+    signal: (matchId: string, by: { id: string; name: string }) => Promise<unknown>;
+  },
+) => {
   const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeMatch, setActiveMatch] = useState<any | null>(null);
 
-  useEffect(() => {
-    const unsub = subscribeToQueue((entries) => setQueue(entries));
-    return unsub;
-  }, []);
+  useEffect(() => api.subscribeQueue(setQueue), [api]);
+  useEffect(() => api.subscribeActive(setActiveMatch), [api]);
 
-  useEffect(() => {
-    const unsub = apiSubscribeToActiveMatch((m) => setActiveMatch(m));
-    return unsub;
-  }, []);
+  const topSix = useMemo(() => queue.slice(0, 6), [queue]);
+  const isInQueue = !!currentUser && queue.some((q) => q.userId === currentUser.id);
+  const isInTopSix = !!currentUser && topSix.some((q) => q.userId === currentUser.id);
 
-  const isInQueue = useMemo(() => {
-    if (!currentUser) return false;
-    return queue.some((q) => q.userId === currentUser.id);
-  }, [queue, currentUser]);
-
-  const isInTopSix = useMemo(() => {
-    if (!currentUser) return false;
-    return queue.slice(0, 6).some((q) => q.userId === currentUser.id);
-  }, [queue, currentUser]);
-
-  const join = useCallback(async () => {
-    if (!currentUser) throw new Error("Not authenticated");
-    setLoading(true);
-    try {
-      await apiJoin({ id: currentUser.id, name: currentUser.name });
-    } finally {
-      setLoading(false);
-    }
-  }, [currentUser]);
-
-  const leave = useCallback(async () => {
-    if (!currentUser) throw new Error("Not authenticated");
-    setLoading(true);
-    try {
-      await apiLeave(currentUser.id);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentUser]);
-
-  const start = useCallback(async (teamAssignments?: Array<string | number | null>) => {
-    if (!currentUser) throw new Error("Not authenticated");
-    setLoading(true);
-    try {
-      return await apiStartMatch({ id: currentUser.id, name: currentUser.name }, teamAssignments);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentUser]);
-
-  const endMatch = useCallback(async (matchId: string) => {
-    if (!currentUser) throw new Error("Not authenticated");
-    if (!matchId) throw new Error("matchId required");
-    setLoading(true);
-    try {
-      return await apiEndMatch(matchId, { id: currentUser.id, name: currentUser.name });
-    } finally {
-      setLoading(false);
-    }
-  }, [currentUser]);
-
-  const signalMatchEnd = useCallback(async (matchId: string) => {
-    if (!currentUser) throw new Error("Not authenticated");
-    if (!matchId) throw new Error("matchId required");
-    setLoading(true);
-    try {
-      return await apiSignalMatchEnd(matchId, { id: currentUser.id, name: currentUser.name });
-    } finally {
-      setLoading(false);
-    }
-  }, [currentUser]);
-
+  // Runs fn(user) with the loading flag set; rejects if signed out.
+  // Keyed on id/name so callers passing a fresh {id, name} literal each render get stable callbacks.
+  const id = currentUser?.id;
+  const name = currentUser?.name;
+  const run = useCallback(
+    async <T,>(fn: (u: { id: string; name: string }) => Promise<T>) => {
+      if (!id) throw new Error("Not authenticated");
+      setLoading(true);
+      try {
+        return await fn({ id, name });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [id, name],
+  );
   return {
     queue,
     loading,
-    join,
-    leave,
-    start,
-    endMatch,
-    signalMatchEnd,
+    join: useCallback(() => run(async (u) => void (await api.join(u))), [run, api]),
+    leave: useCallback(() => run(async (u) => void (await api.leave(u.id))), [run, api]),
+    start: useCallback((teams?: Array<string | number | null>) => run((u) => api.start(u, teams)), [run, api]),
+    endMatch: useCallback(
+      (matchId: string) => run((u) => (needId(matchId), api.end(matchId, u))),
+      [run, api],
+    ),
+    signalMatchEnd: useCallback(
+      (matchId: string) => run((u) => (needId(matchId), api.signal(matchId, u))),
+      [run, api],
+    ),
     activeMatch,
     isInQueue,
     isInTopSix,
-    topSix: queue.slice(0, 6),
+    topSix,
   };
 };
+
+const objectiveApi = {
+  subscribeQueue: subscribeToQueue,
+  subscribeActive: subscribeToActiveMatch,
+  join: joinQueue,
+  leave: leaveQueue,
+  start: startMatch,
+  end: endMatch,
+  signal: signalMatchEnd,
+};
+
+export const useQueue = (currentUser: CurrentUser) => useQueueFlow(currentUser, objectiveApi);

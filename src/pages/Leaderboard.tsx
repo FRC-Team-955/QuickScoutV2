@@ -1,4 +1,4 @@
-import {useEffect, useState} from "react";
+import {Fragment, useEffect, useState} from "react";
 import {useNavigate} from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/Topbar";
@@ -8,17 +8,20 @@ import {useAuth} from "@/contexts/AuthContext";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@/components/ui/table";
 import {get, ref} from "firebase/database";
 import {db} from "@/lib/firebase";
-import {CLACK_DATE_RANGE, DCMP_DATE_RANGE, filterByEventType, isClackData, isDCMPData, isOSFData, OSF_DATE_RANGE} from "@/lib/dateUtils";
-
-type LeaderboardRow = {
-    key: string;
-    scoutName: string;
-    matches: number;
-    lastSubmitted: number;
-    submittedAt: number;
-};
+import {CLACK_DATE_RANGE, DCMP_DATE_RANGE, OSF_DATE_RANGE} from "@/lib/dateUtils";
+import {Boards, buildBoards, collectSubmissions, LeaderboardRow} from "@/lib/leaderboard";
 
 type EventType = "all" | "osf" | "clack" | "dcmp" | "current";
+
+const BOARDS: { event: keyof Boards; title: string; empty: string }[] = [
+    {event: "osf", title: `OSF Scout Activity (${OSF_DATE_RANGE})`, empty: "No OSF scouting data found."},
+    {event: "clack", title: `Clack Scout Activity (${CLACK_DATE_RANGE})`, empty: "No Clack scouting data found."},
+    {event: "dcmp", title: `DCMP Scout Activity (${DCMP_DATE_RANGE})`, empty: "No DCMP scouting data found."},
+    {event: "current", title: "Current Event Scout Activity", empty: "No current event scouting data found."},
+];
+
+const EMPTY_BOARDS: Boards = {osf: [], clack: [], dcmp: [], current: []};
+const TABS = new Set(["dashboard", "scouting", "pit-scouting", "analytics", "matches", "opr", "leaderboard"]);
 
 const Leaderboard = () => {
     const {user} = useAuth();
@@ -26,28 +29,12 @@ const Leaderboard = () => {
     const [activeTab, setActiveTab] = useState("leaderboard");
     const [eventType, setEventType] = useState<EventType>("all");
     const [loading, setLoading] = useState(false);
-    const [osfRows, setOsfRows] = useState<LeaderboardRow[]>([]);
-    const [clackRows, setClackRows] = useState<LeaderboardRow[]>([]);
-    const [dcmpRows, setDcmpRows] = useState<LeaderboardRow[]>([]);
-    const [currentRows, setCurrentRows] = useState<LeaderboardRow[]>([]);
+    const [boards, setBoards] = useState<Boards>(EMPTY_BOARDS);
+    const [scoutCount, setScoutCount] = useState(0);
 
     const handleTabChange = (tab: string) => {
         setActiveTab(tab);
-        if (tab === "dashboard") {
-            navigate("/dashboard");
-        } else if (tab === "scouting") {
-            navigate("/scouting");
-        } else if (tab === "pit-scouting") {
-            navigate("/pit-scouting");
-        } else if (tab === "analytics") {
-            navigate("/analytics");
-        } else if (tab === "matches") {
-            navigate("/matches");
-        } else if (tab === "opr") {
-            navigate("/opr");
-        } else if (tab === "leaderboard") {
-            navigate("/leaderboard");
-        }
+        if (TABS.has(tab)) navigate(`/${tab}`);
     };
 
     const renderLeaderboardCard = (title: string, rows: LeaderboardRow[]) => (
@@ -70,7 +57,7 @@ const Leaderboard = () => {
                             {rows.map((row, index) => (
                                 <TableRow
                                     key={row.key}
-                                    className={row.scoutName === user?.name ? "bg-primary/5" : undefined}
+                                    className={row.key === user?.name?.trim().toLowerCase() ? "bg-primary/5" : undefined}
                                 >
                                     <TableCell className="font-mono">{index + 1}</TableCell>
                                     <TableCell className="font-medium">{row.scoutName}</TableCell>
@@ -91,177 +78,17 @@ const Leaderboard = () => {
         const fetchLeaderboard = async () => {
             setLoading(true);
             try {
-                // Track all submissions per scout with their timestamps
-                const submissions = new Map<
-                    string,
-                    Array<{ scoutName: string; submittedAt: number }>
-                >();
-
-                // Fetch normal matches data
-                const matchesRef = ref(db, "matches");
-                const matchesSnap = await get(matchesRef);
-
-                if (matchesSnap.exists()) {
-                    const matchesData = matchesSnap.val();
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    Object.values(matchesData as Record<string, Record<string, any>>).forEach((matchValue) => {
-                        const participantsRoot = matchValue?.participants || matchValue;
-                        if (!participantsRoot || typeof participantsRoot !== "object") return;
-
-                        Object.entries(participantsRoot).forEach(([participantId, data]) => {
-                            // Skip numeric indices (array elements)
-                            if (/^\d+$/.test(participantId)) return;
-                            
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            const dataObj = data as Record<string, any>;
-                            if (!dataObj) return;
-
-                            const hasSubmission =
-                                dataObj.teamNumber != null ||
-                                dataObj.submittedAt != null ||
-                                dataObj.autonomous ||
-                                dataObj.teleop ||
-                                dataObj.endGame;
-                            if (!hasSubmission) return;
-
-                            const scoutName = String(dataObj.scoutName || dataObj.name || "").trim();
-                            if (!scoutName) return;
-
-                            const key = scoutName.toLowerCase();
-
-                            const submittedAt =
-                                typeof dataObj.submittedAt === "number"
-                                    ? dataObj.submittedAt
-                                    : Number(dataObj.submittedAt) || 0;
-
-                            if (!submissions.has(key)) {
-                                submissions.set(key, []);
-                            }
-                            submissions.get(key)!.push({ scoutName, submittedAt });
-                        });
-                    });
-                }
-
-                // Fetch subjective matches data
-                const subjectiveRef = ref(db, "subjectiveMatches");
-                const subjectiveSnap = await get(subjectiveRef);
-
-                if (subjectiveSnap.exists()) {
-                    const subjectiveData = subjectiveSnap.val();
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    Object.values(subjectiveData as Record<string, Record<string, any>>).forEach((matchValue) => {
-                        const participantsRoot = matchValue?.participants;
-                        if (!participantsRoot || typeof participantsRoot !== "object") return;
-
-                        Object.entries(participantsRoot).forEach(([participantId, data]) => {
-                            // Skip numeric indices (array elements)
-                            if (/^\d+$/.test(participantId)) return;
-                            
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            const dataObj = data as Record<string, any>;
-                            if (!dataObj) return;
-
-                            const scoutName = String(dataObj.scoutName || "").trim();
-                            if (!scoutName) return;
-
-                            const submittedAt =
-                                typeof dataObj.submittedAt === "number"
-                                    ? dataObj.submittedAt
-                                    : Number(dataObj.submittedAt) || 0;
-
-                            const key = scoutName.toLowerCase();
-
-                            if (!submissions.has(key)) {
-                                submissions.set(key, []);
-                            }
-                            submissions.get(key)!.push({ scoutName, submittedAt });
-                        });
-                    });
-                }
-
-                // Aggregate submissions by event type
-                const osfTally = new Map<string, LeaderboardRow>();
-                const clackTally = new Map<string, LeaderboardRow>();
-                const dcmpTally = new Map<string, LeaderboardRow>();
-                const currentTally = new Map<string, LeaderboardRow>();
-
-                submissions.forEach((subList, key) => {
-                    const scoutName = subList[0]?.scoutName || "";
-                    const {osf: osfSubs, clack: clackSubs, dcmp: dcmpSubs, current: currentSubs} = filterByEventType(subList);
-
-                    // For OSF
-                    if (osfSubs.length > 0) {
-                        const lastSubmitted = Math.max(...osfSubs.map(s => s.submittedAt));
-                        osfTally.set(key, {
-                            key,
-                            scoutName,
-                            matches: osfSubs.length,
-                            lastSubmitted,
-                            submittedAt: lastSubmitted,
-                        });
-                    }
-
-                    // For Clack
-                    if (clackSubs.length > 0) {
-                        const lastSubmitted = Math.max(...clackSubs.map(s => s.submittedAt));
-                        clackTally.set(key, {
-                            key,
-                            scoutName,
-                            matches: clackSubs.length,
-                            lastSubmitted,
-                            submittedAt: lastSubmitted,
-                        });
-                    }
-
-                    // For DCMP
-                    if (dcmpSubs.length > 0) {
-                        const lastSubmitted = Math.max(...dcmpSubs.map(s => s.submittedAt));
-                        dcmpTally.set(key, {
-                            key,
-                            scoutName,
-                            matches: dcmpSubs.length,
-                            lastSubmitted,
-                            submittedAt: lastSubmitted,
-                        });
-                    }
-
-                    // For Current
-                    if (currentSubs.length > 0) {
-                        const lastSubmitted = Math.max(...currentSubs.map(s => s.submittedAt));
-                        currentTally.set(key, {
-                            key,
-                            scoutName,
-                            matches: currentSubs.length,
-                            lastSubmitted,
-                            submittedAt: lastSubmitted,
-                        });
-                    }
-                });
-
-                // Sort both boards
-                const osfRows = Array.from(osfTally.values()).sort(
-                    (a, b) => b.matches - a.matches || b.lastSubmitted - a.lastSubmitted
-                );
-                const clackRows = Array.from(clackTally.values()).sort(
-                    (a, b) => b.matches - a.matches || b.lastSubmitted - a.lastSubmitted
-                );
-                const dcmpRows = Array.from(dcmpTally.values()).sort(
-                    (a, b) => b.matches - a.matches || b.lastSubmitted - a.lastSubmitted
-                );
-                const currentRows = Array.from(currentTally.values()).sort(
-                    (a, b) => b.matches - a.matches || b.lastSubmitted - a.lastSubmitted
-                );
-
-                setOsfRows(osfRows);
-                setClackRows(clackRows);
-                setDcmpRows(dcmpRows);
-                setCurrentRows(currentRows);
+                const [matchesSnap, subjectiveSnap] = await Promise.all([
+                    get(ref(db, "matches")),
+                    get(ref(db, "subjectiveMatches")),
+                ]);
+                const submissions = collectSubmissions(matchesSnap.val(), subjectiveSnap.val());
+                setBoards(buildBoards(submissions));
+                setScoutCount(submissions.size);
             } catch (error) {
                 console.error("Error fetching leaderboard data:", error);
-                setOsfRows([]);
-                setClackRows([]);
-                setDcmpRows([]);
-                setCurrentRows([]);
+                setBoards(EMPTY_BOARDS);
+                setScoutCount(0);
             } finally {
                 setLoading(false);
             }
@@ -291,13 +118,13 @@ const Leaderboard = () => {
                             </p>
                         </div>
                         <div className="text-sm text-muted-foreground">
-                            {loading ? "Loading…" : `${osfRows.length + clackRows.length + dcmpRows.length + currentRows.length} scouts`}
+                            {loading ? "Loading…" : `${scoutCount} scouts`}
                         </div>
                     </div>
 
                     <div className="flex items-center gap-3">
                         <span className="text-sm font-medium">Event Type:</span>
-                        <Select value={eventType} onValueChange={setEventType}>
+                        <Select value={eventType} onValueChange={(v) => setEventType(v as EventType)}>
                             <SelectTrigger className="w-[200px]">
                                 <SelectValue />
                             </SelectTrigger>
@@ -317,91 +144,21 @@ const Leaderboard = () => {
                                 Loading leaderboard…
                             </CardContent>
                         </Card>
-                    ) : (osfRows.length === 0 && clackRows.length === 0 && dcmpRows.length === 0 && currentRows.length === 0) ? (
+                    ) : scoutCount === 0 ? (
                         <Card>
                             <CardContent className="p-6 text-sm text-muted-foreground">
                                 No submitted scouting data found yet.
                             </CardContent>
                         </Card>
                     ) : (
-                        <>
-                            {/* All Events - Show both boards */}
-                            {eventType === "all" && (
-                                <>
-                                    {osfRows.length > 0 && (
-                                        renderLeaderboardCard(`OSF Scout Activity (${OSF_DATE_RANGE})`, osfRows)
-                                    )}
-
-                                    {clackRows.length > 0 && (
-                                        renderLeaderboardCard(`Clack Scout Activity (${CLACK_DATE_RANGE})`, clackRows)
-                                    )}
-
-                                    {dcmpRows.length > 0 && (
-                                        renderLeaderboardCard(`DCMP Scout Activity (${DCMP_DATE_RANGE})`, dcmpRows)
-                                    )}
-
-                                    {currentRows.length > 0 && (
-                                        renderLeaderboardCard("Current Event Scout Activity", currentRows)
-                                    )}
-                                </>
-                            )}
-
-                            {/* OSF Only */}
-                            {eventType === "osf" && osfRows.length > 0 && (
-                                renderLeaderboardCard(`OSF Scout Activity (${OSF_DATE_RANGE})`, osfRows)
-                            )}
-
-                            {/* Clack Only */}
-                            {eventType === "clack" && clackRows.length > 0 && (
-                                renderLeaderboardCard(`Clack Scout Activity (${CLACK_DATE_RANGE})`, clackRows)
-                            )}
-
-                            {/* DCMP Only */}
-                            {eventType === "dcmp" && dcmpRows.length > 0 && (
-                                renderLeaderboardCard(`DCMP Scout Activity (${DCMP_DATE_RANGE})`, dcmpRows)
-                            )}
-
-                            {/* OSF selected but no data */}
-                            {eventType === "osf" && osfRows.length === 0 && (
-                                <Card>
-                                    <CardContent className="p-6 text-sm text-muted-foreground">
-                                        No OSF scouting data found.
-                                    </CardContent>
+                        BOARDS.filter(({event}) => eventType === "all" ? boards[event].length > 0 : eventType === event).map(({event, title, empty}) =>
+                            boards[event].length > 0 ? (
+                                <Fragment key={event}>{renderLeaderboardCard(title, boards[event])}</Fragment>
+                            ) : (
+                                <Card key={event}>
+                                    <CardContent className="p-6 text-sm text-muted-foreground">{empty}</CardContent>
                                 </Card>
-                            )}
-
-                            {/* Clack selected but no data */}
-                            {eventType === "clack" && clackRows.length === 0 && (
-                                <Card>
-                                    <CardContent className="p-6 text-sm text-muted-foreground">
-                                        No Clack scouting data found.
-                                    </CardContent>
-                                </Card>
-                            )}
-
-                            {/* DCMP selected but no data */}
-                            {eventType === "dcmp" && dcmpRows.length === 0 && (
-                                <Card>
-                                    <CardContent className="p-6 text-sm text-muted-foreground">
-                                        No DCMP scouting data found.
-                                    </CardContent>
-                                </Card>
-                            )}
-
-                            {/* Current Event Only */}
-                            {eventType === "current" && currentRows.length > 0 && (
-                                renderLeaderboardCard("Current Event Scout Activity", currentRows)
-                            )}
-
-                            {/* Current Event selected but no data */}
-                            {eventType === "current" && currentRows.length === 0 && (
-                                <Card>
-                                    <CardContent className="p-6 text-sm text-muted-foreground">
-                                        No current event scouting data found.
-                                    </CardContent>
-                                </Card>
-                            )}
-                        </>
+                            ))
                     )}
                 </div>
             </main>
