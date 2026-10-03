@@ -1,8 +1,9 @@
-import {useCallback, useEffect, useRef, useState} from "react";
+import {type ReactNode, useCallback, useEffect, useMemo, useRef, useState} from "react";
 import Confetti from "react-confetti";
 import {useNavigate} from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/Topbar";
+import {navItems} from "@/components/nav";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Textarea} from "@/components/ui/textarea";
@@ -15,7 +16,6 @@ import {useSubjectiveQueue} from "@/hooks/use-subjective-queue";
 import {
     type CurrentAssignment,
     type CurrentSubjectiveAssignment,
-    subscribeToActiveMatch,
     subscribeToUserAssignment,
     subscribeToUserSubjectiveAssignment,
 } from "@/lib/queue";
@@ -24,114 +24,249 @@ import successAudio from "/partyblower.mp3";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select.tsx";
 import {toast} from "sonner";
 import {TBA_EVENT_KEY, getEventMatches} from "@/lib/tba";
+import {
+    allSubmitted,
+    buildMatchPayload,
+    buildSubjectivePayload,
+    EMPTY_MATCH,
+    EMPTY_SUBJECTIVE,
+    matchDraftKey,
+    participantRoster,
+    qualTeams,
+    readDraft,
+    removeDraft,
+    STATIONS,
+    SUBJECTIVE_SECTIONS,
+    subjectiveDraftKey,
+    validAssignment,
+    writeDraft,
+} from "@/pages/scouting/logic";
 
-// Draft persistence types and helpers
-type MatchScoutingDraft = {
-    teamNumber: string;
-    autonomousNotes: string;
-    autonomousFuel: number;
-    autoClimb: string;
-    teamNumberNotes: string;
-    teleopNotes: string;
-    teleopFuel: number;
-    teleopClimb: string;
-    endGameNotes: string;
-    didClimb: boolean;
-    climbLevel: string;
-    defenseScore: string;
-    sotm: string;
-    robotTipped: string;
+const EMPTY_TEAMS = ["", "", "", "", "", ""];
+const FUEL_STEPS = [-1, 1, 3, 5, 10];
+
+// Form state mirrored to localStorage under draftKey. Whenever draftKey changes to a new
+// session, the form is reloaded from that session's draft (over `seed`).
+const useDraftForm = <T extends object>(empty: T, draftKey: string | null, seed: Partial<T>) => {
+    const [form, setForm] = useState(empty);
+    const keyRef = useRef<string | null>(null);
+    useEffect(() => {
+        keyRef.current = draftKey;
+        if (draftKey) setForm({...empty, ...seed, ...(readDraft<T>(draftKey) ?? {})});
+    }, [draftKey]);
+    useEffect(() => {
+        if (keyRef.current) writeDraft(keyRef.current, form);
+    }, [form]);
+    const setField = <K extends keyof T>(k: K, v: T[K]) => setForm((f) => ({...f, [k]: v}));
+    // Uses this render's draftKey: clearing the assignment may already have nulled keyRef.
+    const finish = () => {
+        if (draftKey) removeDraft(draftKey);
+        keyRef.current = null;
+        setForm(empty);
+    };
+    return {form, setForm, setField, finish};
 };
 
-type SubjectiveScoutingDraft = {
-    subjectiveTeamNumber: string;
-    autonomousEffectiveness: string;
-    canQuicklyScore: string;
-    estimatedBPS: string;
-    canClimb: string;
-    climbTime: string;
-    defensiveStrategy: string;
-    blockingEffectiveness: string;
-    allyCooperation: string;
-    robotReliability: string;
-    robotPenalties: string;
-    autoFuel: string;
-    autoClimb1: string;
-    teleopPassing: string;
-    gameSense: string;
-    strengths: string;
-    weaknesses: string;
+const Section = ({title, description, children}: { title: ReactNode; description?: string; children?: ReactNode }) => (
+    <Card>
+        <CardHeader>
+            <CardTitle>{title}</CardTitle>
+            {description && <CardDescription>{description}</CardDescription>}
+        </CardHeader>
+        {children && <CardContent>{children}</CardContent>}
+    </Card>
+);
+
+const Choice = ({value, onChange, options = ["yes", "no"], className = "flex gap-2"}: {
+    value: string; onChange: (v: string) => void; options?: string[]; className?: string;
+}) => (
+    <div className={className}>
+        {options.map((o) => (
+            <Button key={o} variant={value === o ? "default" : "outline"} onClick={() => onChange(o)}>
+                {o[0].toUpperCase() + o.slice(1)}
+            </Button>
+        ))}
+    </div>
+);
+
+const Counter = ({label, value, onStep}: { label: string; value: number; onStep: (d: number) => void }) => (
+    <div className="flex items-center justify-between p-4 border rounded-lg">
+        <div>
+            <Label className="text-base font-medium">{label}</Label>
+            <p className="text-sm text-muted-foreground">Current: {value}</p>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+            {FUEL_STEPS.map((d) => (
+                <Button key={d} variant="outline" size="sm" onClick={() => onStep(d)}>
+                    {d > 0 ? `+${d}` : d}
+                </Button>
+            ))}
+        </div>
+    </div>
+);
+
+const Person = ({name, sub}: { name?: string; sub: string }) => (
+    <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium">
+            {name?.charAt(0)?.toUpperCase() || "?"}
+        </div>
+        <div>
+            <div className="text-sm font-medium">{name}</div>
+            <div className="text-xs text-muted-foreground">{sub}</div>
+        </div>
+    </div>
+);
+
+const QueueCard = ({title, description, queue, emptyText, youText, isYouInTopSix, userId, teamAssignments, isLead, children}: {
+    title: string; description: string; queue: any[]; emptyText: string; youText: string; isYouInTopSix: boolean;
+    userId?: string; teamAssignments: string[]; isLead: boolean; children: ReactNode;
+}) => (
+    <Card>
+        <CardHeader>
+            <CardTitle>{title}</CardTitle>
+            <CardDescription>{description}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+            <div className="space-y-2">
+                <div className="text-sm text-muted-foreground">Live queue — ordered by join time</div>
+                <ul className="space-y-2 mt-2">
+                    {queue.length === 0 && <li className="text-sm text-muted-foreground">{emptyText}</li>}
+                    {queue.map((q, idx) => (
+                        <li
+                            key={q.id}
+                            className={`flex items-center justify-between p-2 rounded-md border ${idx < 6 ? "bg-primary/5 border-primary/20" : "bg-secondary"}`}
+                        >
+                            <Person name={q.name} sub={idx < 6 ? `#${idx + 1} — active` : `#${idx + 1}`}/>
+                            <div className="flex items-center gap-3">
+                                {userId === q.userId && isYouInTopSix && (
+                                    <div className="text-xs text-success font-medium">{youText}</div>
+                                )}
+                                {isLead && idx < 6 && teamAssignments[idx] && (
+                                    <div className="text-sm px-2 py-1 rounded-md bg-amber-50 text-amber-700">
+                                        Team {teamAssignments[idx]}
+                                    </div>
+                                )}
+                                {idx < 6 && (
+                                    <div className="text-xs px-2 py-1 rounded-md bg-primary/10 text-primary">Active</div>
+                                )}
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+            {children}
+        </CardContent>
+    </Card>
+);
+
+const ScoutersCard = ({title, description, emptyText, participants}: {
+    title: string; description: string; emptyText: string; participants: any;
+}) => {
+    const roster = participantRoster(participants);
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>{title}</CardTitle>
+                <CardDescription>{description}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                {roster.length > 0 ? (
+                    <ul className="space-y-2">
+                        {roster.map((p) => (
+                            <li key={p.key} className="flex items-center justify-between p-2 rounded-md border bg-secondary/50">
+                                <Person name={p.name} sub={`Team ${p.assignedTeam || "—"}`}/>
+                                {p.submitted ? (
+                                    <div className="text-xs px-2 py-1 rounded-md bg-primary/10 text-primary font-medium">Submitted</div>
+                                ) : (
+                                    <div className="text-xs px-2 py-1 rounded-md bg-green-50 text-green-700 font-medium">Scouting</div>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                    <p className="text-sm text-muted-foreground">{emptyText}</p>
+                )}
+            </CardContent>
+        </Card>
+    );
 };
 
-const getMatchDraftKey = (userId: string, matchId: string, teamNumber: string) =>
-    `scout_draft_match:${userId}:${matchId}:${teamNumber}`;
+// Lead-side start / signal end / force end, shared by the match and subjective queues.
+const LeadControls = ({match, userId, label, loading, canStart, onStart, onSignal, onForce}: {
+    match: any; userId?: string; label: string; loading: boolean; canStart: boolean;
+    onStart: () => void; onSignal: () => void; onForce: () => void;
+}) =>
+    !match ? (
+        <Button onClick={onStart} disabled={loading || !canStart} className="flex-1">
+            <Play className="w-4 h-4 mr-2"/>
+            Assign & Start {label}
+        </Button>
+    ) : match.startedBy !== userId ? (
+        <Button className="flex-1" disabled>{label[0].toUpperCase() + label.slice(1)} running elsewhere</Button>
+    ) : (
+        <div className="flex gap-2 flex-1">
+            <Button onClick={onSignal} variant="destructive" className="flex-1" disabled={loading || match.leadSignaledEnd}>
+                {match.leadSignaledEnd ? "End Signaled" : `Signal End ${label}`}
+            </Button>
+            <Button onClick={onForce} variant="destructive" className="flex-1" disabled={loading}>
+                Force End {label}
+            </Button>
+        </div>
+    );
 
-const getSubjectiveDraftKey = (userId: string, matchId: string, teamNumber: string) =>
-    `scout_draft_subjective:${userId}:${matchId}:${teamNumber}`;
+// Ends the match once every rostered scout has submitted. Every open client runs this;
+// end() is a no-op once the match is no longer active.
+const useAutoEnd = (root: string, matchId: string | undefined, enabled: boolean, end: (id: string) => Promise<unknown>) =>
+    useEffect(() => {
+        if (!matchId || !enabled) return;
+        return onValue(ref(getDatabase(), `${root}/${matchId}/participants`), (snap) => {
+            if (allSubmitted(snap.val())) end(matchId).catch((err) => console.error("Failed to auto-end match", err));
+        });
+    }, [root, matchId, enabled, end]);
 
-const readDraft = <T extends object>(key: string): T | null => {
-    try {
-        const data = localStorage.getItem(key);
-        return data ? JSON.parse(data) : null;
-    } catch {
-        return null;
-    }
+// Scout-side notices: the lead signaled the end, or the session ended without this scout submitting (force end).
+const useSessionNotices = (inSession: boolean, signaled: boolean, submitting: boolean, label: string) => {
+    useEffect(() => {
+        if (inSession && signaled) toast(`Lead has signaled the end of the ${label}. Please finish your scouting and submit.`);
+    }, [inSession, signaled]);
+    const wasIn = useRef(false);
+    useEffect(() => {
+        if (wasIn.current && !inSession && !submitting) toast(`The lead ended the ${label}. You have been removed from it.`);
+        wasIn.current = inSession;
+    }, [inSession]);
 };
 
-const writeDraft = <T extends object>(key: string, data: T): void => {
-    try {
-        localStorage.setItem(key, JSON.stringify(data));
-    } catch {
-        console.warn("Failed to write draft to localStorage");
-    }
-};
+const QueueToggle = ({inQueue, label, onClick, disabled}: { inQueue: boolean; label: string; onClick: () => void; disabled: boolean }) => (
+    <Button onClick={onClick} disabled={disabled} className="flex-1">
+        {inQueue ? <Minus className="w-4 h-4 mr-2"/> : <Plus className="w-4 h-4 mr-2"/>}
+        {inQueue ? `Leave ${label}` : `Join ${label}`}
+    </Button>
+);
 
-const removeDraft = (key: string): void => {
-    try {
-        localStorage.removeItem(key);
-    } catch {
-        console.warn("Failed to remove draft from localStorage");
-    }
-};
+// Logs and toasts any error from fn.
+const run = (fn: () => Promise<unknown>, fallback: string) =>
+    fn().catch((err) => {
+        console.error(err);
+        toast((err as Error)?.message || fallback);
+    });
 
 const Scouting = () => {
     const {user} = useAuth();
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState("scouting");
-    const isManualSessionRef = useRef(false);
 
     const handleTabChange = (tab: string) => {
         setActiveTab(tab);
-        if (tab === "dashboard") {
-            navigate("/dashboard");
-        } else if (tab === "scouting") {
-            navigate("/scouting");
-        } else if (tab === "pit-scouting") {
-            navigate("/pit-scouting");
-        } else if (tab === "analytics") {
-            navigate("/analytics");
-        } else if (tab === "matches") {
-            navigate("/matches");
-        } else if (tab === "opr") {
-            navigate("/opr");
-        } else if (tab === "leaderboard") {
-            navigate("/leaderboard");
-        }
+        if (navItems.some((i) => i.id === tab)) navigate(`/${tab}`);
     };
 
+    // Stable identity: the queue hooks' callbacks (and the participants listener below) depend on it.
+    const queueUser = useMemo(() => (user ? {id: user.id, name: user.name} : null), [user?.id, user?.name]);
+
     const {
-        queue,
-        topSix,
-        join,
-        leave,
-        start,
-        endMatch,
-        signalMatchEnd,
-        activeMatch,
-        isInQueue,
-        isInTopSix,
+        queue, topSix, join, leave, start, endMatch, signalMatchEnd, activeMatch, isInQueue, isInTopSix,
         loading: queueLoading,
-    } = useQueue(user ? {id: user.id, name: user.name} : null);
+    } = useQueue(queueUser);
 
     const {
         queue: subjectiveQueue,
@@ -140,131 +275,107 @@ const Scouting = () => {
         leave: subjectiveLeave,
         start: subjectiveStart,
         endMatch: subjectiveEndMatch,
+        signalMatchEnd: subjectiveSignalMatchEnd,
         activeMatch: subjectiveActiveMatch,
         isInQueue: isInSubjectiveQueue,
         isInTopSix: isInSubjectiveTopSix,
         loading: subjectiveQueueLoading,
-    } = useSubjectiveQueue(user ? {id: user.id, name: user.name} : null);
+    } = useSubjectiveQueue(queueUser);
 
     const isLead = !!user?.isLead;
 
-    const handleQueueToggle = async () => {
-        try {
-            if (isInQueue) {
-                await leave();
-            } else {
-                await join();
-            }
-        } catch (err) {
-            console.error(err);
-            toast((err as Error)?.message || "Queue error");
-        }
-    };
-
-    const handleSubjectiveQueueToggle = async () => {
-        try {
-            if (isInSubjectiveQueue) {
-                await subjectiveLeave();
-            } else {
-                await subjectiveJoin();
-            }
-        } catch (err) {
-            console.error(err);
-            toast((err as Error)?.message || "Subjective queue error");
-        }
-    };
-
-    const [teamAssignments, setTeamAssignments] = useState<string[]>([
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-    ]);
+    const [teamAssignments, setTeamAssignments] = useState<string[]>(EMPTY_TEAMS);
     const [importingTeams, setImportingTeams] = useState(false);
     const [qualificationNumber, setQualificationNumber] = useState("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const setAssignment = (index: number, value: string) => {
-        setTeamAssignments((prev) => {
-            const copy = [...prev];
-            copy[index] = value.replace(/[^0-9]/g, "").slice(0, 5);
-            return copy;
-        });
+    const [currentAssignment, setCurrentAssignment] = useState<CurrentAssignment | null>(null);
+    const [currentSubjectiveAssignment, setCurrentSubjectiveAssignment] = useState<CurrentSubjectiveAssignment | null>(null);
+
+    useEffect(() => user?.id ? subscribeToUserAssignment(user.id, setCurrentAssignment) : undefined, [user?.id]);
+    useEffect(() => user?.id ? subscribeToUserSubjectiveAssignment(user.id, setCurrentSubjectiveAssignment) : undefined, [user?.id]);
+
+    // A scout is in a session exactly while their assignment points at the currently active match.
+    const isInMatchScouting = !!user?.id && !!activeMatch?.id && currentAssignment?.matchId === activeMatch.id;
+    const isInSubjectiveScouting = !!user?.id && !!subjectiveActiveMatch?.id && currentSubjectiveAssignment?.matchId === subjectiveActiveMatch.id;
+    const isActivelyScouting = isInMatchScouting || isInSubjectiveScouting;
+
+    const matchKey = isInMatchScouting ? matchDraftKey(user.id, currentAssignment.matchId, currentAssignment.teamNumber) : null;
+    const subjectiveKey = isInSubjectiveScouting
+        ? subjectiveDraftKey(user.id, currentSubjectiveAssignment.matchId, currentSubjectiveAssignment.teamNumber)
+        : null;
+    const match = useDraftForm(EMPTY_MATCH, matchKey, {teamNumber: currentAssignment?.teamNumber});
+    const subj = useDraftForm(EMPTY_SUBJECTIVE, subjectiveKey, {subjectiveTeamNumber: currentSubjectiveAssignment?.teamNumber});
+    const m = match.form;
+    const s = subj.form;
+
+    useEffect(() => {
+        if (matchKey) toast(`Scouting Team ${currentAssignment.teamNumber}`);
+    }, [matchKey]);
+
+    useEffect(() => {
+        if (!(isActivelyScouting || isInQueue || isInSubjectiveQueue)) return;
+        const warn = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            e.returnValue = "";
+        };
+        window.addEventListener("beforeunload", warn);
+        return () => window.removeEventListener("beforeunload", warn);
+    }, [isActivelyScouting, isInQueue, isInSubjectiveQueue]);
+
+    useSessionNotices(isInMatchScouting, !!activeMatch?.leadSignaledEnd, isSubmitting, "match");
+    useSessionNotices(isInSubjectiveScouting, !!subjectiveActiveMatch?.leadSignaledEnd, isSubmitting, "subjective match");
+    useAutoEnd("matches", activeMatch?.id, !!user?.id, endMatch);
+    useAutoEnd("subjectiveMatches", subjectiveActiveMatch?.id, !!user?.id, subjectiveEndMatch);
+
+    const [showConfetti, setShowConfetti] = useState(false);
+    const [confettiSize, setConfettiSize] = useState({width: 0, height: 0});
+    const confettiTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+        const updateSize = () => setConfettiSize({width: window.innerWidth, height: window.innerHeight});
+        updateSize();
+        window.addEventListener("resize", updateSize);
+        return () => window.removeEventListener("resize", updateSize);
+    }, []);
+
+    const triggerConfetti = useCallback(() => {
+        setShowConfetti(true);
+        setTimeout(() => {
+            new Audio(successAudio).play().catch((err) => console.warn("Unable to play success audio", err));
+        }, Math.random() * 15000 + 1000);
+        if (confettiTimeoutRef.current) clearTimeout(confettiTimeoutRef.current);
+        confettiTimeoutRef.current = setTimeout(() => {
+            setShowConfetti(false);
+            confettiTimeoutRef.current = null;
+        }, 5000);
+    }, []);
+
+    const setAssignment = (index: number, value: string) =>
+        setTeamAssignments((prev) => prev.map((t, i) => (i === index ? value.replace(/[^0-9]/g, "").slice(0, 5) : t)));
+
+    // The first min(6, queueSize) assignments if all are valid team numbers, else null.
+    const readyAssignments = (queueSize: number) => {
+        const assigned = teamAssignments.slice(0, Math.min(6, queueSize));
+        return assigned.every(validAssignment) ? assigned : null;
     };
 
     const handleImportTeamsByQualNumber = async () => {
-        if (!qualificationNumber.trim()) {
-            toast("Please enter a qualification match number");
-            return;
-        }
-
+        if (!qualificationNumber.trim()) return toast("Please enter a qualification match number");
+        const qualNum = parseInt(qualificationNumber, 10);
+        setImportingTeams(true);
         try {
-            setImportingTeams(true);
-            const qualNum = parseInt(qualificationNumber, 10);
-
             const matches = await getEventMatches(TBA_EVENT_KEY);
-
-            if (!matches || matches.length === 0) {
-                toast("No matches found");
-                setTeamAssignments(["", "", "", "", "", ""]);
-                return;
+            const teams = matches?.length ? qualTeams(matches, qualNum) : null;
+            const count = teams?.filter(Boolean).length ?? 0;
+            if (!count) {
+                setTeamAssignments(EMPTY_TEAMS);
+                return toast(!matches?.length ? "No matches found"
+                    : !teams ? `Qualification match ${qualNum} not found`
+                        : "No valid team numbers found in qualification match");
             }
-
-            // Find match with matching qualification number
-            const match = matches.find((m: any) => {
-                const matchKey = m.key || "";
-                // Match key format: "2026orore_qm1", "2026orore_qm2", etc
-                const qmMatch = matchKey.match(/_qm(\d+)/);
-                if (qmMatch) {
-                    return parseInt(qmMatch[1], 10) === qualNum;
-                }
-                return false;
-            });
-
-            if (!match) {
-                toast(`Qualification match ${qualNum} not found`);
-                setTeamAssignments(["", "", "", "", "", ""]);
-                return;
-            }
-
-            // Extract team numbers from alliances
-            // Match structure: { alliances: { red: { team_keys: [...] }, blue: { team_keys: [...] } } }
-            const redTeams = match.alliances?.red?.team_keys || [];
-            const blueTeams = match.alliances?.blue?.team_keys || [];
-
-            const teamNumbers: string[] = [];
-
-            // Red teams (indices 0, 1, 2)
-            redTeams.forEach((key: string) => {
-                const num = key.replace(/^frc/, "");
-                if (/^\d+$/.test(num)) {
-                    teamNumbers.push(num);
-                }
-            });
-
-            // Blue teams (indices 3, 4, 5)
-            blueTeams.forEach((key: string) => {
-                const num = key.replace(/^frc/, "");
-                if (/^\d+$/.test(num)) {
-                    teamNumbers.push(num);
-                }
-            });
-
-            if (teamNumbers.length === 0) {
-                toast("No valid team numbers found in qualification match");
-                setTeamAssignments(["", "", "", "", "", ""]);
-                return;
-            }
-
-            // Fill the team assignments with proper order: Red 1, Red 2, Red 3, Blue 1, Blue 2, Blue 3
-            const newAssignments = ["", "", "", "", "", ""];
-            teamNumbers.slice(0, 6).forEach((num, idx) => {
-                newAssignments[idx] = num;
-            });
-
-            setTeamAssignments(newAssignments);
-            toast(`Imported ${teamNumbers.length} teams from Qualification Match ${qualNum}`);
+            setTeamAssignments(teams);
+            toast(`Imported ${count} teams from Qualification Match ${qualNum}`);
             setQualificationNumber("");
         } catch (err) {
             console.error("Failed to import teams from TBA", err);
@@ -274,904 +385,95 @@ const Scouting = () => {
         }
     };
 
+    const handleStartMatch = () => run(async () => {
+        if (activeMatch) return toast("A match is already running — end it before starting a new one.");
+        const assigned = readyAssignments(topSix.length);
+        if (!assigned) return toast("Please enter valid team numbers for the active slots (numbers only)");
+        await start(assigned);
+        toast(`Match started — Teams: ${assigned.filter(Boolean).join(", ")}`);
+        setTeamAssignments(EMPTY_TEAMS);
+    }, "Failed to start match");
 
-    const validAssignment = (s: string) => /^\d{1,5}$/.test(s);
-    const handleStartMatch = async () => {
+    const handleStartSubjectiveMatch = () => run(async () => {
+        if (subjectiveActiveMatch) return toast("A subjective match is already running — end it before starting a new one.");
+        const assigned = readyAssignments(subjectiveTopSix.length);
+        if (!assigned) return toast("Please enter valid team numbers for the active slots (numbers only)");
+        const matchId = await subjectiveStart(assigned);
+        toast(`Subjective match started — id: ${matchId}`);
+    }, "Failed to start subjective match");
+
+    const signalEnd = (active: any, signal: (id: string) => Promise<unknown>, label: string) => () => run(async () => {
+        if (!active?.id) return toast(`No active ${label} to end`);
+        await signal(active.id);
+        toast(`${label[0].toUpperCase() + label.slice(1)} end signaled to all scouters`);
+    }, `Failed to signal ${label} end`);
+
+    // Ends the match for everyone, submitted or not: status flips to ended, which closes every scout's form,
+    // and unsubmitted scouts' assignments are cleared.
+    const forceEnd = (active: any, end: (id: string) => Promise<unknown>, label: string, draftPrefix: string) => () => run(async () => {
+        if (!active?.id) return toast(`No active ${label} to end`);
+        // Clears drafts on this (the lead's) device only.
+        Object.keys(localStorage).filter((k) => k.includes(draftPrefix)).forEach((k) => localStorage.removeItem(k));
+        await end(active.id);
+        toast(`${label[0].toUpperCase() + label.slice(1)} force ended — all scouters removed`);
+    }, `Failed to force end ${label}`);
+
+    // Wraps a save that resolves to its success message; navigates away on success.
+    const submitting = (save: () => Promise<string>) => async () => {
+        setIsSubmitting(true);
         try {
-            if (activeMatch) {
-                toast("A match is already running — end it before starting a new one.");
-                return;
-            }
-
-            const required = Math.min(6, topSix.length);
-            const assigned = teamAssignments.slice(0, required);
-            const invalid = assigned.some((v) => !validAssignment(v));
-            if (required > 0 && invalid) {
-                toast(
-                    "Please enter valid team numbers for the active slots (numbers only)",
-                );
-                return;
-            }
-
-            const matchId = await start(assigned);
-            const teamList = assigned.filter(t => t).join(", ");
-            toast(`Match started — Teams: ${teamList}`);
-            setActiveTeamAssignments(assigned);
-            setTeamAssignments(["", "", "", "", "", ""]);
+            toast(await save());
+            setTimeout(() => navigate("/dashboard"), 500);
         } catch (err) {
-            console.error(err);
-            toast((err as Error)?.message || "Failed to start match");
+            console.error("Submit error:", err);
+            toast("Failed to submit. Please try again.");
+            setIsSubmitting(false);
         }
     };
 
-    const handleStartSubjectiveMatch = async () => {
-        try {
-            if (subjectiveActiveMatch) {
-                toast("A subjective match is already running — end it before starting a new one.");
-                return;
-            }
-
-            const required = Math.min(6, subjectiveTopSix.length);
-            const assigned = teamAssignments.slice(0, required);
-            const invalid = assigned.some((v) => !validAssignment(v));
-            if (required > 0 && invalid) {
-                toast(
-                    "Please enter valid team numbers for the active slots (numbers only)",
-                );
-                return;
-            }
-
-            const matchId = await subjectiveStart(assigned);
-            toast(`Subjective match started — id: ${matchId}`);
-        } catch (err) {
-            console.error(err);
-            toast((err as Error)?.message || "Failed to start subjective match");
-        }
-    };
-
-    const handleEndMatch = async () => {
-        try {
-            if (!activeMatch?.id) return toast("No active match to end");
-            await signalMatchEnd(activeMatch.id);
-            toast("Match end signaled to all scouters");
-        } catch (err) {
-            console.error(err);
-            toast((err as Error)?.message || "Failed to signal match end");
-        }
-    };
-
-    const handleEndSubjectiveMatch = async () => {
-        try {
-            if (!subjectiveActiveMatch?.id) return toast("No active subjective match to end");
-            await subjectiveEndMatch(subjectiveActiveMatch.id);
-        } catch (err) {
-            console.error(err);
-            toast((err as Error)?.message || "Failed to end subjective match");
-        }
-    };
-
-    const startSubjectiveScouting = (teamNum?: string) => {
-        const effectiveTeam = (
-            typeof teamNum === "string" ? teamNum : subjectiveTeamNumber
-        ).trim();
-        if (!effectiveTeam) {
-            toast("Please enter a team number");
-            return;
-        }
-
-        if (teamNum) setSubjectiveTeamNumber(String(teamNum));
-
-        setIsInMatchScouting(false);
-        setIsInSubjectiveScouting(true);
-        setAutonomousEffectiveness("");
-        setCanQuicklyScore("");
-        setEstimatedBPS("");
-        setCanClimb("");
-        setClimbTime("");
-        setClimbLevelSubjective("");
-        setTeamFocus("");
-        setDriverSynchronization("");
-        setDefensiveStrategy("");
-        setBlockingEffectiveness("");
-        setAllyCooperation("");
-        setDefensiveSkill("");
-        setRobotReliability("");
-        setRobotPenalties("");
-        setAutoFuel("");
-        setAutoClimb1("");
-        setTeleopPassing("");
-        setGameSense("");
-        setStrengths("");
-        setWeaknesses("");
-    };
-
-    const resetSubjectiveScouting = async () => {
-        if (isInSubjectiveScouting && user?.id && subjectiveActiveMatch?.id) {
-            try {
-                const db = getDatabase();
-                const participantRef = ref(
-                    db,
-                    `subjectiveMatches/${subjectiveActiveMatch.id}/participants/${user.id}`,
-                );
-
-                await set(participantRef, {
-                    userId: user.id,
-                    scoutName: user.name || "Unknown",
-                    teamNumber: subjectiveTeamNumber,
-                    matchId: subjectiveActiveMatch.id,
-                    submittedAt: serverTimestamp(),
-                    robotPerformance: {
-                        autonomousEffectiveness,
-                        canQuicklyScore,
-                        canClimb,
-                        climbLevel: canClimb === "yes" ? climbLevelSubjective : null,
-                    },
-                    teamDynamics: {
-                        teamFocus,
-                        driverSynchronization,
-                    },
-                    tacticalInsights: {
-                        defensiveStrategy,
-                        blockingEffectiveness,
-                        allyCooperation,
-                    },
-                    // misc fields added for analytics
-                    misc: {
-                        defensiveSkill,
-                        robotReliability: robotReliablity,
-                        robotPenalties,
-                        autoFuel,
-                        autoClimb: autoClimb1,
-                        teleopPassing,
-                        gameSense,
-                        strengths,
-                        weaknesses
-                    },
-                });
-                await remove(ref(db, `users/${user.id}/currentSubjectiveAssignment`));
-
-                // Remove draft from localStorage after successful submission
-                if (subjectiveDraftKeyRef.current) {
-                    removeDraft(subjectiveDraftKeyRef.current);
-                    subjectiveDraftKeyRef.current = null;
-                }
-
-                toast("Subjective scouting submitted!");
-            } catch (err) {
-                console.error("Failed to submit subjective scouting data:", err);
-                toast("Failed to save subjective scouting data. Please notify a lead.");
-            }
-        }
-
-        setIsInSubjectiveScouting(false);
-        setIsInMatchScouting(false);
-        setSubjectiveTeamNumber("");
-        setAutonomousEffectiveness("");
-        setCanQuicklyScore("");
-        setEstimatedBPS("");
-        setCanClimb("");
-        setClimbTime("");
-        setClimbLevelSubjective("");
-        setTeamFocus("");
-        setDriverSynchronization("");
-        setDefensiveStrategy("");
-        setBlockingEffectiveness("");
-        setAllyCooperation("");
-        setDefensiveStrategy("");
-        setRobotReliability("");
-        setRobotPenalties("");
-        setAutoFuel("");
-        setAutoClimb1("");
-        setTeleopPassing("");
-        setGameSense("");
-        setStrengths("");
-        setWeaknesses("");
-    };
-
-    const [teamNumber, setTeamNumber] = useState("");
-
-    const [autonomousNotes, setAutonomousNotes] = useState("");
-    const [autonomousFuel, setAutonomousFuel] = useState(0);
-    const [autoClimb, setAutoClimb] = useState<string>("");
-    const [teamNumberNotes, setTeamNumberNotes] = useState("");
-
-    const [teleopNotes, setTeleopNotes] = useState("");
-    const [teleopFuel, setTeleopFuel] = useState(0);
-    const [teleopClimb, setTeleopClimb] = useState<string>("");
-
-    const [endGameNotes, setEndGameNotes] = useState("");
-    const [didClimb, setDidClimb] = useState(false);
-    const [climbLevel, setClimbLevel] = useState("");
-    const [defenseScore, setDefenseScore] = useState("");
-
-    const [sotm, setSotm] = useState<string>("");
-    const [robotTipped, setRobotTipped] = useState<string>("");
-
-    const [isInMatchScouting, setIsInMatchScouting] = useState(false);
-
-    // Subjective Scouting State
-    const [subjectiveTeamNumber, setSubjectiveTeamNumber] = useState("");
-    const [isInSubjectiveScouting, setIsInSubjectiveScouting] = useState(false);
-
-    // Section 1: Robot Performance and Strategy
-    const [autonomousEffectiveness, setAutonomousEffectiveness] = useState<string>("");
-    const [canQuicklyScore, setCanQuicklyScore] = useState<string>("");
-    const [estimatedBPS, setEstimatedBPS] = useState<string>("");
-    const [canClimb, setCanClimb] = useState<string>("");
-    const [climbTime, setClimbTime] = useState<string>("");
-    const [climbLevelSubjective, setClimbLevelSubjective] = useState<string>("");
-
-    // Section 2: Team Dynamics
-    const [teamFocus, setTeamFocus] = useState<string>("");
-    const [driverSynchronization, setDriverSynchronization] = useState<string>("");
-
-    // Section 3: Tactical Insights
-    const [defensiveStrategy, setDefensiveStrategy] = useState<string>("");
-    const [blockingEffectiveness, setBlockingEffectiveness] = useState<string>("");
-    const [allyCooperation, setAllyCooperation] = useState<string>("");
-
-    // Section 4: Misc
-    const [defensiveSkill, setDefensiveSkill] = useState<string>("");
-    const [robotReliablity, setRobotReliability] = useState<string>("");
-    const [robotPenalties, setRobotPenalties] = useState<string>("");
-    const [autoFuel, setAutoFuel] = useState<string>("");
-    const [autoClimb1, setAutoClimb1] = useState<string>("");
-    const [teleopPassing, setTeleopPassing] = useState<string>("");
-    const [gameSense, setGameSense] = useState<string>("");
-
-    const [strengths, setStrengths] = useState<string>("");
-    const [weaknesses, setWeaknesses] = useState<string>("");
-
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
-    const currentMatchIdRef = useRef<string | null>(null);
-    const assignedTeamRef = useRef<string | null>(null);
-    const pendingAssignmentRef = useRef<CurrentAssignment | null>(null);
-    const pendingSubjectiveAssignmentRef = useRef<CurrentSubjectiveAssignment | null>(null);
-    const [currentAssignment, setCurrentAssignment] = useState<CurrentAssignment | null>(null);
-    const [currentSubjectiveAssignment, setCurrentSubjectiveAssignment] = useState<CurrentSubjectiveAssignment | null>(null);
-
-    const matchDraftKeyRef = useRef<string | null>(null);
-    const subjectiveDraftKeyRef = useRef<string | null>(null);
-
-    const matchEndedHandledRef = useRef(false);
-
-    const [showConfetti, setShowConfetti] = useState(false);
-    const [confettiSize, setConfettiSize] = useState({width: 0, height: 0});
-    const confettiTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const audioTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-    const [activeTeamAssignments, setActiveTeamAssignments] = useState<string[]>([]);
-
-    const triggerConfetti = useCallback(() => {
-        setShowConfetti(true);
-        audioTimeoutRef.current = setTimeout(
-            () => {
-                const audio = new Audio(successAudio);
-                audio.play().catch((err) => {
-                    console.warn("Unable to play success audio", err);
-                });
-                audioTimeoutRef.current = null;
-            },
-            Math.random() * 15000 + 1000,
-        );
-        if (confettiTimeoutRef.current) {
-            clearTimeout(confettiTimeoutRef.current);
-        }
-        confettiTimeoutRef.current = setTimeout(() => {
-            setShowConfetti(false);
-            confettiTimeoutRef.current = null;
-        }, 5000);
-    }, []);
-
-    const startScouting = (teamNum?: string, opts?: { manual?: boolean }) => {
-        const manual = opts?.manual === true;
-        isManualSessionRef.current = manual;
-        const effectiveTeam = (
-            typeof teamNum === "string" ? teamNum : teamNumber
-        ).trim();
-        if (!effectiveTeam) {
-            toast("Please enter a team number");
-            return;
-        }
-
-        if (manual) {
-            currentMatchIdRef.current = null;
-            assignedTeamRef.current = null;
-        }
-
-        if (teamNum) setTeamNumber(String(teamNum));
-
-        setIsInSubjectiveScouting(false);
-        setAutonomousNotes("");
-        setAutonomousFuel(0);
-        setAutoClimb("");
-        setTeamNumberNotes("");
-        setTeleopNotes("");
-        setTeleopFuel(0);
-        setDefenseScore("");
-        setEndGameNotes("");
-        setDidClimb(false);
-        setIsInMatchScouting(true);
-
-        // Show scouter which team they're scouting
-        toast(`Scouting Team ${effectiveTeam}`);
-    };
-
-    const lastProcessedAssignmentRef = useRef<string | null>(null);
-    const lastProcessedSubjectiveAssignmentRef = useRef<string | null>(null);
-
-    useEffect(() => {
-        if (!user?.id || isManualSessionRef.current) return;
-
-        const pending = pendingAssignmentRef.current;
-        if (!pending) return;
-        if (activeMatch?.id !== pending.matchId) return;
-        if (currentAssignment?.matchId !== activeMatch?.id) return;
-
-        const assignmentKey = `${pending.matchId}:${pending.teamNumber}`;
-        if (lastProcessedAssignmentRef.current === assignmentKey) {
-            pendingAssignmentRef.current = null;
-            return;
-        }
-
-        pendingAssignmentRef.current = null;
-        lastProcessedAssignmentRef.current = assignmentKey;
-        currentMatchIdRef.current = pending.matchId;
-        assignedTeamRef.current = String(pending.teamNumber);
-        matchEndedHandledRef.current = false;
-        startScouting(String(pending.teamNumber), {manual: false});
-    }, [activeMatch?.id, currentAssignment?.matchId, user?.id]);
-
-    useEffect(() => {
-        if (isManualSessionRef.current) return;
-
-        if (!activeMatch?.id || currentAssignment?.matchId !== activeMatch.id) {
-            setIsInMatchScouting(false);
-            currentMatchIdRef.current = null;
-            assignedTeamRef.current = null;
-            if (!activeMatch?.id) {
-                pendingAssignmentRef.current = null;
-                matchEndedHandledRef.current = false;
-            }
-        }
-    }, [activeMatch?.id, currentAssignment?.matchId]);
-
-    useEffect(() => {
-        if (!user?.id) return;
-
-        const unsub = subscribeToUserAssignment(user.id, (assignment) => {
-            if (isManualSessionRef.current) {
-                return;
-            }
-            if (!assignment) {
-                setCurrentAssignment(null);
-                pendingAssignmentRef.current = null;
-                if (!matchEndedHandledRef.current && !activeMatch) {
-                    matchEndedHandledRef.current = true;
-                }
-                return;
-            }
-
-            const assignmentKey = `${assignment.matchId}:${assignment.teamNumber}`;
-            if (lastProcessedAssignmentRef.current === assignmentKey) {
-                return;
-            }
-
-            currentMatchIdRef.current = assignment.matchId;
-            assignedTeamRef.current = String(assignment.teamNumber);
-            setCurrentAssignment(assignment);
-
-            if (activeMatch?.id === assignment.matchId) {
-                pendingAssignmentRef.current = null;
-                lastProcessedAssignmentRef.current = assignmentKey;
-                matchEndedHandledRef.current = false;
-                startScouting(String(assignment.teamNumber), {manual: false});
-            } else {
-                pendingAssignmentRef.current = assignment;
-            }
-        });
-
-        return unsub;
-    }, [user?.id, activeMatch]);
-
-    useEffect(() => {
-        if (!subjectiveActiveMatch?.id || currentSubjectiveAssignment?.matchId !== subjectiveActiveMatch.id) {
-            setIsInSubjectiveScouting(false);
-            if (!subjectiveActiveMatch?.id) {
-                pendingSubjectiveAssignmentRef.current = null;
-            }
-        }
-    }, [subjectiveActiveMatch?.id, currentSubjectiveAssignment?.matchId]);
-
-    useEffect(() => {
-        if (!user?.id) return;
-
-        const unsub = subscribeToUserSubjectiveAssignment(user.id, (assignment) => {
-            if (!assignment) {
-                setCurrentSubjectiveAssignment(null);
-                pendingSubjectiveAssignmentRef.current = null;
-                return;
-            }
-
-            const assignmentKey = `${assignment.matchId}:${assignment.teamNumber}`;
-            if (lastProcessedSubjectiveAssignmentRef.current === assignmentKey) {
-                return;
-            }
-
-            if (subjectiveActiveMatch?.id === assignment.matchId && !isInSubjectiveScouting) {
-                pendingSubjectiveAssignmentRef.current = null;
-                lastProcessedSubjectiveAssignmentRef.current = assignmentKey;
-                setCurrentSubjectiveAssignment(assignment);
-                startSubjectiveScouting(String(assignment.teamNumber));
-            } else {
-                setCurrentSubjectiveAssignment(assignment);
-                pendingSubjectiveAssignmentRef.current = assignment;
-            }
-        });
-
-        return unsub;
-    }, [user?.id, isInSubjectiveScouting, subjectiveActiveMatch?.id]);
-
-    useEffect(() => {
-        if (!user?.id || isManualSessionRef.current) return;
-
-        const pending = pendingSubjectiveAssignmentRef.current;
-        if (!pending) return;
-        if (subjectiveActiveMatch?.id !== pending.matchId || isInSubjectiveScouting) return;
-        if (currentSubjectiveAssignment?.matchId !== subjectiveActiveMatch?.id) return;
-
-        const assignmentKey = `${pending.matchId}:${pending.teamNumber}`;
-        if (lastProcessedSubjectiveAssignmentRef.current === assignmentKey) {
-            pendingSubjectiveAssignmentRef.current = null;
-            return;
-        }
-
-        pendingSubjectiveAssignmentRef.current = null;
-        lastProcessedSubjectiveAssignmentRef.current = assignmentKey;
-        startSubjectiveScouting(String(pending.teamNumber));
-    }, [currentSubjectiveAssignment?.matchId, subjectiveActiveMatch?.id, user?.id, isInSubjectiveScouting]);
-
-    // Add beforeunload event listener to prevent accidental reload during scouting
-    useEffect(() => {
-        const isScoutingActive = isInSubjectiveScouting || isInQueue || isInSubjectiveQueue;
-
-        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            if (isScoutingActive) {
-                e.preventDefault();
-                e.returnValue = "";
-                return "";
-            }
-        };
-
-        if (isScoutingActive) {
-            window.addEventListener("beforeunload", handleBeforeUnload);
-            return () => {
-                window.removeEventListener("beforeunload", handleBeforeUnload);
-            };
-        }
-    }, [isInSubjectiveScouting, isInQueue, isInSubjectiveQueue]);
-
-    const leadSignaledEndRef = useRef(false);
-    useEffect(() => {
-        if (!activeMatch?.id || !user?.id) return;
-        if (isManualSessionRef.current) return; // Don't show for manual scouting
-
-        // Watch for lead signaling match end
-        const unsubscribe = subscribeToActiveMatch((match) => {
-            if (match && match.leadSignaledEnd && !leadSignaledEndRef.current) {
-                leadSignaledEndRef.current = true;
-                toast("Lead has signaled the end of the match. Please finish your scouting and submit.");
-            }
-        });
-
-        return () => {
-            unsubscribe?.();
-            leadSignaledEndRef.current = false;
-        };
-    }, [activeMatch?.id, user?.id]);
-
-    const canScoutMatch = !!activeMatch && currentAssignment?.matchId === activeMatch.id && !isInSubjectiveScouting && !isLead;
-    const canScoutSubjectiveMatch = !!subjectiveActiveMatch && currentSubjectiveAssignment?.matchId === subjectiveActiveMatch.id && !isLead;
-    const isActivelyScouting = isInMatchScouting || isInSubjectiveScouting;
-
-    // Check for existing drafts on mount and resume scouting
-    useEffect(() => {
-        if (!user?.id) return;
-
-        // Check if there's an existing match draft and resume if so
-        if (!isInMatchScouting) {
-            // Look through localStorage for match drafts for this user
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key?.startsWith(`scout_draft_match:${user.id}:`)) {
-                    const draft = readDraft<MatchScoutingDraft>(key);
-                    if (draft && draft.teamNumber) {
-                        const parts = key.split(':');
-                        if (parts.length >= 4 && parts[2] === activeMatch?.id) {
-                            matchDraftKeyRef.current = key;
-                            setTeamNumber(draft.teamNumber);
-                            setAutonomousNotes(draft.autonomousNotes);
-                            setAutonomousFuel(draft.autonomousFuel);
-                            setAutoClimb(draft.autoClimb);
-                            setTeamNumberNotes(draft.teamNumberNotes);
-                            setTeleopNotes(draft.teleopNotes);
-                            setTeleopFuel(draft.teleopFuel);
-                            setTeleopClimb(draft.teleopClimb);
-                            setEndGameNotes(draft.endGameNotes);
-                            setDidClimb(draft.didClimb);
-                            setClimbLevel(draft.climbLevel);
-                            setDefenseScore(draft.defenseScore);
-                            setSotm(draft.sotm);
-                            setRobotTipped(draft.robotTipped);
-                            setIsInMatchScouting(true);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Check if there's an existing subjective draft and resume if so
-        if (!isInSubjectiveScouting) {
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key?.startsWith(`scout_draft_subjective:${user.id}:`)) {
-                    const draft = readDraft<SubjectiveScoutingDraft>(key);
-                    if (draft && draft.subjectiveTeamNumber) {
-                        const parts = key.split(':');
-                        if (parts.length >= 4 && parts[2] === subjectiveActiveMatch?.id) {
-                            subjectiveDraftKeyRef.current = key;
-                            setSubjectiveTeamNumber(draft.subjectiveTeamNumber);
-                            setAutonomousEffectiveness(draft.autonomousEffectiveness);
-                            setCanQuicklyScore(draft.canQuicklyScore);
-                            setEstimatedBPS(draft.estimatedBPS);
-                            setCanClimb(draft.canClimb);
-                            setClimbTime(draft.climbTime);
-                            setDefensiveStrategy(draft.defensiveStrategy);
-                            setBlockingEffectiveness(draft.blockingEffectiveness);
-                            setAllyCooperation(draft.allyCooperation);
-                            setRobotReliability(draft.robotReliability);
-                            setRobotPenalties(draft.robotPenalties);
-                            setAutoFuel(draft.autoFuel);
-                            setAutoClimb1(draft.autoClimb1);
-                            setTeleopPassing(draft.teleopPassing);
-                            setGameSense(draft.gameSense);
-                            setStrengths(draft.strengths);
-                            setWeaknesses(draft.weaknesses);
-                            setIsInSubjectiveScouting(true);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }, [user?.id, isInMatchScouting, isInSubjectiveScouting, activeMatch?.id, subjectiveActiveMatch?.id]);
-
-    // Auto-resume match scouting if assignment exists
-    useEffect(() => {
-        if (isInMatchScouting || !currentAssignment?.matchId || !currentAssignment?.teamNumber) return;
-        setIsInMatchScouting(true);
-    }, [currentAssignment?.matchId, currentAssignment?.teamNumber, isInMatchScouting]);
-
-    // Restore match scouting draft when entering scouting mode
-    useEffect(() => {
-        if (!user?.id || !currentAssignment?.matchId || !currentAssignment?.teamNumber || !isInMatchScouting) return;
-
-        const draftKey = getMatchDraftKey(user.id, currentAssignment.matchId, String(currentAssignment.teamNumber));
-        if (matchDraftKeyRef.current === draftKey) return; // Already restored this draft
-        matchDraftKeyRef.current = draftKey;
-
-        const draft = readDraft<MatchScoutingDraft>(draftKey);
-        if (draft) {
-            setTeamNumber(draft.teamNumber);
-            setAutonomousNotes(draft.autonomousNotes);
-            setAutonomousFuel(draft.autonomousFuel);
-            setAutoClimb(draft.autoClimb);
-            setTeamNumberNotes(draft.teamNumberNotes);
-            setTeleopNotes(draft.teleopNotes);
-            setTeleopFuel(draft.teleopFuel);
-            setTeleopClimb(draft.teleopClimb);
-            setEndGameNotes(draft.endGameNotes);
-            setDidClimb(draft.didClimb);
-            setClimbLevel(draft.climbLevel);
-            setDefenseScore(draft.defenseScore);
-            setSotm(draft.sotm);
-            setRobotTipped(draft.robotTipped);
-        }
-    }, [currentAssignment?.matchId, currentAssignment?.teamNumber, isInMatchScouting, user?.id]);
-
-    // Auto-resume subjective scouting if assignment exists
-    useEffect(() => {
-        if (isInSubjectiveScouting || !currentSubjectiveAssignment?.matchId || !currentSubjectiveAssignment?.teamNumber) return;
-        setIsInSubjectiveScouting(true);
-    }, [currentSubjectiveAssignment?.matchId, currentSubjectiveAssignment?.teamNumber, isInSubjectiveScouting]);
-
-    // Restore subjective scouting draft when entering scouting mode
-    useEffect(() => {
-        if (!user?.id || !currentSubjectiveAssignment?.matchId || !currentSubjectiveAssignment?.teamNumber || !isInSubjectiveScouting) return;
-
-        const draftKey = getSubjectiveDraftKey(user.id, currentSubjectiveAssignment.matchId, String(currentSubjectiveAssignment.teamNumber));
-        if (subjectiveDraftKeyRef.current === draftKey) return; // Already restored this draft
-        subjectiveDraftKeyRef.current = draftKey;
-
-        const draft = readDraft<SubjectiveScoutingDraft>(draftKey);
-        if (draft) {
-            setSubjectiveTeamNumber(draft.subjectiveTeamNumber);
-            setAutonomousEffectiveness(draft.autonomousEffectiveness);
-            setCanQuicklyScore(draft.canQuicklyScore);
-            setEstimatedBPS(draft.estimatedBPS);
-            setCanClimb(draft.canClimb);
-            setClimbTime(draft.climbTime);
-            setDefensiveStrategy(draft.defensiveStrategy);
-            setBlockingEffectiveness(draft.blockingEffectiveness);
-            setAllyCooperation(draft.allyCooperation);
-            setRobotReliability(draft.robotReliability);
-            setRobotPenalties(draft.robotPenalties);
-            setAutoFuel(draft.autoFuel);
-            setAutoClimb1(draft.autoClimb1);
-            setTeleopPassing(draft.teleopPassing);
-            setGameSense(draft.gameSense);
-            setStrengths(draft.strengths);
-            setWeaknesses(draft.weaknesses);
-        }
-    }, [currentSubjectiveAssignment?.matchId, currentSubjectiveAssignment?.teamNumber, isInSubjectiveScouting, user?.id]);
-
-    // Persist match scouting draft on every field change
-    useEffect(() => {
-        const draftKey = matchDraftKeyRef.current;
-        if (!draftKey) return;
-
-        writeDraft<MatchScoutingDraft>(draftKey, {
-            teamNumber,
-            autonomousNotes,
-            autonomousFuel,
-            autoClimb,
-            teamNumberNotes,
-            teleopNotes,
-            teleopFuel,
-            teleopClimb,
-            endGameNotes,
-            didClimb,
-            climbLevel,
-            defenseScore,
-            sotm,
-            robotTipped,
-        });
-    }, [teamNumber, autonomousNotes, autonomousFuel, autoClimb, teamNumberNotes, teleopNotes, teleopFuel, teleopClimb, endGameNotes, didClimb, climbLevel, defenseScore, sotm, robotTipped]);
-
-    // Persist subjective scouting draft on every field change
-    useEffect(() => {
-        const draftKey = subjectiveDraftKeyRef.current;
-        if (!draftKey) return;
-
-        writeDraft<SubjectiveScoutingDraft>(draftKey, {
-            subjectiveTeamNumber,
-            autonomousEffectiveness,
-            canQuicklyScore,
-            estimatedBPS,
-            canClimb,
-            climbTime,
-            defensiveStrategy,
-            blockingEffectiveness,
-            allyCooperation,
-            robotReliability: robotReliablity,
-            robotPenalties,
-            autoFuel,
-            autoClimb1,
-            teleopPassing,
-            gameSense,
-            strengths,
-            weaknesses,
-        });
-    }, [subjectiveTeamNumber, autonomousEffectiveness, canQuicklyScore, estimatedBPS, canClimb, climbTime, defensiveStrategy, blockingEffectiveness, allyCooperation, robotReliablity, robotPenalties, autoFuel, autoClimb1, teleopPassing, gameSense, strengths, weaknesses]);
-
-    useEffect(() => {
-        if (isManualSessionRef.current) return;
-        if (!activeMatch?.id || !user?.id) return;
-
+    // Writes the participant payload, then clears the assignment. Throws (keeping the form) on failure.
+    const saveParticipant = async (matchesRoot: string, assignmentNode: string, assignment: CurrentAssignment | null, payload: (sub: any) => object) => {
+        if (!assignment?.matchId || !user?.id || !assignment.teamNumber) throw new Error("Missing match or team information");
         const db = getDatabase();
-        const participantsRef = ref(db, `matches/${activeMatch.id}/participants`);
-
-        // Set up real-time listener for participants changes
-        const unsubscribe = onValue(participantsRef, async (snapshot) => {
-            try {
-                if (!snapshot.exists()) {
-                    // No participants at all, force end the match
-                    console.log("No participants found → force ending match");
-                    await endMatch(activeMatch.id);
-                    return;
-                }
-
-                const participants = snapshot.val();
-                const activeParticipants = Object.values(participants as any).filter(
-                    (p: any) => !p.submittedAt
-                );
-
-                if (activeParticipants.length === 0) {
-                    console.log("No active scouters remaining → force ending match");
-                    await endMatch(activeMatch.id);
-                }
-            } catch (err) {
-                console.error("Failed to check active scouters", err);
-            }
-        });
-
-        return () => {
-            unsubscribe();
-        };
-    }, [activeMatch?.id, user?.id, endMatch]);
-
-    const resetScouting = async () => {
-        if (Math.random() * 10 < 2) {
-            for (let i = 0; i < 5; i++) {
-                triggerConfetti();
-            }
-        }
-
-        if (!isManualSessionRef.current) {
-            try {
-                const matchId = currentMatchIdRef.current;
-                const assignedTeam = assignedTeamRef.current;
-
-                if (!matchId || !user?.id || !assignedTeam) {
-                    throw new Error("Missing match or team information");
-                }
-
-                const db = getDatabase();
-
-                const participantRef = ref(
-                    db,
-                    `matches/${matchId}/participants/${user.id}`,
-                );
-
-                await set(participantRef, {
-                    userId: user.id,
-                    scoutName: user.name || "Unknown",
-                    teamNumber: assignedTeam,
-                    matchId,
-
-                    submittedAt: serverTimestamp(),
-
-                    teamNumberNotes,
-
-                    autonomous: {
-                        fuel: autonomousFuel,
-                        notes: autonomousNotes,
-                        autoClimb,
-                    },
-
-                    teleop: {
-                        fuel: teleopFuel,
-                        notes: teleopNotes,
-                        teleopClimb,
-                        climbLevel: teleopClimb === "yes" ? climbLevel : null,
-                        defenseScore,
-                    },
-
-                    endGame: {
-                        didClimb,
-                        climbLevel: didClimb ? climbLevel : null,
-                        notes: endGameNotes,
-                    },
-                    sotm,
-                    robotTipped,
-                });
-                await remove(ref(db, `users/${user.id}/currentAssignment`));
-
-                // Remove draft from localStorage after successful submission
-                if (matchDraftKeyRef.current) {
-                    removeDraft(matchDraftKeyRef.current);
-                    matchDraftKeyRef.current = null;
-                }
-
-                // Check if lead signaled end and all other scouters have submitted
-                const matchRef = ref(db, `matches/${matchId}`);
-                const matchSnap = await get(matchRef);
-                if (matchSnap.exists()) {
-                    const match = matchSnap.val();
-                    if (match.leadSignaledEnd) {
-                        // Check if all participants have submitted
-                        const participantsRef = ref(db, `matches/${matchId}/participants`);
-                        const participantsSnap = await get(participantsRef);
-                        if (participantsSnap.exists()) {
-                            const participants = participantsSnap.val();
-                            const allSubmitted = Object.values(participants as any).every(
-                                (p: any) => p.submittedAt
-                            );
-                            // Only call endMatch if ALL scouters have submitted
-                            if (allSubmitted && match.status === "active") {
-                                await endMatch(matchId);
-                                toast("All scouters submitted. Match ended.");
-                            }
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error("Failed to submit scouting data:", err);
-                throw err;
-            }
-        }
-
-        // Clear all form state
-        setTeamNumber("");
-        setAutonomousNotes("");
-        setTeamNumberNotes("");
-        setAutonomousFuel(0);
-        setAutoClimb("");
-        setTeleopFuel(0);
-        setTeleopNotes("");
-        setDefenseScore("");
-        setEndGameNotes("");
-        setDidClimb(false);
-        setClimbLevel("");
-        setTeleopClimb("");
-        setSotm("");
-        setRobotTipped("");
-        setIsInSubjectiveScouting(false);
-        setSubjectiveTeamNumber("");
-        setAutonomousEffectiveness("");
-        setCanQuicklyScore("");
-        setEstimatedBPS("");
-        setCanClimb("");
-        setClimbTime("");
-        setClimbLevelSubjective("");
-        setTeamFocus("");
-        setDriverSynchronization("");
-        setDefensiveStrategy("");
-        setBlockingEffectiveness("");
-        setAllyCooperation("");
-        setDefensiveSkill("");
-        setRobotReliability("");
-        setRobotPenalties("");
-        setAutoFuel("");
-        setAutoClimb1("");
-        setTeleopPassing("");
-        setGameSense("");
-        setStrengths("");
-        setWeaknesses("");
-        setIsInMatchScouting(false);
-        isManualSessionRef.current = false;
+        await set(ref(db, `${matchesRoot}/${assignment.matchId}/participants/${user.id}`), payload({
+            userId: user.id,
+            scoutName: user.name || "Unknown",
+            matchId: assignment.matchId,
+            submittedAt: serverTimestamp(),
+        }));
+        await remove(ref(db, `users/${user.id}/${assignmentNode}`));
+        return assignment.matchId;
     };
 
-    const placeholders = [
-        "Red 1",
-        "Red 2",
-        "Red 3",
-        "Blue 1",
-        "Blue 2",
-        "Blue 3",
-    ];
+    const submitMatch = submitting(async () => {
+        if (Math.random() * 10 < 2) for (let i = 0; i < 5; i++) triggerConfetti();
+        const matchId = await saveParticipant("matches", "currentAssignment", currentAssignment,
+            (sub) => buildMatchPayload(m, {...sub, teamNumber: currentAssignment.teamNumber}));
+        match.finish();
+        const snap = await get(ref(getDatabase(), `matches/${matchId}/participants`));
+        if (!allSubmitted(snap.val())) return "Scouting data submitted successfully!";
+        await endMatch(matchId);
+        return "No more active scouters. Match ended.";
+    });
 
-    const getTeamLabel = (teamNumber: number): string => {
-        const index = activeTeamAssignments.indexOf(String(teamNumber));
-        console.log("TA:");
-        console.log(activeTeamAssignments);
-        console.log("current numbr");
-        console.log(teamNumber);
+    const submitSubjective = submitting(async () => {
+        const matchId = await saveParticipant("subjectiveMatches", "currentSubjectiveAssignment", currentSubjectiveAssignment,
+            (sub) => buildSubjectivePayload(s, {...sub, teamNumber: s.subjectiveTeamNumber}));
+        subj.finish();
+        const snap = await get(ref(getDatabase(), `subjectiveMatches/${matchId}/participants`));
+        if (!allSubmitted(snap.val())) return "Subjective scouting data submitted successfully!";
+        await subjectiveEndMatch(matchId);
+        return "No more active subjective scouters. Subjective match ended.";
+    });
 
-        return index !== -1 ? placeholders[index] : "Unknown Team Station";
-    };
-
-    useEffect(() => {
-        const updateSize = () => {
-            setConfettiSize({width: window.innerWidth, height: window.innerHeight});
-        };
-        updateSize();
-        window.addEventListener("resize", updateSize);
-        return () => window.removeEventListener("resize", updateSize);
-    }, []);
-
+    const showMatchForm = isInMatchScouting && !isLead;
+    const showSubjectiveForm = isInSubjectiveScouting && !isLead;
+    const station = currentSubjectiveAssignment?.station;
 
     return (
         <div className="min-h-screen bg-background">
             {showConfetti && confettiSize.width > 0 && (
-                <Confetti
-                    width={confettiSize.width}
-                    height={confettiSize.height}
-                    recycle={false}
-                    numberOfPieces={1000}
-                />
+                <Confetti width={confettiSize.width} height={confettiSize.height} recycle={false} numberOfPieces={1000}/>
             )}
             <Sidebar activeTab={activeTab} onTabChange={handleTabChange}/>
 
@@ -1179,1176 +481,260 @@ const Scouting = () => {
                 className="md:ml-64 min-h-screen max-h-screen overflow-auto touch-pan-y"
                 style={{WebkitOverflowScrolling: "touch"}}
             >
-                <TopBar
-                    activeTab={activeTab}
-                    onTabChange={handleTabChange}
-                />
+                <TopBar activeTab={activeTab} onTabChange={handleTabChange}/>
 
                 <div className="p-6">
                     <div className="space-y-6">
-                        <div className="flex items-center justify-between"></div>
-
                         {(isLead || !isActivelyScouting) && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Match Queue</CardTitle>
-                                    <CardDescription>
-                                        First 6 in the queue will be selected to start scouting (real-time).
-                                        Use the qualification number input below to load team numbers
-                                        for a specific qualification match from TBA.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <div className="text-sm text-muted-foreground">
-                                                Live queue — ordered by join time
-                                            </div>
-                                        </div>
-
-                                        <ul className="space-y-2 mt-2">
-                                            {queue.length === 0 && (
-                                                <li className="text-sm text-muted-foreground">
-                                                    No one in queue yet
-                                                </li>
-                                            )}
-
-                                            {queue.map((q, idx) => (
-                                                <li
-                                                    key={q.id}
-                                                    className={`flex items-center justify-between p-2 rounded-md border ${idx < 6 ? "bg-primary/5 border-primary/20" : "bg-secondary"}`}
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div
-                                                            className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium">
-                                                            {(q.name?.charAt(0)?.toUpperCase() || "?")}
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-sm font-medium">
-                                                                {q.name}
-                                                            </div>
-                                                            <div className="text-xs text-muted-foreground">
-                                                                {idx < 6
-                                                                    ? `#${idx + 1} — active`
-                                                                    : `#${idx + 1}`}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="flex items-center gap-3">
-                                                        {user?.id === q.userId && isInTopSix && (
-                                                            <div className="text-xs text-success font-medium">
-                                                                You are in the next match!
-                                                            </div>
-                                                        )}
-
-                                                        {isLead && idx < 6 && teamAssignments[idx] && (
-                                                            <div
-                                                                className="text-sm px-2 py-1 rounded-md bg-amber-50 text-amber-700">
-                                                                Team {teamAssignments[idx]}
-                                                            </div>
-                                                        )}
-
-                                                        {idx < 6 && (
-                                                            <div
-                                                                className="text-xs px-2 py-1 rounded-md bg-primary/10 text-primary">
-                                                                Active
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-
-                                    {isLead && (
-                                        <div className="space-y-3">
-                                            <Label htmlFor="qual-number">Qualification Match Number</Label>
-                                            <div className="flex gap-2">
-                                                <Input
-                                                    id="qual-number"
-                                                    type="number"
-                                                    min="1"
-                                                    placeholder="Enter match number (e.g., 1, 2, 3)"
-                                                    value={qualificationNumber}
-                                                    onChange={(e) => setQualificationNumber(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') {
-                                                            handleImportTeamsByQualNumber();
-                                                        }
-                                                    }}
-                                                />
-                                                <Button
-                                                    onClick={handleImportTeamsByQualNumber}
-                                                    disabled={importingTeams || !qualificationNumber.trim()}
-                                                    variant="outline"
-                                                >
-                                                    {importingTeams ? "Importing..." : "Import"}
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {isLead && (
-                                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                                            {[0, 3, 1, 4, 2, 5].map((i) => {
-                                                const placeholders = [
-                                                    "Red 1",
-                                                    "Red 2",
-                                                    "Red 3",
-                                                    "Blue 1",
-                                                    "Blue 2",
-                                                    "Blue 3",
-                                                ];
-                                                return (
-                                                    <div key={i} className="flex items-center gap-2">
-                                                        <Input
-                                                            aria-label={`Team number ${i + 1}`}
-                                                            value={teamAssignments[i]}
-                                                            onChange={(e) => setAssignment(i, e.target.value)}
-                                                            className="w-28"
-                                                            placeholder={placeholders[i]}
-                                                            inputMode="numeric"
-                                                        />
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-
-                                    <div className="flex gap-3 items-center">
-                                        {!isLead ? (
-                                            /* !activeMatch ? */(
-                                                <Button
-                                                    onClick={handleQueueToggle}
-                                                    disabled={queueLoading}
-                                                    className="flex-1"
-                                                >
-                                                    {isInQueue ? (
-                                                        <Minus className="w-4 h-4 mr-2"/>
-                                                    ) : (
-                                                        <Plus className="w-4 h-4 mr-2"/>
-                                                    )}
-                                                    {isInQueue ? "Leave match queue" : "Join match queue"}
-                                                </Button>
-                                            ) /*: (
-                                                <div className="flex-1 text-center text-sm text-muted-foreground">
-                                                    Scouting in progress
-                                                </div>
-                                            ) */
-                                        ) : activeMatch ? (
-                                            activeMatch.startedBy === user?.id ? (
-                                                <div className="flex gap-2 flex-1">
-                                                    <Button
-                                                        onClick={handleEndMatch}
-                                                        variant="destructive"
-                                                        className="flex-1"
-                                                        disabled={queueLoading}
-                                                    >
-                                                        Signal End Match
-                                                    </Button>
-                                                    <Button
-                                                        onClick={async () => {
-                                                            if (!activeMatch?.id) return toast("No active match to end");
-                                                            try {
-                                                                // Clear all drafts from localStorage for this match
-                                                                const keys = [];
-                                                                for (let i = 0; i < localStorage.length; i++) {
-                                                                    const key = localStorage.key(i);
-                                                                    if (key) keys.push(key);
-                                                                }
-
-                                                                // Now remove matching keys
-                                                                keys.forEach(key => {
-                                                                    const isMatchDraft = key.includes(`scout_draft_match:`);
-                                                                    const isSubjectiveDraft = key.includes(`scout_draft_subjective:`);
-                                                                    if (isMatchDraft || isSubjectiveDraft) {
-                                                                        localStorage.removeItem(key);
-                                                                    }
-                                                                });
-
-                                                                await endMatch(activeMatch.id);
-
-                                                                // If current user is scouting, reset their state and navigate
-                                                                if (isInMatchScouting || isInSubjectiveScouting) {
-                                                                    setIsInMatchScouting(false);
-                                                                    setIsInSubjectiveScouting(false);
-                                                                    matchDraftKeyRef.current = null;
-                                                                    subjectiveDraftKeyRef.current = null;
-                                                                    toast("Match ended. Returning to dashboard...");
-                                                                    setTimeout(() => {
-                                                                        navigate("/dashboard");
-                                                                    }, 500);
-                                                                } else {
-                                                                    toast("Match force ended - all scouters cleared");
-                                                                }
-                                                            } catch (err) {
-                                                                console.error(err);
-                                                                toast((err as Error)?.message || "Failed to force end match");
-                                                            }
-                                                        }}
-                                                        variant="destructive"
-                                                        className="flex-1"
-                                                        disabled={queueLoading}
-                                                    >
-                                                        Force End Match
-                                                    </Button>
-                                                </div>
-                                            ) : (
-                                                <Button className="flex-1" disabled>
-                                                    Match running elsewhere
-                                                </Button>
-                                            )
-                                        ) : (
+                            <QueueCard
+                                title="Match Queue"
+                                description="First 6 in the queue will be selected to start scouting (real-time). Use the qualification number input below to load team numbers for a specific qualification match from TBA."
+                                queue={queue}
+                                emptyText="No one in queue yet"
+                                youText="You are in the next match!"
+                                isYouInTopSix={isInTopSix}
+                                userId={user?.id}
+                                teamAssignments={teamAssignments}
+                                isLead={isLead}
+                            >
+                                {isLead && (
+                                    <div className="space-y-3">
+                                        <Label htmlFor="qual-number">Qualification Match Number</Label>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                id="qual-number"
+                                                type="number"
+                                                min="1"
+                                                placeholder="Enter match number (e.g., 1, 2, 3)"
+                                                value={qualificationNumber}
+                                                onChange={(e) => setQualificationNumber(e.target.value)}
+                                                onKeyDown={(e) => e.key === "Enter" && handleImportTeamsByQualNumber()}
+                                            />
                                             <Button
-                                                onClick={handleStartMatch}
-                                                disabled={
-                                                    queueLoading ||
-                                                    topSix.length === 0 ||
-                                                    (topSix.length > 0 &&
-                                                        !teamAssignments
-                                                            .slice(0, Math.min(6, topSix.length))
-                                                            .every((v) => /^\d{1,5}$/.test(v)))
-                                                }
-                                                className="flex-1"
+                                                onClick={handleImportTeamsByQualNumber}
+                                                disabled={importingTeams || !qualificationNumber.trim()}
+                                                variant="outline"
                                             >
-                                                <Play className="w-4 h-4 mr-2"/>
-                                                Assign & Start match
+                                                {importingTeams ? "Importing..." : "Import"}
                                             </Button>
-                                        )}
+                                        </div>
                                     </div>
-                                </CardContent>
-                            </Card>
+                                )}
+
+                                {isLead && (
+                                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                        {[0, 3, 1, 4, 2, 5].map((i) => (
+                                            <div key={i} className="flex items-center gap-2">
+                                                <Input
+                                                    aria-label={`Team number ${i + 1}`}
+                                                    value={teamAssignments[i]}
+                                                    onChange={(e) => setAssignment(i, e.target.value)}
+                                                    className="w-28"
+                                                    placeholder={STATIONS[i]}
+                                                    inputMode="numeric"
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <div className="flex gap-3 items-center">
+                                    {!isLead ? (
+                                        <QueueToggle
+                                            inQueue={isInQueue}
+                                            label="match queue"
+                                            onClick={() => run(() => (isInQueue ? leave() : join()), "Queue error")}
+                                            disabled={queueLoading}
+                                        />
+                                    ) : (
+                                        <LeadControls
+                                            match={activeMatch}
+                                            userId={user?.id}
+                                            label="match"
+                                            loading={queueLoading}
+                                            canStart={topSix.length > 0 && !!readyAssignments(topSix.length)}
+                                            onStart={handleStartMatch}
+                                            onSignal={signalEnd(activeMatch, signalMatchEnd, "match")}
+                                            onForce={forceEnd(activeMatch, endMatch, "match", "scout_draft_match:")}
+                                        />
+                                    )}
+                                </div>
+                            </QueueCard>
                         )}
 
                         {isLead && activeMatch && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Active Scouters</CardTitle>
-                                    <CardDescription>
-                                        Scouters currently scouting in the active match
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    {activeMatch.participants && activeMatch.participants.length > 0 ? (
-                                        <ul className="space-y-2">
-                                            {activeMatch.participants.map((participant: any, idx: number) => (
-                                                <li
-                                                    key={participant.userId}
-                                                    className="flex items-center justify-between p-2 rounded-md border bg-secondary/50"
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div
-                                                            className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium">
-                                                            {participant.name?.charAt(0)?.toUpperCase() || "?"}
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-sm font-medium">
-                                                                {participant.name}
-                                                            </div>
-                                                            <div className="text-xs text-muted-foreground">
-                                                                Team {participant.assignedTeam || "—"}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    {idx < 6 && (
-                                                        <div
-                                                            className="text-xs px-2 py-1 rounded-md bg-green-50 text-green-700 font-medium">
-                                                            Scouting
-                                                        </div>
-                                                    )}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    ) : (
-                                        <p className="text-sm text-muted-foreground">
-                                            No scouters in the active match
-                                        </p>
-                                    )}
-                                </CardContent>
-                            </Card>
+                            <ScoutersCard
+                                title="Active Scouters"
+                                description="Scouters currently scouting in the active match"
+                                emptyText="No scouters in the active match"
+                                participants={activeMatch.participants}
+                            />
                         )}
 
                         {(isLead || !isActivelyScouting) && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Subjective Queue</CardTitle>
-                                    <CardDescription>
-                                        First 6 in the queue will be selected to start subjective scouting
-                                        (real-time)
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <div className="text-sm text-muted-foreground">
-                                                Live queue — ordered by join time
-                                            </div>
-                                        </div>
-
-                                        <ul className="space-y-2 mt-2">
-                                            {subjectiveQueue.length === 0 && (
-                                                <li className="text-sm text-muted-foreground">
-                                                    No one in subjective queue yet
-                                                </li>
-                                            )}
-
-                                            {subjectiveQueue.map((q, idx) => (
-                                                <li
-                                                    key={q.id}
-                                                    className={`flex items-center justify-between p-2 rounded-md border ${idx < 6 ? "bg-primary/5 border-primary/20" : "bg-secondary"}`}
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div
-                                                            className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium">
-                                                            {q.name?.charAt(0)?.toUpperCase() || "?"}
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-sm font-medium">
-                                                                {q.name}
-                                                            </div>
-                                                            <div className="text-xs text-muted-foreground">
-                                                                {idx < 6
-                                                                    ? `#${idx + 1} — active`
-                                                                    : `#${idx + 1}`}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="flex items-center gap-3">
-                                                        {user?.id === q.userId && isInSubjectiveTopSix && (
-                                                            <div className="text-xs text-success font-medium">
-                                                                You are in the next subjective match!
-                                                            </div>
-                                                        )}
-
-                                                        {isLead && idx < 6 && teamAssignments[idx] && (
-                                                            <div
-                                                                className="text-sm px-2 py-1 rounded-md bg-amber-50 text-amber-700">
-                                                                Team {teamAssignments[idx]}
-                                                            </div>
-                                                        )}
-
-                                                        {idx < 6 && (
-                                                            <div
-                                                                className="text-xs px-2 py-1 rounded-md bg-primary/10 text-primary">
-                                                                Active
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-
-                                    <div className="flex gap-3 items-center">
-                                        {!isLead ? (
-                                            /* !subjectiveActiveMatch ? */ (
-                                                <Button
-                                                    onClick={handleSubjectiveQueueToggle}
-                                                    disabled={subjectiveQueueLoading}
-                                                    className="flex-1"
-                                                >
-                                                    {isInSubjectiveQueue ? (
-                                                        <Minus className="w-4 h-4 mr-2"/>
-                                                    ) : (
-                                                        <Plus className="w-4 h-4 mr-2"/>
-                                                    )}
-                                                    {isInSubjectiveQueue ? "Leave subjective queue" : "Join subjective queue"}
-                                                </Button>
-                                            ) /*: (
-                                                <div className="flex-1 text-center text-sm text-muted-foreground">
-                                                    Scouting in progress
-                                                </div>
-                                            ) */
-                                        ) : subjectiveActiveMatch ? (
-                                            subjectiveActiveMatch.startedBy === user?.id ? (
-                                                <Button
-                                                    onClick={handleEndSubjectiveMatch}
-                                                    variant="destructive"
-                                                    className="flex-1"
-                                                    disabled={subjectiveQueueLoading}
-                                                >
-                                                    End subjective match
-                                                </Button>
-                                            ) : (
-                                                <Button className="flex-1" disabled>
-                                                    Subjective match running elsewhere
-                                                </Button>
-                                            )
-                                        ) : (
-                                            <Button
-                                                onClick={handleStartSubjectiveMatch}
-                                                disabled={
-                                                    subjectiveQueueLoading ||
-                                                    subjectiveTopSix.length === 0 ||
-                                                    (subjectiveTopSix.length > 0 &&
-                                                        !teamAssignments
-                                                            .slice(0, Math.min(6, subjectiveTopSix.length))
-                                                            .every((v) => /^\d{1,5}$/.test(v)))
-                                                }
-                                                className="flex-1"
-                                            >
-                                                <Play className="w-4 h-4 mr-2"/>
-                                                Assign & Start subjective match
-                                            </Button>
-                                        )}
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            <QueueCard
+                                title="Subjective Queue"
+                                description="First 6 in the queue will be selected to start subjective scouting (real-time)"
+                                queue={subjectiveQueue}
+                                emptyText="No one in subjective queue yet"
+                                youText="You are in the next subjective match!"
+                                isYouInTopSix={isInSubjectiveTopSix}
+                                userId={user?.id}
+                                teamAssignments={teamAssignments}
+                                isLead={isLead}
+                            >
+                                <div className="flex gap-3 items-center">
+                                    {!isLead ? (
+                                        <QueueToggle
+                                            inQueue={isInSubjectiveQueue}
+                                            label="subjective queue"
+                                            onClick={() => run(() => (isInSubjectiveQueue ? subjectiveLeave() : subjectiveJoin()), "Subjective queue error")}
+                                            disabled={subjectiveQueueLoading}
+                                        />
+                                    ) : (
+                                        <LeadControls
+                                            match={subjectiveActiveMatch}
+                                            userId={user?.id}
+                                            label="subjective match"
+                                            loading={subjectiveQueueLoading}
+                                            canStart={subjectiveTopSix.length > 0 && !!readyAssignments(subjectiveTopSix.length)}
+                                            onStart={handleStartSubjectiveMatch}
+                                            onSignal={signalEnd(subjectiveActiveMatch, subjectiveSignalMatchEnd, "subjective match")}
+                                            onForce={forceEnd(subjectiveActiveMatch, subjectiveEndMatch, "subjective match", "scout_draft_subjective:")}
+                                        />
+                                    )}
+                                </div>
+                            </QueueCard>
                         )}
 
                         {isLead && subjectiveActiveMatch && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Active Subjective Scouters</CardTitle>
-                                    <CardDescription>
-                                        Scouters currently scouting in the active subjective match
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    {subjectiveActiveMatch.participants && Object.keys(subjectiveActiveMatch.participants).filter(key => !/^\d+$/.test(key)).length > 0 ? (
-                                        <ul className="space-y-2">
-                                            {Object.entries(subjectiveActiveMatch.participants)
-                                                .filter(([key]) => !/^\d+$/.test(key))
-                                                .map(([key, participant]: [string, any], idx: number) => (
-                                                    <li
-                                                        key={key}
-                                                        className="flex items-center justify-between p-2 rounded-md border bg-secondary/50"
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <div
-                                                                className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium">
-                                                                {participant.name?.charAt(0)?.toUpperCase() || "?"}
-                                                            </div>
-                                                            <div>
-                                                                <div className="text-sm font-medium">
-                                                                    {participant.name}
-                                                                </div>
-                                                                <div className="text-xs text-muted-foreground">
-                                                                    Team {participant.assignedTeam || "—"}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        {idx < 6 && (
-                                                            <div
-                                                                className="text-xs px-2 py-1 rounded-md bg-green-50 text-green-700 font-medium">
-                                                                Scouting
-                                                            </div>
-                                                        )}
-                                                    </li>
-                                                ))}
-                                        </ul>
-                                    ) : (
-                                        <p className="text-sm text-muted-foreground">
-                                            No scouters in the active subjective match
-                                        </p>
-                                    )}
-                                </CardContent>
-                            </Card>
+                            <ScoutersCard
+                                title="Active Subjective Scouters"
+                                description="Scouters currently scouting in the active subjective match"
+                                emptyText="No scouters in the active subjective match"
+                                participants={subjectiveActiveMatch.participants}
+                            />
                         )}
 
-                        {/*{!isInSubjectiveScouting && !activeMatch && (*/}
-                        {/*    <Card>*/}
-                        {/*        <CardHeader>*/}
-                        {/*            <CardTitle>Start Manual Scouting Session</CardTitle>*/}
-                        {/*            <CardDescription>*/}
-                        {/*                Enter the team number you're scouting and begin*/}
-                        {/*            </CardDescription>*/}
-                        {/*        </CardHeader>*/}
-                        {/*        <CardContent className="space-y-4">*/}
-                        {/*            <div className="space-y-2">*/}
-                        {/*                <Label htmlFor="team-number">Team Number</Label>*/}
-                        {/*                <Input*/}
-                        {/*                    id="team-number"*/}
-                        {/*                    type="text"*/}
-                        {/*                    placeholder="Enter team number"*/}
-                        {/*                    value={teamNumber}*/}
-                        {/*                    onChange={(e) => setTeamNumber(e.target.value)}*/}
-                        {/*                />*/}
-                        {/*            </div>*/}
-
-                        {/*            {isLead || !isLead ? (*/}
-                        {/*                <Button*/}
-                        {/*                    onClick={() => startScouting(teamNumber, {manual: true})}*/}
-                        {/*                    className="w-full"*/}
-                        {/*                    size="lg"*/}
-                        {/*                    disabled={!teamNumber.trim()}*/}
-                        {/*                >*/}
-                        {/*                    <Play className="w-4 h-4 mr-2"/>*/}
-                        {/*                    Start Scouting*/}
-                        {/*                </Button>*/}
-                        {/*            ) : (*/}
-                        {/*                <div className="w-full text-center text-sm text-muted-foreground">*/}
-                        {/*                    You will be started automatically when the lead assigns a*/}
-                        {/*                    team to you.*/}
-                        {/*                </div>*/}
-                        {/*            )}*/}
-                        {/*        </CardContent>*/}
-                        {/*    </Card>*/}
-                        {/*)}*/}
-
-                        {(isInMatchScouting || canScoutMatch) && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Match Scouting - Team {teamNumber}</CardTitle>
-                                    <CardDescription>
-                                        Answer the following questions about this team's robot and strategy
-                                    </CardDescription>
-                                </CardHeader>
-                            </Card>
-                        )}
-
-                        {canScoutMatch && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Autonomous Notes</CardTitle>
-                                    <CardDescription>
-                                        Record observations during autonomous period (available
-                                        throughout match)
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
+                        {showMatchForm && (
+                            <>
+                                <Section
+                                    title={`Match Scouting - Team ${m.teamNumber}`}
+                                    description="Answer the following questions about this team's robot and strategy"
+                                />
+                                <Section title="Autonomous Notes" description="Record observations during autonomous period (available throughout match)">
                                     <Textarea
                                         placeholder="Enter your notes here..."
-                                        value={autonomousNotes}
-                                        onChange={(e) => setAutonomousNotes(e.target.value)}
+                                        value={m.autonomousNotes}
+                                        onChange={(e) => match.setField("autonomousNotes", e.target.value)}
                                         className="min-h-[120px]"
                                     />
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {(isInMatchScouting || canScoutMatch) && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Autonomous Fuel</CardTitle>
-                                    <CardDescription>
-                                        Fuel scored during autonomous period (editable throughout match)
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="flex items-center justify-between p-4 border rounded-lg">
-                                        <div>
-                                            <Label className="text-base font-medium">
-                                                Autonomous Fuel
-                                            </Label>
-                                            <p className="text-sm text-muted-foreground">
-                                                Current: {autonomousFuel}
-                                            </p>
-                                        </div>
-                                        <div className="grid grid-cols-3 gap-2">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setAutonomousFuel((prev) => Math.max(0, prev - 1))}
-                                            >
-                                                -1
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setAutonomousFuel((prev) => prev + 1)}
-                                            >
-                                                +1
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setAutonomousFuel((prev) => prev + 3)}
-                                            >
-                                                +3
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setAutonomousFuel((prev) => prev + 5)}
-                                            >
-                                                +5
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setAutonomousFuel((prev) => prev + 10)}
-                                            >
-                                                +10
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {(isInMatchScouting || canScoutMatch) && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Auto Climb</CardTitle>
-                                    <CardDescription>Did this team climb?</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="flex gap-2">
-                                        <Button
-                                            variant={autoClimb === "yes" ? "default" : "outline"}
-                                            onClick={() => setAutoClimb("yes")}
-                                        >
-                                            Yes
-                                        </Button>
-                                        <Button
-                                            variant={autoClimb === "no" ? "default" : "outline"}
-                                            onClick={() => setAutoClimb("no")}
-                                        >
-                                            No
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {(isInMatchScouting || canScoutMatch) && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Teleop Notes</CardTitle>
-                                    <CardDescription>
-                                        Record observations during teleop period
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
+                                </Section>
+                                <Section title="Autonomous Fuel" description="Fuel scored during autonomous period (editable throughout match)">
+                                    <Counter
+                                        label="Autonomous Fuel"
+                                        value={m.autonomousFuel}
+                                        onStep={(d) => match.setForm((f) => ({...f, autonomousFuel: Math.max(0, f.autonomousFuel + d)}))}
+                                    />
+                                </Section>
+                                <Section title="Auto Climb" description="Did this team climb?">
+                                    <Choice value={m.autoClimb} onChange={(v) => match.setField("autoClimb", v)}/>
+                                </Section>
+                                <Section title="Teleop Notes" description="Record observations during teleop period">
                                     <Textarea
                                         placeholder="Enter your notes here..."
-                                        value={teleopNotes}
-                                        onChange={(e) => setTeleopNotes(e.target.value)}
+                                        value={m.teleopNotes}
+                                        onChange={(e) => match.setField("teleopNotes", e.target.value)}
                                         className="min-h-[120px]"
                                     />
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {(isInMatchScouting || canScoutMatch) && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Teleop Fuel</CardTitle>
-                                    <CardDescription>
-                                        Fuel scored during teleop period
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="flex items-center justify-between p-4 border rounded-lg">
-                                        <div>
-                                            <Label className="text-base font-medium">
-                                                Teleop Fuel
-                                            </Label>
-                                            <p className="text-sm text-muted-foreground">
-                                                Current: {teleopFuel}
-                                            </p>
-                                        </div>
-                                        <div className="grid grid-cols-3 gap-2">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setTeleopFuel((prev) => Math.max(0, prev - 1))}
-                                            >
-                                                -1
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setTeleopFuel((prev) => prev + 1)}
-                                            >
-                                                +1
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setTeleopFuel((prev) => prev + 3)}
-                                            >
-                                                +3
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setTeleopFuel((prev) => prev + 5)}
-                                            >
-                                                +5
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setTeleopFuel((prev) => prev + 10)}
-                                            >
-                                                +10
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {(isInMatchScouting || canScoutMatch) && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Teleop Climb</CardTitle>
-                                    <CardDescription>Did the team successfully climb?</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="flex gap-2 mb-4">
-                                        <Button
-                                            variant={teleopClimb === "yes" ? "default" : "outline"}
-                                            onClick={() => setTeleopClimb("yes")}
-                                        >
-                                            Yes
-                                        </Button>
-                                        <Button
-                                            variant={teleopClimb === "no" ? "default" : "outline"}
-                                            onClick={() => setTeleopClimb("no")}
-                                        >
-                                            No
-                                        </Button>
-                                    </div>
-                                    {teleopClimb === "yes" && (
+                                </Section>
+                                <Section title="Teleop Fuel" description="Fuel scored during teleop period">
+                                    <Counter
+                                        label="Teleop Fuel"
+                                        value={m.teleopFuel}
+                                        onStep={(d) => match.setForm((f) => ({...f, teleopFuel: Math.max(0, f.teleopFuel + d)}))}
+                                    />
+                                </Section>
+                                <Section title="Teleop Climb" description="Did the team successfully climb?">
+                                    <Choice className="flex gap-2 mb-4" value={m.teleopClimb} onChange={(v) => match.setField("teleopClimb", v)}/>
+                                    {m.teleopClimb === "yes" && (
                                         <div>
                                             <div className="font-medium mb-2">Climb Level</div>
-                                            <div className="flex gap-2">
-                                                <Button
-                                                    variant={climbLevel === "L1" ? "default" : "outline"}
-                                                    onClick={() => setClimbLevel("L1")}
-                                                >
-                                                    L1
-                                                </Button>
-                                                <Button
-                                                    variant={climbLevel === "L2" ? "default" : "outline"}
-                                                    onClick={() => setClimbLevel("L2")}
-                                                >
-                                                    L2
-                                                </Button>
-                                                <Button
-                                                    variant={climbLevel === "L3" ? "default" : "outline"}
-                                                    onClick={() => setClimbLevel("L3")}
-                                                >
-                                                    L3
-                                                </Button>
-                                            </div>
+                                            <Choice options={["L1", "L2", "L3"]} value={m.climbLevel} onChange={(v) => match.setField("climbLevel", v)}/>
                                         </div>
                                     )}
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {(isInMatchScouting || canScoutMatch) && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Defense Score</CardTitle>
-                                    <CardDescription>Rate the team's defensive performance</CardDescription>
-                                </CardHeader>
-                                <CardContent>
+                                </Section>
+                                <Section title="Defense Score" description="Rate the team's defensive performance">
                                     <div className="flex gap-2">
-                                        <Select value={defenseScore} onValueChange={setDefenseScore}>
+                                        <Select value={m.defenseScore} onValueChange={(v) => match.setField("defenseScore", v)}>
                                             <SelectTrigger className="w-[180px]">
                                                 <SelectValue placeholder="Select Score"/>
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="0">0 - None</SelectItem>
-                                                <SelectItem value="1">1 - Poor</SelectItem>
-                                                <SelectItem value="2">2 - Fair</SelectItem>
-                                                <SelectItem value="3">3 - Good</SelectItem>
-                                                <SelectItem value="4">4 - Excellent</SelectItem>
+                                                {["None", "Poor", "Fair", "Good", "Excellent"].map((label, i) => (
+                                                    <SelectItem key={i} value={String(i)}>{i} - {label}</SelectItem>
+                                                ))}
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {(isInMatchScouting || canScoutMatch) && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Shooting on the Move & Robot Tipped</CardTitle>
-                                    <CardDescription>
-                                        Select Yes or No for each
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
+                                </Section>
+                                <Section title="Shooting on the Move & Robot Tipped" description="Select Yes or No for each">
                                     <div className="mb-4">
                                         <div className="font-medium mb-2">Shooting on the Move (SOTM)</div>
-                                        <div className="flex gap-2">
-                                            <Button
-                                                variant={sotm === "yes" ? "default" : "outline"}
-                                                onClick={() => setSotm("yes")}
-                                            >
-                                                Yes
-                                            </Button>
-                                            <Button
-                                                variant={sotm === "no" ? "default" : "outline"}
-                                                onClick={() => setSotm("no")}
-                                            >
-                                                No
-                                            </Button>
-                                        </div>
+                                        <Choice value={m.sotm} onChange={(v) => match.setField("sotm", v)}/>
                                     </div>
                                     <div>
                                         <div className="font-medium mb-2">Robot Tipped</div>
-                                        <div className="flex gap-2">
-                                            <Button
-                                                variant={robotTipped === "yes" ? "default" : "outline"}
-                                                onClick={() => setRobotTipped("yes")}
-                                            >
-                                                Yes
-                                            </Button>
-                                            <Button
-                                                variant={robotTipped === "no" ? "default" : "outline"}
-                                                onClick={() => setRobotTipped("no")}
-                                            >
-                                                No
-                                            </Button>
-                                        </div>
+                                        <Choice value={m.robotTipped} onChange={(v) => match.setField("robotTipped", v)}/>
                                     </div>
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {(isInMatchScouting || canScoutMatch) && (
-                            <Card>
-                                <CardContent className="pt-6">
-                                    <Button
-                                        onClick={async () => {
-                                            setIsSubmitting(true);
-                                            try {
-                                                await resetScouting();
-
-                                                const matchId = activeMatch?.id || currentMatchIdRef.current;
-                                                if (!matchId) {
-                                                    toast("Error: No match ID found");
-                                                    setIsSubmitting(false);
-                                                    return;
-                                                }
-
-                                                const db = getDatabase();
-                                                const participantsRef = ref(db, `matches/${matchId}/participants`);
-                                                const participantsSnap = await get(participantsRef);
-
-                                                let hasActiveScouters = false;
-                                                if (participantsSnap.exists()) {
-                                                    const participants = participantsSnap.val();
-                                                    const activeParticipants = Object.values(participants as any).filter(
-                                                        (p: any) => !p.submittedAt
-                                                    );
-                                                    hasActiveScouters = activeParticipants.length > 0;
-                                                }
-
-                                                // If no active scouters, force end the match
-                                                if (!hasActiveScouters) {
-                                                    await endMatch(matchId);
-                                                    toast("No more active scouters. Match ended.");
-                                                } else {
-                                                    toast("Scouting data submitted successfully!");
-                                                }
-                                            } catch (err) {
-                                                console.error("Submit error:", err);
-                                                toast("Failed to submit. Please try again.");
-                                                setIsSubmitting(false);
-                                                return;
-                                            }
-
-                                            // Navigate to dashboard after successful submission
-                                            setTimeout(() => {
-                                                navigate("/dashboard");
-                                            }, 500);
-                                        }}
-                                        className="w-full"
-                                        size="lg"
-                                        disabled={isSubmitting}
-                                    >
-                                        {isSubmitting ? "Submitting..." : "Submit Scouting"}
-                                    </Button>
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        { /* {[0, 3, 1, 4, 2, 5].map((i) => {
-                        const placeholders = [
-                            "Red 1",
-                            "Red 2",
-                            "Red 3",
-                            "Blue 1",
-                            "Blue 2",
-                            "Blue 3",
-
-                            teamAssignments[i]
-                        ];*/}
-
-                        {isInSubjectiveScouting && canScoutSubjectiveMatch && (
-                            <>
+                                </Section>
                                 <Card>
-                                    <CardHeader>                                                     {/* want to show here what thing they are. eg Blue 1, Red 3 */}
-                                        <CardTitle>Subjective Scouting - Team {subjectiveTeamNumber} ({getTeamLabel(Number(subjectiveTeamNumber))})</CardTitle>
-                                        <CardDescription>
-                                            Answer the following questions about this team's robot and strategy
-                                        </CardDescription>
-                                    </CardHeader>
-                                </Card>
-
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Robot Performance and Strategy</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-6">
-                                        <div className="space-y-3">
-                                            <Label htmlFor="autonomous-effectiveness" className="text-base font-medium">
-                                                How effective is their robot during the Autonomous period?
-                                            </Label>
-                                            <Input
-                                                id="autonomous-effectiveness"
-                                                placeholder="e.g., Not Effective, Somewhat Effective, Very Effective"
-                                                value={autonomousEffectiveness}
-                                                onChange={(e) => setAutonomousEffectiveness(e.target.value)}
-                                            />
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            <Label htmlFor="quick-score" className="text-base font-medium">
-                                                Estimated fuels scored per cycle?
-                                            </Label>
-                                            <Input
-                                                id="quick-score"
-                                                placeholder=""
-                                                value={canQuicklyScore}
-                                                onChange={(e) => setCanQuicklyScore(e.target.value)}
-                                            />
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            <Label htmlFor="estimated-bps" className="text-base font-medium">
-                                                Estimated BPS (optional)?
-                                            </Label>
-                                            <Input
-                                                id="estimated-bps"
-                                                placeholder="e.g., 3-5 BPS, 1-2 BPS, or N/A"
-                                                value={estimatedBPS}
-                                                onChange={(e) => setEstimatedBPS(e.target.value)}
-                                            />
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            <Label htmlFor="can-climb" className="text-base font-medium">
-                                                Is their robot able to climb? If so, what level (L1, L2, L3)?
-                                            </Label>
-                                            <Input
-                                                id="can-climb"
-                                                placeholder="e.g., Yes - L1, No, or description"
-                                                value={canClimb}
-                                                onChange={(e) => setCanClimb(e.target.value)}
-                                            />
-                                        </div>
-
-                                        <div className="spacey-3">
-                                            <Label htmlFor="climb-time" className="text-base font-medium">
-                                                Estimated time to climb?
-                                            </Label>
-                                            <Input
-                                                id="climb-time"
-                                                placeholder="e.g., <10s, 10-20s, >20s, or N/A"
-                                                value={climbTime}
-                                                onChange={(e) => setClimbTime(e.target.value)}
-                                            />
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            <Label htmlFor="climb-level-subjective" className="text-base font-medium">
-                                                Climb Level (Subjective)?
-                                            </Label>
-                                            <Input
-                                                id="climb-level-subjective"
-                                                placeholder="e.g., L1, L2, L3, or N/A"
-                                                value={climbLevelSubjective}
-                                                onChange={(e) => setClimbLevelSubjective(e.target.value)}
-                                            />
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Team Dynamics</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-6">
-                                        <div className="space-y-3">
-                                            <Label htmlFor="team-focus" className="text-base font-medium">
-                                                Do they focus on scoring, passing, defense, or a mix?
-                                            </Label>
-                                            <Input
-                                                id="team-focus"
-                                                placeholder="e.g., Scoring focused, Balanced mix, Defense oriented, Support oriented"
-                                                value={teamFocus}
-                                                onChange={(e) => setTeamFocus(e.target.value)}
-                                            />
-                                        </div>
-
-                                    </CardContent>
-                                </Card>
-
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Tactical Insights</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-6">
-
-                                        <div className="space-y-3">
-                                            <Label htmlFor="blocking-effectiveness" className="text-base font-medium">
-                                                How effectively can they block or disrupt scoring (if they defend)?
-                                            </Label>
-                                            <Input
-                                                id="blocking-effectiveness"
-                                                placeholder="e.g., Very effective, Moderately effective, Ineffective"
-                                                value={blockingEffectiveness}
-                                                onChange={(e) => setBlockingEffectiveness(e.target.value)}
-                                            />
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            <Label htmlFor="defensive-skill" className="text-base font-medium">
-                                                Do they seem experienced with playing defense?
-                                            </Label>
-                                            <Input
-                                                id="defensive-skill"
-                                                placeholder="e.g., Yes, No, A little"
-                                                value={defensiveSkill}
-                                                onChange={(e) => setDefensiveSkill(e.target.value)}
-                                            />
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            <Label htmlFor="ally-cooperation" className="text-base font-medium">
-                                                How well do they work their allies for combined strategies (constantly
-                                                bumping or getting in their way)?
-                                            </Label>
-                                            <Input
-                                                id="ally-cooperation"
-                                                placeholder="e.g., Great teamwork, Often interferes, Gets in the way"
-                                                value={allyCooperation}
-                                                onChange={(e) => setAllyCooperation(e.target.value)}
-                                            />
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Misc</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-6">
-
-                                        <div className="space-y-3">
-                                            <Label htmlFor="robot-reliability" className="text-base font-medium">
-                                                Was the robot reliable during the entire match?
-                                            </Label>
-                                            <Input
-                                                id="robot-reliability"
-                                                placeholder="e.g., Dead, Stuck, Tipped"
-                                                value={robotReliablity}
-                                                onChange={(e) => setRobotReliability(e.target.value)}
-                                            />
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            <Label htmlFor="robot-penalties" className="text-base font-medium">
-                                                Did they receive any penalties?
-                                            </Label>
-                                            <Input
-                                                id="robot-penalties"
-                                                placeholder="e.g., Red Card, Yellow Card"
-                                                value={robotPenalties}
-                                                onChange={(e) => setRobotPenalties(e.target.value)}
-                                            />
-                                        </div>
-
-
-                                        <div className="space-y-3">
-                                            <Label htmlFor="teleop-passing" className="text-base font-medium">
-                                                Can they pass?
-                                            </Label>
-                                            <Input
-                                                id="teleop-passing"
-                                                placeholder="e.g., Yes, No, Sometimes"
-                                                value={teleopPassing}
-                                                onChange={(e) => setTeleopPassing(e.target.value)}
-                                            />
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            <Label htmlFor="game-sense" className="text-base font-medium">
-                                                Do you think they have game sense?
-                                            </Label>
-                                            <Input
-                                                id="game-sense"
-                                                placeholder="e.g., Yes, No, A little"
-                                                value={gameSense}
-                                                onChange={(e) => setGameSense(e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="space-y-3">
-                                            <Label htmlFor="strengths" className="text-base font-medium">
-                                                Team and Robot Strengths?
-                                            </Label>
-                                            <Input
-                                                id="strengths"
-                                                placeholder="e.g., Shooting, Defense, Speed"
-                                                value={strengths}
-                                                onChange={(e) => setStrengths(e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="space-y-3">
-                                            <Label htmlFor="weaknesses" className="text-base font-medium">
-                                                Team and Robot Weaknesses?
-                                            </Label>
-                                            <Input
-                                                id="weaknesses"
-                                                placeholder="e.g., Bad intake, Can't shoot, Tank Drive"
-                                                value={weaknesses}
-                                                onChange={(e) => setWeaknesses(e.target.value)}
-                                            />
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Submit Subjective Scouting</CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <Button
-                                            onClick={async () => {
-                                                setIsSubmitting(true);
-                                                try {
-                                                    await resetSubjectiveScouting();
-                                                    toast("Subjective scouting data submitted successfully!");
-                                                    // Navigate to dashboard after successful submission
-                                                    setTimeout(() => {
-                                                        navigate("/dashboard");
-                                                    }, 500);
-                                                } catch (err) {
-                                                    console.error("Submit error:", err);
-                                                    toast("Failed to submit. Please try again.");
-                                                    setIsSubmitting(false);
-                                                }
-                                            }}
-                                            className="w-full"
-                                            size="lg"
-                                            disabled={isSubmitting}
-                                        >
-                                            {isSubmitting ? "Submitting..." : "Submit Subjective Scouting"}
+                                    <CardContent className="pt-6">
+                                        <Button onClick={submitMatch} className="w-full" size="lg" disabled={isSubmitting}>
+                                            {isSubmitting ? "Submitting..." : "Submit Scouting"}
                                         </Button>
                                     </CardContent>
                                 </Card>
                             </>
                         )}
+
+                        {showSubjectiveForm && (
+                            <>
+                                <Section
+                                    title={`Subjective Scouting - Team ${s.subjectiveTeamNumber}${station ? ` (${station})` : ""}`}
+                                    description="Answer the following questions about this team's robot and strategy"
+                                />
+                                {SUBJECTIVE_SECTIONS.map((section) => (
+                                    <Card key={section.title}>
+                                        <CardHeader>
+                                            <CardTitle>{section.title}</CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="space-y-6">
+                                            {section.fields.map((f) => (
+                                                <div key={f.key} className="space-y-3">
+                                                    <Label htmlFor={f.id} className="text-base font-medium">{f.label}</Label>
+                                                    <Input
+                                                        id={f.id}
+                                                        placeholder={f.placeholder}
+                                                        value={s[f.key]}
+                                                        onChange={(e) => subj.setField(f.key, e.target.value)}
+                                                    />
+                                                </div>
+                                            ))}
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                                <Section title="Submit Subjective Scouting">
+                                    <Button onClick={submitSubjective} className="w-full" size="lg" disabled={isSubmitting}>
+                                        {isSubmitting ? "Submitting..." : "Submit Subjective Scouting"}
+                                    </Button>
+                                </Section>
+                            </>
+                        )}
                     </div>
 
                     <div className="flex justify-center gap-4 py-6 px-6 border-t">
-                        <Button
-                            variant="outline"
-                            onClick={() => window.scrollTo(0, 0)}
-                        >
-                            Back to Top
-                        </Button>
+                        <Button variant="outline" onClick={() => window.scrollTo(0, 0)}>Back to Top</Button>
                     </div>
                 </div>
             </main>

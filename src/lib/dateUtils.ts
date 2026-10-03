@@ -1,91 +1,44 @@
 /**
  * Event date ranges used to identify and filter scouting data.
+ * Windows are [start, end) in Pacific time (all events are in the PNW), so classification
+ * doesn't depend on the viewer's timezone. PST is -08:00; DST began 2026-03-08 (-07:00).
  */
+const EVENTS = [
+    {key: "osf", label: "OSF", start: Date.parse("2026-03-06T00:00:00-08:00"), end: Date.parse("2026-03-08T00:00:00-08:00")},
+    {key: "clack", label: "Clack", start: Date.parse("2026-03-26T00:00:00-07:00"), end: Date.parse("2026-03-29T00:00:00-07:00")},
+    {key: "dcmp", label: "DCMP", start: Date.parse("2026-04-09T00:00:00-07:00"), end: Date.parse("2026-04-11T00:00:00-07:00")},
+    {key: "girlsgen", label: "Girls' Gen", start: Date.parse("2026-10-03T00:00:00-07:00"), end: Date.parse("2026-10-04T00:00:00-07:00")},
+] as const;
 
-// OSF Event date range in milliseconds
-const OSF_START = new Date(2026, 2, 6, 0, 0, 0).getTime(); // March 6, 2026 00:00:00
-const OSF_END = new Date(2026, 2, 7, 23, 59, 59).getTime(); // March 7, 2026 23:59:59
+export type EventKey = (typeof EVENTS)[number]["key"] | "current";
 
-// Clack Event date range in milliseconds
-const CLACK_START = new Date(2026, 2, 26, 0, 0, 0).getTime(); // March 26, 2026 00:00:00
-const CLACK_END = new Date(2026, 2, 28, 23, 59, 59).getTime(); // March 28, 2026 23:59:59
+const findEvent = (timestamp: number | undefined | null) =>
+    EVENTS.find((e) => !!timestamp && timestamp >= e.start && timestamp < e.end);
 
-// DCMP Event date range in milliseconds
-const DCMP_START = new Date(2026, 3, 9, 0, 0, 0).getTime(); // April 9, 2026 00:00:00
-const DCMP_END = new Date(2026, 3, 10, 23, 59, 59).getTime(); // April 10, 2026 23:59:59
+/** Display label ("OSF", "Girls' Gen", ...), or "Current" for anything outside every window */
+export const getDataLabel = (timestamp: number | undefined | null): string => findEvent(timestamp)?.label ?? "Current";
 
-/**
- * Check if a timestamp falls within the OSF date range
- * @param timestamp - Timestamp in milliseconds (from serverTimestamp)
- * @returns true if the timestamp is within OSF date range
- */
-export const isOSFData = (timestamp: number | undefined | null): boolean => {
-    if (!timestamp) return false;
-    return timestamp >= OSF_START && timestamp <= OSF_END;
+/** Stable key for filters/boards ("osf", "girlsgen", ...), or "current" */
+export const getEventKey = (timestamp: number | undefined | null): EventKey => findEvent(timestamp)?.key ?? "current";
+
+const inEvent = (label: (typeof EVENTS)[number]["label"]) => (timestamp: number | undefined | null): boolean =>
+    getDataLabel(timestamp) === label;
+
+/** Timestamp (ms, from serverTimestamp) falls within the OSF window */
+export const isOSFData = inEvent("OSF");
+/** Timestamp (ms) falls within the Clack window */
+export const isClackData = inEvent("Clack");
+/** Timestamp (ms) falls within the DCMP window */
+export const isDCMPData = inEvent("DCMP");
+
+/** Split entries by the event their submittedAt falls in */
+export const filterByEventType = <T extends { submittedAt?: number }>(entries: T[]): Record<EventKey, T[]> => {
+    const out = {osf: [], clack: [], dcmp: [], girlsgen: [], current: []} as Record<EventKey, T[]>;
+    entries.forEach((e) => out[getEventKey(e.submittedAt)].push(e));
+    return out;
 };
 
-/**
- * Check if a timestamp falls within the Clack date range
- * @param timestamp - Timestamp in milliseconds (from serverTimestamp)
- * @returns true if the timestamp is within Clack date range
- */
-export const isClackData = (timestamp: number | undefined | null): boolean => {
-    if (!timestamp) return false;
-    return timestamp >= CLACK_START && timestamp <= CLACK_END;
-};
-
-/**
- * Check if a timestamp falls within the DCMP date range
- * @param timestamp - Timestamp in milliseconds (from serverTimestamp)
- * @returns true if the timestamp is within DCMP date range
- */
-export const isDCMPData = (timestamp: number | undefined | null): boolean => {
-    if (!timestamp) return false;
-    return timestamp >= DCMP_START && timestamp <= DCMP_END;
-};
-
-/**
- * Get label for data based on date range
- * @param timestamp - Timestamp in milliseconds
- * @returns "OSF" or "Current"
- */
-export const getDataLabel = (timestamp: number | undefined | null): string => {
-    if (isOSFData(timestamp)) return "OSF";
-    if (isClackData(timestamp)) return "Clack";
-    if (isDCMPData(timestamp)) return "DCMP";
-    return "Current";
-};
-
-/**
- * Filter entries into OSF and current groups
- * @param entries - Array of entries with submittedAt field
- * @returns Object with osf and current arrays
- */
-export const filterByEventType = <T extends { submittedAt?: number }>(
-    entries: T[]
-): { osf: T[]; clack: T[]; dcmp: T[]; current: T[] } => {
-    return {
-        osf: entries.filter((e) => isOSFData(e.submittedAt)),
-        clack: entries.filter((e) => isClackData(e.submittedAt)),
-        dcmp: entries.filter((e) => isDCMPData(e.submittedAt)),
-        current: entries.filter(
-            (e) => !isOSFData(e.submittedAt) && !isClackData(e.submittedAt) && !isDCMPData(e.submittedAt),
-        ),
-    };
-};
-
-/**
- * Get date range string for display
- */
 export const OSF_DATE_RANGE = "3/6/26 - 3/7/26";
-
-/**
- * Get date range string for display
- */
 export const CLACK_DATE_RANGE = "3/26/26 - 3/28/26";
-
-/**
- * Get date range string for display
- */
 export const DCMP_DATE_RANGE = "4/9/26 - 4/10/26";
-
+export const GIRLS_GEN_DATE_RANGE = "10/3/26";

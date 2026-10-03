@@ -21,24 +21,11 @@ type TbaMatch = {
 
 const Matches = () => {
     const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState("matches");
-
-    const [eventKey, setEventKey] = useState(TBA_EVENT_KEY);
+    const eventKey = TBA_EVENT_KEY;
     const [loading, setLoading] = useState(false);
     const [matches, setMatches] = useState<TbaMatch[]>([]);
     const [filter, setFilter] = useState<string>("all");
-    const [query, setQuery] = useState("");
-
-    const handleTabChange = (tab: string) => {
-        setActiveTab(tab);
-        if (tab === "dashboard") navigate("/dashboard");
-        if (tab === "scouting") navigate("/scouting");
-        if (tab === "pit-scouting") navigate("/pit-scouting");
-        if (tab === "analytics") navigate("/analytics");
-        if (tab === "matches") navigate("/matches");
-        if (tab === "opr") navigate("/opr");
-        if (tab === "leaderboard") navigate("/leaderboard");
-    };
+    const handleTabChange = (tab: string) => navigate(`/${tab}`);
 
     useEffect(() => {
         const run = async () => {
@@ -71,23 +58,14 @@ const Matches = () => {
         return lvl;
     };
 
-    const filtered = matches.filter((m) => {
-        if (filter !== "all" && m.comp_level !== filter) return false;
-        if (!query) return true;
-        const q = query.toLowerCase();
-        return (
-            m.key.toLowerCase().includes(q) ||
-            m.alliances.red.team_keys.some((t) => t.includes(q)) ||
-            m.alliances.blue.team_keys.some((t) => t.includes(q))
-        );
-    });
+    const filtered = matches.filter((m) => filter === "all" || m.comp_level === filter);
 
     return (
         <div className="min-h-screen bg-background">
-            <Sidebar activeTab={activeTab} onTabChange={handleTabChange}/>
+            <Sidebar activeTab="matches" onTabChange={handleTabChange}/>
 
             <main className="md:ml-64 min-h-screen overflow-auto">
-                <TopBar activeTab={activeTab} onTabChange={handleTabChange}/>
+                <TopBar activeTab="matches" onTabChange={handleTabChange}/>
 
                 <div className="p-6 space-y-4">
                     <div className="flex items-center justify-between">

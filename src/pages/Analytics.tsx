@@ -11,7 +11,7 @@ import {AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, A
 import {useAuth} from "@/contexts/AuthContext";
 import {get, ref, remove} from "firebase/database";
 import {db} from "@/lib/firebase";
-import {CLACK_DATE_RANGE, DCMP_DATE_RANGE, getDataLabel, isDCMPData, OSF_DATE_RANGE} from "@/lib/dateUtils";
+import {CLACK_DATE_RANGE, DCMP_DATE_RANGE, GIRLS_GEN_DATE_RANGE, OSF_DATE_RANGE} from "@/lib/dateUtils";
 import {
     CartesianGrid,
     Legend,
@@ -25,92 +25,23 @@ import {
 } from "recharts";
 import {Trash2} from "lucide-react";
 import {toast} from "sonner";
+import {
+    buildCsv,
+    EventType,
+    MatchEntry,
+    matchesSelectedEvent,
+    matchStats,
+    parseMatches,
+    parsePitScouting,
+    parseSubjective,
+    PitScoutingEntry,
+    SortBy,
+    sortMatches,
+    SubjectiveScoutingEntry,
+} from "./analytics/data";
+import {MatchReportCard, PitCard, StatGrid, SubjectiveCard, TeamNumberInput} from "./analytics/cards";
 
-type Filters = {
-    sortBy:
-        | "newest"
-        | "highest_score_auto"
-        | "highest_score_teleop"
-        | "highest_total_score"
-        | "highest_climb"
-        | "best_defense";
-};
-
-type EventType = "all" | "osf" | "clack" | "dcmp" | "current";
-
-export type MatchEntry = {
-    id: string;
-    matchKey: string;
-    userId: string;
-    station: string;
-    teamNumber: number;
-    scoutName: string;
-    score_auto: number;
-    score_teleop: number;
-    total_score: number;
-    climb: string;
-    climbValue: number;
-    defense_rating: string;
-    defense_rating_value: number;
-    robotTipped?: boolean;
-    robotDead?: boolean;
-    submittedAt: number;
-};
-
-export type PitScoutingEntry = {
-    id: string;
-    dateStr: string;
-    teamNumber: number;
-    scoutName: string;
-    scoutId: string;
-    responses: Record<string, unknown>;
-    submittedAt: number;
-};
-
-export type SubjectiveScoutingEntry = {
-    id: string;
-    matchId: string;
-    teamNumber: string;
-    scoutName: string;
-    userId: string;
-    robotPerformance: {
-        autonomousEffectiveness: string;
-        canQuicklyScore: string;
-        canClimb: string;
-        climbLevel?: string | null;
-    };
-    teamDynamics: {
-        performanceUnderPressure: string;
-        teamFocus: string;
-        driverSynchronization: string;
-    };
-    tacticalInsights: {
-        defensiveStrategy: string;
-        blockingEffectiveness: string;
-        allyCooperation: string;
-    };
-    misc?: {
-        defensiveSkill?: string;
-        robotReliability?: string;
-        robotPenalties?: string;
-        autoFuel?: string;
-        autoClimb?: string;
-        teleopPassing?: string;
-        gameSense?: string;
-        strengths?: string;
-        weaknesses?: string;
-    };
-    submittedAt: number;
-};
-
-const matchesSelectedEvent = (timestamp: number, eventType: EventType): boolean => {
-    const dataLabel = getDataLabel(timestamp);
-    if (eventType === "osf") return dataLabel === "OSF";
-    if (eventType === "clack") return dataLabel === "Clack";
-    if (eventType === "dcmp") return dataLabel === "DCMP";
-    if (eventType === "current") return dataLabel === "Current";
-    return true;
-};
+export type {MatchEntry, PitScoutingEntry, SubjectiveScoutingEntry} from "./analytics/data";
 
 type DeleteTarget = {
     kind: "match" | "pit" | "subjective";
@@ -124,7 +55,7 @@ const Analytics = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState("analytics");
     const [viewTab, setViewTab] = useState("all");
-    const [sortBy, setSortBy] = useState<Filters["sortBy"]>("newest");
+    const [sortBy, setSortBy] = useState<SortBy>("newest");
     const [teamNumberInput, setTeamNumberInput] = useState("");
     const [loading, setLoading] = useState(false);
     const [matchEntries, setMatchEntries] = useState<MatchEntry[]>([]);
@@ -135,40 +66,26 @@ const Analytics = () => {
     const [scouterSearchInput, setScouterSearchInput] = useState("");
     const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
     const [deleting, setDeleting] = useState(false);
-    const [showJson, setShowJson] = useState(false);
 
     const isLead = !!user?.isLead;
 
     const handleTabChange = (tab: string) => {
         setActiveTab(tab);
-        if (tab === "dashboard") navigate("/dashboard");
-        if (tab === "scouting") navigate("/scouting");
-        if (tab === "analytics") navigate("/analytics");
-        if (tab === "pit-scouting") navigate("/pit-scouting");
-        if (tab === "matches") navigate("/matches");
-        if (tab === "opr") navigate("/opr");
-        if (tab === "leaderboard") navigate("/leaderboard");
-    };
-
-    const openDeleteDialog = (target: DeleteTarget) => {
-        if (!isLead) return;
-        setDeleteTarget(target);
+        if (["dashboard", "scouting", "analytics", "pit-scouting", "matches", "opr", "leaderboard"].includes(tab)) navigate(`/${tab}`);
     };
 
     const handleDeleteConfirmed = async () => {
-        if (!deleteTarget) return;
+        // path comes from the keys the entry was read from (see dbPath); never delete without one
+        if (!deleteTarget?.path || !isLead) return;
 
         try {
             setDeleting(true);
             await remove(ref(db, deleteTarget.path));
 
-            if (deleteTarget.kind === "match") {
-                setMatchEntries((prev) => prev.filter((entry) => entry.id !== deleteTarget.id));
-            } else if (deleteTarget.kind === "pit") {
-                setPitScoutingEntries((prev) => prev.filter((entry) => entry.id !== deleteTarget.id));
-            } else if (deleteTarget.kind === "subjective") {
-                setSubjectiveScoutingEntries((prev) => prev.filter((entry) => entry.id !== deleteTarget.id));
-            }
+            const drop = <T extends { id: string }>(prev: T[]) => prev.filter((entry) => entry.id !== deleteTarget.id);
+            if (deleteTarget.kind === "match") setMatchEntries(drop);
+            else if (deleteTarget.kind === "pit") setPitScoutingEntries(drop);
+            else setSubjectiveScoutingEntries(drop);
 
             toast("Scouting report deleted.");
         } catch (error) {
@@ -180,272 +97,34 @@ const Analytics = () => {
         }
     };
 
-    const renderDeleteButton = (target: DeleteTarget) => (
-        isLead ? (
+    const deleteButton = (kind: DeleteTarget["kind"], entry: { id: string; path?: string | null }, label: string) => (
+        isLead && entry.path ? (
             <Button
                 type="button"
                 variant="destructive"
                 size="icon"
                 className="h-8 w-8 shrink-0"
-                onClick={() => openDeleteDialog(target)}
+                onClick={() => setDeleteTarget({kind, id: entry.id, path: entry.path, label})}
                 aria-label="Delete scouting report"
             >
                 <Trash2 className="h-4 w-4" />
             </Button>
         ) : null
     );
+    const matchDelete = (e: MatchEntry) => deleteButton("match", e, `Team ${e.teamNumber} • Match ${e.matchKey.slice(-6)}`);
+    const pitDelete = (e: PitScoutingEntry) => deleteButton("pit", e, `Team ${e.teamNumber} • Pit scouting`);
+    const subjectiveDelete = (e: SubjectiveScoutingEntry) => deleteButton("subjective", e, `Team ${e.teamNumber} • Subjective scouting`);
 
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                // Fetch match scouting data
-                const matchesRef = ref(db, "matches");
-                const snap = await get(matchesRef);
-
-                if (!snap.exists()) {
-                    console.log("No data found at 'matches' path");
-                    setMatchEntries([]);
-                } else {
-                    const matchesData = snap.val();
-                    const allEntries: MatchEntry[] = [];
-                    console.log("All Match IDs in DB:", Object.keys(matchesData));
-
-                    const parseClimbValue = (val: unknown): { climbValue: number; climbDisplay: string } => {
-                        if (val === null || val === undefined) {
-                            return {climbValue: 0, climbDisplay: "N/A"};
-                        }
-
-                        if (typeof val === 'number' && !isNaN(val)) {
-                            if (val > 0) {
-                                return {climbValue: val, climbDisplay: `L${val}`};
-                            }
-                            return {climbValue: 0, climbDisplay: "N/A"};
-                        }
-
-                        if (typeof val === 'string') {
-                            const s = val.trim();
-                            const match = s.match(/(?:L|Level|level|level_|lvl|LVL)?\s*_?\s*([1-3])/i);
-                            if (match) {
-                                const num = parseInt(match[1], 10);
-                                return {climbValue: num, climbDisplay: `L${num}`};
-                            }
-                            const digitMatch = s.match(/^([1-3])$/);
-                            if (digitMatch) {
-                                const num = parseInt(digitMatch[1], 10);
-                                return {climbValue: num, climbDisplay: `L${num}`};
-                            }
-                        }
-
-                        return {climbValue: 0, climbDisplay: "N/A"};
-                    };
-
-                    const parseDefenseRating = (val: unknown): { defenseValue: number; defenseDisplay: string } => {
-                        const defenseMap: { [key: string]: string } = {
-                            "1": "1 - Poor",
-                            "2": "2 - Fair",
-                            "3": "3 - Good",
-                            "4": "4 - Excellent",
-                        };
-
-                        if (val === null || val === undefined) {
-                            return {defenseValue: 0, defenseDisplay: "N/A"};
-                        }
-
-                        if (typeof val === 'number' && !isNaN(val)) {
-                            if (val > 0 && val <= 4) {
-                                return {defenseValue: val, defenseDisplay: defenseMap[String(val)]};
-                            }
-                            return {defenseValue: 0, defenseDisplay: "N/A"};
-                        }
-
-                        if (typeof val === 'string') {
-                            const s = val.trim();
-                            const match = s.match(/^([1-4])/);
-                            if (match) {
-                                const num = parseInt(match[1], 10);
-                                return {defenseValue: num, defenseDisplay: defenseMap[match[1]]};
-                            }
-                            if (defenseMap[s]) {
-                                const num = parseInt(s, 10);
-                                return {defenseValue: num, defenseDisplay: defenseMap[s]};
-                            }
-                        }
-
-                        return {defenseValue: 0, defenseDisplay: "N/A"};
-                    };
-
-                            Object.entries(matchesData).forEach(([matchKey, matchValue]: [string, Record<string, unknown>]) => {
-                        const participantsRoot = matchValue.participants || matchValue;
-
-                        if (typeof participantsRoot !== 'object') return;
-
-                            Object.entries(participantsRoot).forEach(([stationId, data]: [string, Record<string, unknown>]) => {
-                            if (!data || typeof data !== 'object' || !data.teamNumber) return;
-
-                            const teamNum = parseInt(String(data.teamNumber));
-                            const autoScore = ((data.autonomous as Record<string, unknown>)?.score as number) || ((data.autonomous as Record<string, unknown>)?.fuel as number) || 0;
-                            const teleopScore = ((data.teleop as Record<string, unknown>)?.score as number) || ((data.teleop as Record<string, unknown>)?.fuel as number) || 0;
-
-                            const climbRaw = (data.teleop as Record<string, unknown>)?.climbLevel ?? 0;
-                            const {climbValue, climbDisplay} = parseClimbValue(climbRaw);
-
-                            const defenseRaw = (data.teleop as Record<string, unknown>)?.defenseScore ?? 0;
-                            const {defenseValue, defenseDisplay} = parseDefenseRating(defenseRaw);
-
-                            const robotTippedRaw = (data as Record<string, unknown>)?.robotTipped ?? false;
-                            const robotTipped = robotTippedRaw === true || String(robotTippedRaw).toLowerCase() === "yes";
-
-                            const robotDeadRaw = (data as Record<string, unknown>)?.robotDead ?? false;
-                            const robotDead = robotDeadRaw === true || String(robotDeadRaw).toLowerCase() === "yes";
-
-                            allEntries.push({
-                                id: `${matchKey}_${stationId}_${(data.submittedAt as number) || Math.random()}`,
-                                matchKey: matchKey,
-                                userId: (data.userId as string) || stationId,
-                                station: stationId,
-                                teamNumber: teamNum,
-                                scoutName: (data.scoutName as string) || "Unknown",
-                                score_auto: autoScore,
-                                score_teleop: teleopScore,
-                                total_score: autoScore + teleopScore,
-                                climb: climbDisplay,
-                                climbValue: climbValue,
-                                defense_rating: defenseDisplay,
-                                defense_rating_value: defenseValue,
-                                robotTipped,
-                                robotDead,
-                                submittedAt: (data.submittedAt as number) || 0
-                            });
-                        });
-                    });
-
-                    console.log(`Successfully parsed ${allEntries.length} individual reports.`);
-                    setMatchEntries(allEntries);
-                }
-
-                // Fetch pit scouting data
-                const pitScoutingRef = ref(db, "pitScouting");
-                const pitSnap = await get(pitScoutingRef);
-
-                if (!pitSnap.exists()) {
-                    console.log("No pit scouting data found");
-                    setPitScoutingEntries([]);
-                } else {
-                    const pitData = pitSnap.val();
-                    const allPitEntries: PitScoutingEntry[] = [];
-
-                    // pitData structure: { dateStr: { teamNumber: { userId: { flat pit scouting fields } } } }
-                    Object.entries(pitData).forEach(([dateStr, dateValue]: [string, Record<string, unknown>]) => {
-                        if (!dateValue || typeof dateValue !== 'object') return;
-
-                        Object.entries(dateValue).forEach(([teamNum, teamValue]: [string, Record<string, unknown>]) => {
-                            if (!teamValue || typeof teamValue !== 'object') return;
-
-                            Object.entries(teamValue).forEach(([userId, entryValue]: [string, Record<string, unknown>]) => {
-                                if (!entryValue || typeof entryValue !== 'object') return;
-
-                                // Separate meta fields from actual responses
-                                const META_KEYS = ["teamNumber", "scoutName", "scoutId", "submittedAt"];
-                                const responses = Object.fromEntries(
-                                    Object.entries(entryValue).filter(([key]) => !META_KEYS.includes(key))
-                                );
-
-                                allPitEntries.push({
-                                    id: `${dateStr}_${teamNum}_${userId}`,
-                                    dateStr,
-                                    teamNumber: (entryValue.teamNumber as number) || parseInt(teamNum, 10) || 0,
-                                    scoutName: (entryValue.scoutName as string) || "Unknown",
-                                    scoutId: (entryValue.scoutId as string) || userId || "",
-                                    responses, // <-- now contains all the actual scouting data
-                                    submittedAt: (entryValue.submittedAt as number) || 0,
-                                });
-                            });
-                        });
-                    });
-
-                    console.log(`Successfully loaded ${allPitEntries.length} pit scouting entries.`);
-                    setPitScoutingEntries(allPitEntries);
-                }
-
-                // Fetch subjective scouting data
-                const subjectiveRef = ref(db, "subjectiveMatches");
-                const subjectiveSnap = await get(subjectiveRef);
-
-                if (!subjectiveSnap.exists()) {
-                    console.log("No subjective scouting data found");
-                    setSubjectiveScoutingEntries([]);
-                } else {
-                    const subjectiveData = subjectiveSnap.val();
-                    const allSubjectiveEntries: SubjectiveScoutingEntry[] = [];
-
-                    // subjectiveData structure: { matchId: { participants: { userId: { data } } } }
-                    Object.entries(subjectiveData).forEach(([matchId, matchValue]: [string, Record<string, unknown>]) => {
-                        if (!matchValue || typeof matchValue !== 'object') return;
-
-                        const participants = matchValue.participants as Record<string, unknown> | undefined;
-                        if (!participants || typeof participants !== 'object') return;
-
-                        Object.entries(participants).forEach(([userId, participantValue]: [string, Record<string, unknown>]) => {
-                            // Skip numeric indices (array elements) - only process actual userId keys
-                            if (/^\d+$/.test(userId)) return;
-
-                            if (!participantValue || typeof participantValue !== 'object') return;
-
-                            const teamNumber = (participantValue.teamNumber as string)?.trim();
-                            const scoutName = (participantValue.scoutName as string)?.trim();
-
-                            if (!teamNumber || !scoutName) {
-                                console.debug(`Skipping subjective entry ${matchId}_${userId}: missing team number or scout name`);
-                                return;
-                            }
-
-                            const robotPerf = participantValue.robotPerformance as Record<string, unknown> || {};
-                            const teamDyn = participantValue.teamDynamics as Record<string, unknown> || {};
-                            const tactical = participantValue.tacticalInsights as Record<string, unknown> || {};
-                            const misc = participantValue.misc as Record<string, unknown> || {};
-
-                            allSubjectiveEntries.push({
-                                id: `${matchId}_${userId}`,
-                                matchId,
-                                userId,
-                                teamNumber: teamNumber,
-                                scoutName: scoutName,
-                                robotPerformance: {
-                                    autonomousEffectiveness: (robotPerf.autonomousEffectiveness as string) || "",
-                                    canQuicklyScore: (robotPerf.canQuicklyScore as string) || "",
-                                    canClimb: (robotPerf.canClimb as string) || "",
-                                    climbLevel: (robotPerf.climbLevel as string | null) || null,
-                                },
-                                teamDynamics: {
-                                    performanceUnderPressure: (teamDyn.performanceUnderPressure as string) || "",
-                                    teamFocus: (teamDyn.teamFocus as string) || "",
-                                    driverSynchronization: (teamDyn.driverSynchronization as string) || "",
-                                },
-                                tacticalInsights: {
-                                    defensiveStrategy: (tactical.defensiveStrategy as string) || "",
-                                    blockingEffectiveness: (tactical.blockingEffectiveness as string) || "",
-                                    allyCooperation: (tactical.allyCooperation as string) || "",
-                                },
-                                  misc: {
-                                      defensiveSkill: (misc.defensiveSkill as string) || "",
-                                      robotReliability: (misc.robotReliability as string) || (misc.robotReliablity as string) || "",
-                                      robotPenalties: (misc.robotPenalties as string) || "",
-                                      autoFuel: (misc.autoFuel as string) || "",
-                                      autoClimb: (misc.autoClimb as string) || (misc.autoClimb1 as string) || "",
-                                      teleopPassing: (misc.teleopPassing as string) || "",
-                                      gameSense: (misc.gameSense as string) || "",
-                                      strengths: (misc.strengths as string) || "",
-                                      weaknesses: (misc.weaknesses as string) || ""
-                                  },
-                                submittedAt: (participantValue.submittedAt as number) || 0,
-                            });
-                        });
-                    });
-
-                    console.log(`Successfully loaded ${allSubjectiveEntries.length} subjective scouting entries.`);
-                    setSubjectiveScoutingEntries(allSubjectiveEntries);
-                }
+                const [matches, pits, subjectives] = await Promise.all(
+                    ["matches", "pitScouting", "subjectiveMatches"].map((path) => get(ref(db, path))),
+                );
+                setMatchEntries(parseMatches(matches.val()));
+                setPitScoutingEntries(parsePitScouting(pits.val()));
+                setSubjectiveScoutingEntries(parseSubjective(subjectives.val()));
             } catch (error) {
                 console.error("Error fetching data:", error);
             } finally {
@@ -456,281 +135,82 @@ const Analytics = () => {
         fetchData();
     }, []);
 
+    const sortedAndFiltered = useMemo(
+        () => sortMatches(matchEntries.filter((e) => matchesSelectedEvent(e.submittedAt, eventType)), sortBy),
+        [matchEntries, eventType, sortBy],
+    );
 
-
-    const sortedAndFiltered = useMemo(() => {
-        let filtered = matchEntries;
-        
-        // Filter by event type
-        if (eventType !== "all") {
-            filtered = filtered.filter(e => matchesSelectedEvent(e.submittedAt, eventType));
-        }
-        
-        return filtered.sort((a, b) => {
-            switch (sortBy) {
-                case "newest":
-                    return b.submittedAt - a.submittedAt;
-                case "highest_score_auto":
-                    return b.score_auto - a.score_auto;
-                case "highest_score_teleop":
-                    return b.score_teleop - a.score_teleop;
-                case "highest_total_score":
-                    return b.total_score - a.total_score;
-                case "highest_climb":
-                    return (b.climbValue || 0) - (a.climbValue || 0);
-                case "best_defense":
-                    return (b.defense_rating_value || 0) - (a.defense_rating_value || 0);
-                default:
-                    return 0;
-            }
-        });
-    }, [matchEntries, sortBy, eventType]);
+    const teamNum = parseInt(teamNumberInput, 10);
 
     const teamSpecificData = useMemo(() => {
-        const teamNum = parseInt(teamNumberInput);
-        if (isNaN(teamNum)) return null;
+        const matches = sortedAndFiltered.filter((entry) => entry.teamNumber === teamNum);
+        return matches.length ? {teamNum, matches, stats: matchStats(matches)} : null;
+    }, [sortedAndFiltered, teamNum]);
 
-        let teamMatches = matchEntries.filter(entry => entry.teamNumber === teamNum);
-        
-        // Filter by event type
-        if (eventType !== "all") {
-            teamMatches = teamMatches.filter(e => matchesSelectedEvent(e.submittedAt, eventType));
-        }
+    const filteredPitScoutingEntries = useMemo(
+        () => pitScoutingEntries.filter((e) => matchesSelectedEvent(e.submittedAt, eventType)),
+        [pitScoutingEntries, eventType],
+    );
 
-        if (teamMatches.length === 0) return null;
+    const teamPitEntries = useMemo(
+        () => filteredPitScoutingEntries.filter((e) => e.teamNumber === teamNum),
+        [filteredPitScoutingEntries, teamNum],
+    );
 
-        const autoScores = teamMatches.map(m => m.score_auto);
-        const teleopScores = teamMatches.map(m => m.score_teleop);
-        const totalScores = teamMatches.map(m => m.total_score);
-        const climbScores = teamMatches.map(m => m.climbValue || 0);
-        const defenseRatings = teamMatches.map(m => m.defense_rating_value || 0);
+    const pitTabEntries = useMemo(() => {
+        const n = parseInt(pitTeamNumberInput, 10);
+        return isNaN(n) ? filteredPitScoutingEntries : filteredPitScoutingEntries.filter((e) => e.teamNumber === n);
+    }, [filteredPitScoutingEntries, pitTeamNumberInput]);
 
-        const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
-        const max = (arr: number[]) => Math.max(...arr);
-        const min = (arr: number[]) => Math.min(...arr);
-
-        return {
-            teamNum,
-            matches: teamMatches,
-            stats: {
-                autoScore: {avg: avg(autoScores), max: max(autoScores), min: min(autoScores)},
-                teleopScore: {avg: avg(teleopScores), max: max(teleopScores), min: min(teleopScores)},
-                totalScore: {avg: avg(totalScores), max: max(totalScores), min: min(totalScores)},
-                climb: {avg: avg(climbScores), max: max(climbScores), min: min(climbScores)},
-                defense: {avg: avg(defenseRatings), max: max(defenseRatings), min: min(defenseRatings)},
-            }
-        };
-    }, [matchEntries, teamNumberInput, eventType]);
-
-    const filteredPitScoutingEntries = useMemo(() => {
-        let filtered = pitScoutingEntries;
-        
-        // Filter by event type
-        if (eventType !== "all") {
-            filtered = filtered.filter(e => matchesSelectedEvent(e.submittedAt, eventType));
-        }
-        
-        return filtered;
-    }, [pitScoutingEntries, eventType]);
-
-    const filteredSubjectiveScoutingEntries = useMemo(() => {
-        let filtered = subjectiveScoutingEntries;
-        
-        // Filter by event type
-        if (eventType !== "all") {
-            filtered = filtered.filter(e => matchesSelectedEvent(e.submittedAt, eventType));
-        }
-        if (teamNumberInput.trim() !== "") {
-            const teamNum = parseInt(teamNumberInput, 10);
-            if (!isNaN(teamNum)) {
-                filtered = filtered.filter(e => Number(e.teamNumber) === teamNum);
-            }
-        }
-        
-        return filtered;
-    }, [subjectiveScoutingEntries, eventType, teamNumberInput]);
+    // newest first; empty/invalid team input = all teams
+    const filteredSubjectiveScoutingEntries = useMemo(
+        () => subjectiveScoutingEntries
+            .filter((e) => matchesSelectedEvent(e.submittedAt, eventType) && (isNaN(teamNum) || Number(e.teamNumber) === teamNum))
+            .sort((a, b) => b.submittedAt - a.submittedAt),
+        [subjectiveScoutingEntries, eventType, teamNum],
+    );
 
     const scouterData = useMemo(() => {
         const searchTerm = scouterSearchInput.trim().toLowerCase();
         if (!searchTerm) return null;
-
-        let scouterMatches = matchEntries.filter((entry) => entry.scoutName.toLowerCase().includes(searchTerm));
-
-        if (eventType !== "all") {
-            scouterMatches = scouterMatches.filter((e) => matchesSelectedEvent(e.submittedAt, eventType));
-        }
-
-        if (scouterMatches.length === 0) return null;
-
-        const nums = <T extends number[]>(arr: T) => arr;
-        const autoScores = nums(scouterMatches.map((m) => m.score_auto));
-        const teleopScores = nums(scouterMatches.map((m) => m.score_teleop));
-        const totalScores = nums(scouterMatches.map((m) => m.total_score));
-        const climbScores = nums(scouterMatches.map((m) => m.climbValue || 0));
-        const defenseRatings = nums(scouterMatches.map((m) => m.defense_rating_value || 0));
-
-        const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / (arr.length || 1);
-        const max = (arr: number[]) => Math.max(...arr);
-        const min = (arr: number[]) => Math.min(...arr);
-
-        const uniqueTeams = new Set(scouterMatches.map((m) => m.teamNumber));
-
+        const matches = sortedAndFiltered.filter((entry) => entry.scoutName.toLowerCase().includes(searchTerm));
+        if (matches.length === 0) return null;
         return {
             scouterName: scouterSearchInput,
-            matches: scouterMatches,
-            uniqueTeamCount: uniqueTeams.size,
-            stats: {
-                autoScore: {avg: avg(autoScores), max: max(autoScores), min: min(autoScores)},
-                teleopScore: {avg: avg(teleopScores), max: max(teleopScores), min: min(teleopScores)},
-                totalScore: {avg: avg(totalScores), max: max(totalScores), min: min(totalScores)},
-                climb: {avg: avg(climbScores), max: max(climbScores), min: min(climbScores)},
-                defense: {avg: avg(defenseRatings), max: max(defenseRatings), min: min(defenseRatings)},
-            },
+            matches,
+            uniqueTeamCount: new Set(matches.map((m) => m.teamNumber)).size,
+            stats: matchStats(matches),
         };
-    }, [matchEntries, scouterSearchInput, eventType]);
+    }, [sortedAndFiltered, scouterSearchInput]);
 
-    const bubbleData = useMemo(() => {
-        return sortedAndFiltered.map((m) => ({
-            x: m.score_teleop,
-            y: m.score_auto,
-            r: Math.max(3, (m.climbValue || 0) * 6),
-            robotTipped: !!m.robotTipped,
-            robotDead: !!m.robotDead,
-            team: m.teamNumber,
-            id: m.id,
-        }));
-    }, [sortedAndFiltered]);
+    const bubbleData = useMemo(() => sortedAndFiltered.map((m) => ({
+        x: m.score_teleop,
+        y: m.score_auto,
+        r: Math.max(3, (m.climbValue || 0) * 6),
+        robotTipped: !!m.robotTipped,
+        robotDead: !!m.robotDead,
+        team: m.teamNumber,
+        id: m.id,
+    })), [sortedAndFiltered]);
 
     const handleExportAllData = () => {
-        // Helper: escape a single CSV field according to RFC4180 (double-quote, double internal quotes)
-        const escapeField = (v: unknown) => {
-            if (v === null || v === undefined) return "";
-            const s = String(v);
-            // keep line breaks (spreadsheet apps like Excel/Sheets will display multi-line cells)
-            return `"${s.replace(/"/g, '""')}"`;
-        };
-
-        // Build a CSV section with a title, header row and rows (array of arrays)
-        const buildSection = (title: string, headers: string[], rows: Array<Array<unknown>>) => {
-            const out: string[] = [];
-            // section title in first column to make it obvious when opening raw CSV
-            out.push(escapeField(title));
-            out.push(headers.map(escapeField).join(","));
-            rows.forEach((r) => out.push(r.map(escapeField).join(",")));
-            out.push(""); // blank line after section
-            return out;
-        };
-
-        const lines: string[] = [];
-
-        // Match Scouting
-        const matchHeaders = [
-            "Match Key",
-            "Station",
-            "Team Number",
-            "Scout Name",
-            "Auto Score",
-            "Teleop Score",
-            "Total Score",
-            "Climb",
-            "Defense Rating",
-            "Robot Tipped",
-            "Robot Dead",
-            "Submitted At (PST)"
-        ];
-        const matchRows = matchEntries.map((entry) => [
-            entry.matchKey,
-            entry.station,
-            entry.teamNumber,
-            entry.scoutName,
-            entry.score_auto,
-            entry.score_teleop,
-            entry.total_score,
-            entry.climb,
-            entry.defense_rating,
-            entry.robotTipped ? "Yes" : "No",
-            entry.robotDead ? "Yes" : "No",
-            new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"})
-        ] as Array<unknown>);
-
-        lines.push(...buildSection("MATCH SCOUTING DATA", matchHeaders, matchRows));
-
-        // Pit Scouting
-        const pitHeaders = ["Team Number", "Scout Name", "Scout ID", "Submitted At (PST)", "Responses (multi-line JSON) "];
-        const pitRows = pitScoutingEntries.map((entry) => {
-            // pretty-print responses JSON for readability (multi-line field)
-            let prettyResponses: string;
-            try {
-                prettyResponses = JSON.stringify(entry.responses || {}, null, 2);
-            } catch (e) {
-                prettyResponses = String(entry.responses || "");
-            }
-            return [
-                entry.teamNumber,
-                entry.scoutName,
-                entry.scoutId,
-                new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"}),
-                prettyResponses
-            ] as Array<unknown>;
-        });
-        lines.push(...buildSection("PIT SCOUTING DATA", pitHeaders, pitRows));
-
-        // Subjective Scouting
-        const subjHeaders = [
-            "Match ID",
-            "Team Number",
-            "Scout Name",
-            "Submitted At (PST)",
-            "Subjective Summary (multi-line)"
-        ];
-        const subjRows = subjectiveScoutingEntries.map((entry) => {
-            // build a readable multi-line summary per subjective entry
-            const parts: string[] = [];
-            parts.push("=== Section 1: Robot Performance & Strategy ===");
-            parts.push(`Autonomous Effectiveness: ${entry.robotPerformance.autonomousEffectiveness || ""}`);
-            parts.push(`Can Quickly Score: ${entry.robotPerformance.canQuicklyScore || ""}`);
-            parts.push(`Can Climb: ${entry.robotPerformance.canClimb || ""}`);
-            if (entry.robotPerformance.climbLevel) parts.push(`Climb Level: ${entry.robotPerformance.climbLevel}`);
-            parts.push("");
-            parts.push("=== Section 2: Team Dynamics ===");
-            parts.push(`Performance Under Pressure: ${entry.teamDynamics.performanceUnderPressure || ""}`);
-            parts.push(`Team Focus: ${entry.teamDynamics.teamFocus || ""}`);
-            parts.push(`Driver Synchronization: ${entry.teamDynamics.driverSynchronization || ""}`);
-            parts.push("");
-            parts.push("=== Section 3: Tactical Insights ===");
-            parts.push(`Defensive Strategy: ${entry.tacticalInsights.defensiveStrategy || ""}`);
-            parts.push(`Blocking Effectiveness: ${entry.tacticalInsights.blockingEffectiveness || ""}`);
-            parts.push(`Ally Cooperation: ${entry.tacticalInsights.allyCooperation || ""}`);
-
-            const summary = parts.join("\n");
-
-            return [
-                entry.matchId,
-                entry.teamNumber,
-                entry.scoutName,
-                new Date(entry.submittedAt).toLocaleString([], {timeZone: "America/Los_Angeles"}),
-                summary
-            ] as Array<unknown>;
-        });
-        lines.push(...buildSection("SUBJECTIVE SCOUTING DATA", subjHeaders, subjRows));
-
-        const csvContent = lines.join("\r\n");
-        const blob = new Blob([csvContent], {type: "text/csv;charset=utf-8;"});
-        const link = document.createElement("a");
+        const blob = new Blob([buildCsv(matchEntries, pitScoutingEntries, subjectiveScoutingEntries)], {type: "text/csv;charset=utf-8;"});
         const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", `QuickScout_Export_${new Date().toISOString().split('T')[0]}.csv`);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `QuickScout_Export_${new Date().toISOString().split('T')[0]}.csv`;
         link.style.visibility = "hidden";
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     };
 
-    const sortedEntries = useMemo(() => {
-        return [...filteredSubjectiveScoutingEntries].sort(
-            (a, b) => b.submittedAt - a.submittedAt
-        );
-    }, [filteredSubjectiveScoutingEntries]);
+    const emptyState = (text: string) => (
+        <div className="flex items-center justify-center h-64">
+            <p className="text-muted-foreground">{text}</p>
+        </div>
+    );
 
     return (
         <div className="min-h-screen bg-background">
@@ -766,6 +246,7 @@ const Analytics = () => {
                                     <SelectItem value="osf">OSF ({OSF_DATE_RANGE})</SelectItem>
                                     <SelectItem value="clack">Clack ({CLACK_DATE_RANGE})</SelectItem>
                                     <SelectItem value="dcmp">DCMP ({DCMP_DATE_RANGE})</SelectItem>
+                                    <SelectItem value="girlsgen">Girls' Gen ({GIRLS_GEN_DATE_RANGE})</SelectItem>
                                     <SelectItem value="current">Current Event</SelectItem>
                                 </SelectContent>
                             </Select>
@@ -779,7 +260,7 @@ const Analytics = () => {
                                     <Button onClick={handleExportAllData} variant="outline">
                                         Export All Data
                                     </Button>
-                                    <Select value={sortBy} onValueChange={(v) => setSortBy(v as Filters["sortBy"])}>
+                                    <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
                                         <SelectTrigger className="w-[220px]">
                                             <SelectValue placeholder="Sort by"/>
                                         </SelectTrigger>
@@ -798,7 +279,7 @@ const Analytics = () => {
                                 {loading ? (
                                     <p>Loading scouted matches...</p>
                                 ) : (
-                                            sortedAndFiltered.map((entry) => (
+                                    sortedAndFiltered.map((entry) => (
                                         <Card key={entry.id} className="overflow-hidden border-l-4 border-l-primary">
                                             <CardHeader className="pb-2">
                                                 <CardTitle className="flex justify-between items-start gap-3">
@@ -809,12 +290,7 @@ const Analytics = () => {
                                                         <div className="bg-secondary px-2 py-1 rounded text-[10px] font-mono">
                                                             {entry.matchKey.slice(-6)}
                                                         </div>
-                                                        {renderDeleteButton({
-                                                            kind: "match",
-                                                            id: entry.id,
-                                                            path: `matches/${entry.matchKey}/participants/${entry.userId}`,
-                                                            label: `Team ${entry.teamNumber} • Match ${entry.matchKey.slice(-6)}`,
-                                                        })}
+                                                        {matchDelete(entry)}
                                                     </div>
                                                 </CardTitle>
                                             </CardHeader>
@@ -823,52 +299,6 @@ const Analytics = () => {
                                                     <span className="text-muted-foreground">Scout:</span>
                                                     <span className="font-medium">{entry.scoutName}</span>
                                                 </div>
-                                                {/* Section 4: Misc */}
-                                                {entry.misc && (
-                                                    <div className="pt-4">
-                                                        <h4 className="font-semibold text-sm mb-3 text-primary">Section 4: Misc</h4>
-                                                        <div className="space-y-2 text-sm">
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Defensive Skill</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.defensiveSkill || "N/A"}</p>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Robot Reliability</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.robotReliability || "N/A"}</p>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Robot Penalties</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.robotPenalties || "N/A"}</p>
-                                                            </div>
-                                                            <div className="grid grid-cols-2 gap-2">
-                                                                <div className="p-3 bg-muted rounded border border-border">
-                                                                    <p className="font-semibold">Auto Fuel</p>
-                                                                    <p className="text-foreground mt-1">{entry.misc.autoFuel || "N/A"}</p>
-                                                                </div>
-                                                                <div className="p-3 bg-muted rounded border border-border">
-                                                                    <p className="font-semibold">Auto Climb</p>
-                                                                    <p className="text-foreground mt-1">{entry.misc.autoClimb || "N/A"}</p>
-                                                                </div>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Teleop Passing</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.teleopPassing || "N/A"}</p>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Game Sense</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.gameSense || "N/A"}</p>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Strengths</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.strengths || "N/A"}</p>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Weaknesses</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.weaknesses || "N/A - none found"}</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
                                                 <div className="grid grid-cols-2 gap-2 pt-1">
                                                     <div className="bg-primary/5 p-2 rounded">
                                                         <p className="text-[10px] uppercase text-muted-foreground">Auto</p>
@@ -892,22 +322,8 @@ const Analytics = () => {
 
                         <TabsContent value="team" className="space-y-4">
                             <div className="flex gap-2">
-                                <Input
-                                    type="text"
-                                    inputMode="numeric"
-                                    pattern="[0-9]*"
-                                    placeholder="Enter team number"
-                                    value={teamNumberInput}
-                                    onChange={(e) => setTeamNumberInput(e.target.value.replace(/\D/g, ""))}
-                                    onKeyDown={(e) => {
-                                        if (e.ctrlKey || e.metaKey || e.altKey) return;
-                                        const allowedKeys = ["Backspace", "Tab", "Enter", "ArrowLeft", "ArrowRight", "Delete"];
-                                        if (allowedKeys.includes(e.key)) return;
-                                        if (!/^[0-9]$/.test(e.key)) e.preventDefault();
-                                    }}
-                                    className="w-49"
-                                    aria-label="Team number"
-                                />
+                                <TeamNumberInput value={teamNumberInput} onChange={setTeamNumberInput}
+                                                 placeholder="Enter team number" label="Team number"/>
                             </div>
 
                             {teamSpecificData ? (
@@ -920,559 +336,48 @@ const Analytics = () => {
                                         </CardHeader>
                                     </Card>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        <Card>
-                                            <CardHeader className="pb-3">
-                                                <CardTitle className="text-sm">Auto Score</CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="space-y-2">
-                                                <div>
-                                                    <p className="text-xs text-muted-foreground">Average</p>
-                                                    <p className="text-2xl font-bold">{teamSpecificData.stats.autoScore.avg.toFixed(1)}</p>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Max</p>
-                                                        <p className="text-lg font-semibold">{teamSpecificData.stats.autoScore.max}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Min</p>
-                                                        <p className="text-lg font-semibold">{teamSpecificData.stats.autoScore.min}</p>
-                                                    </div>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-
-                                        <Card>
-                                            <CardHeader className="pb-3">
-                                                <CardTitle className="text-sm">Teleop Score</CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="space-y-2">
-                                                <div>
-                                                    <p className="text-xs text-muted-foreground">Average</p>
-                                                    <p className="text-2xl font-bold">{teamSpecificData.stats.teleopScore.avg.toFixed(1)}</p>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Max</p>
-                                                        <p className="text-lg font-semibold">{teamSpecificData.stats.teleopScore.max}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Min</p>
-                                                        <p className="text-lg font-semibold">{teamSpecificData.stats.teleopScore.min}</p>
-                                                    </div>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-
-                                        <Card>
-                                            <CardHeader className="pb-3">
-                                                <CardTitle className="text-sm">Total Score</CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="space-y-2">
-                                                <div>
-                                                    <p className="text-xs text-muted-foreground">Average</p>
-                                                    <p className="text-2xl font-bold">{teamSpecificData.stats.totalScore.avg.toFixed(1)}</p>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Max</p>
-                                                        <p className="text-lg font-semibold">{teamSpecificData.stats.totalScore.max}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Min</p>
-                                                        <p className="text-lg font-semibold">{teamSpecificData.stats.totalScore.min}</p>
-                                                    </div>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-
-                                        <Card>
-                                            <CardHeader className="pb-3">
-                                                <CardTitle className="text-sm">Climb</CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="space-y-2">
-                                                <div>
-                                                    <p className="text-xs text-muted-foreground">Average</p>
-                                                    <p className="text-2xl font-bold">{teamSpecificData.stats.climb.avg.toFixed(1)}</p>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Max</p>
-                                                        <p className="text-lg font-semibold">{teamSpecificData.stats.climb.max}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Min</p>
-                                                        <p className="text-lg font-semibold">{teamSpecificData.stats.climb.min}</p>
-                                                    </div>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-
-                                        <Card>
-                                            <CardHeader className="pb-3">
-                                                <CardTitle className="text-sm">Defense Rating</CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="space-y-2">
-                                                <div>
-                                                    <p className="text-xs text-muted-foreground">Average</p>
-                                                    <p className="text-2xl font-bold">{teamSpecificData.stats.defense.avg.toFixed(1)}</p>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Max</p>
-                                                        <p className="text-lg font-semibold">{teamSpecificData.stats.defense.max}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Min</p>
-                                                        <p className="text-lg font-semibold">{teamSpecificData.stats.defense.min}</p>
-                                                    </div>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    </div>
+                                    <StatGrid stats={teamSpecificData.stats}/>
 
                                     <div>
                                         <h3 className="font-semibold text-lg mb-3">Individual Match Reports</h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             {teamSpecificData.matches.map((entry) => (
-                                                <Card key={entry.id} className="border-l-4 border-l-primary">
-                                                    <CardHeader className="pb-2">
-                                                        <CardTitle className="flex justify-between items-start gap-3">
-                                                            <span className="text-lg">Match {entry.matchKey.slice(-6)}</span>
-                                                            <div className="flex items-start gap-2">
-                                                                <span className="text-xs bg-secondary px-2 py-1 rounded">{entry.station}</span>
-                                                                {renderDeleteButton({
-                                                                    kind: "match",
-                                                                    id: entry.id,
-                                                                    path: `matches/${entry.matchKey}/participants/${entry.userId}`,
-                                                                    label: `Team ${entry.teamNumber} • Match ${entry.matchKey.slice(-6)}`,
-                                                                })}
-                                                            </div>
-                                                        </CardTitle>
-                                                    </CardHeader>
-                                                    <CardContent className="text-sm space-y-2">
-                                                        <div
-                                                            className="flex justify-between border-b border-border/50 pb-1">
-                                                            <span className="text-muted-foreground">Scout:</span>
-                                                            <span className="font-medium">{entry.scoutName}</span>
-                                                        </div>
-                                                        <div className="grid grid-cols-2 gap-2 pt-1">
-                                                            <div>
-                                                                <p className="text-xs text-muted-foreground">Auto</p>
-                                                                <p className="font-semibold">{entry.score_auto}</p>
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-xs text-muted-foreground">Teleop</p>
-                                                                <p className="font-semibold">{entry.score_teleop}</p>
-                                                            </div>
-                                                        </div>
-                                                        <div className="pt-2 border-t space-y-1">
-                                                            <div className="flex justify-between">
-                                                                <span className="text-muted-foreground">Total:</span>
-                                                                <span className="font-bold">{entry.total_score}</span>
-                                                            </div>
-                                                            <div className="flex justify-between">
-                                                                <span className="text-muted-foreground">Climb:</span>
-                                                                <span className="font-semibold">{entry.climb}</span>
-                                                            </div>
-                                                            <div className="flex justify-between">
-                                                                <span className="text-muted-foreground">Defense:</span>
-                                                                <span
-                                                                    className="font-semibold">{entry.defense_rating}</span>
-                                                            </div>
-                                                        </div>
-                                                    </CardContent>
-                                                </Card>
+                                                <MatchReportCard key={entry.id} entry={entry} by="team" action={matchDelete(entry)}/>
                                             ))}
                                         </div>
                                     </div>
                                 </div>
-                            ) : (
-                                <div className="flex items-center justify-center h-64">
-                                    <p className="text-muted-foreground">
-                                        {teamNumberInput ? "No match data found for this team" : "Enter a team number to view analytics"}
-                                    </p>
-                                </div>
-                            )}
+                            ) : emptyState(teamNumberInput ? "No match data found for this team" : "Enter a team number to view analytics")}
+
                             <h3 className="font-semibold text-lg mb-3">Subjective Scouting Data</h3>
                             {loading ? (
                                 <p>Loading subjective scouting data...</p>
                             ) : teamNumberInput === "" ? (
-                                    <div className="flex items-center justify-center h-64">
-                                <p className="text-muted-foreground">
-                                    Enter a team number to view team subjective data
-                                </p>
-                                    </div>
+                                emptyState("Enter a team number to view team subjective data")
                             ) : filteredSubjectiveScoutingEntries.length === 0 ? (
-                                <p className="text-muted-foreground">
-                                    No subjective scouting data found
-                                </p>
+                                <p className="text-muted-foreground">No subjective scouting data found</p>
                             ) : (
                                 <div className="grid grid-cols-2 gap-4">
                                     {filteredSubjectiveScoutingEntries.map((entry) => (
-                                        <Card key={entry.id} className="overflow-hidden border-l-4 border-l-accent">
-                                            <CardHeader className="bg-gradient-to-r from-accent/10 to-accent/5 pb-3">
-                                                <CardTitle className="flex justify-between items-start gap-3">
-                                                    <div className="flex flex-col gap-1">
-                                                        <span
-                                                            className="text-2xl font-bold">Team {entry.teamNumber}</span>
-                                                        <span
-                                                            className="text-xs text-muted-foreground">Scout: {entry.scoutName}</span>
-                                                    </div>
-                                                    <div className="flex items-start gap-2">
-                                                        <div className="bg-secondary px-3 py-1 rounded text-xs font-mono">
-                                                            {new Date(entry.submittedAt).toLocaleDateString([], {timeZone: "America/Los_Angeles"})}
-                                                        </div>
-                                                        {renderDeleteButton({
-                                                            kind: "subjective",
-                                                            id: entry.id,
-                                                            path: `subjectiveMatches/${entry.matchId}/participants/${entry.userId}`,
-                                                            label: `Team ${entry.teamNumber} • Subjective scouting`,
-                                                        })}
-                                                    </div>
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="pt-4 space-y-4">
-                                                {/* Section 1: Robot Performance and Strategy */}
-                                                <div className="border-b pb-4">
-                                                    <h4 className="font-semibold text-sm mb-3 text-primary">Section 1:
-                                                        Robot Performance and Strategy</h4>
-                                                    <div className="space-y-2 text-sm">
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Autonomous Effectiveness</p>
-                                                            <p className="text-foreground mt-1">{entry.robotPerformance.autonomousEffectiveness || "N/A"}</p>
-                                                        </div>
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Can Quickly Score Fuels</p>
-                                                            <p className="text-foreground mt-1">{entry.robotPerformance.canQuicklyScore || "N/A"}</p>
-                                                        </div>
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Can Climb</p>
-                                                            <div className="text-foreground mt-1">
-                                                                <p>{entry.robotPerformance.canClimb || "N/A"}</p>
-                                                                {entry.robotPerformance.climbLevel && (
-                                                                    <p className="text-xs text-muted-foreground mt-1">Level: {entry.robotPerformance.climbLevel}</p>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Section 2: Team Dynamics */}
-                                                <div className="border-b pb-4">
-                                                    <h4 className="font-semibold text-sm mb-3 text-primary">Section 2:
-                                                        Team Dynamics</h4>
-                                                    <div className="space-y-2 text-sm">
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Performance Under Pressure</p>
-                                                            <p className="text-foreground mt-1">{entry.teamDynamics.performanceUnderPressure || "N/A"}</p>
-                                                        </div>
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Team Focus</p>
-                                                            <p className="text-foreground mt-1">{entry.teamDynamics.teamFocus || "N/A"}</p>
-                                                        </div>
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Driver Synchronization</p>
-                                                            <p className="text-foreground mt-1">{entry.teamDynamics.driverSynchronization || "N/A"}</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Section 3: Tactical Insights */}
-                                                <div>
-                                                    <h4 className="font-semibold text-sm mb-3 text-primary">Section 3:
-                                                        Tactical Insights</h4>
-                                                    <div className="space-y-2 text-sm">
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Defensive Strategy</p>
-                                                            <p className="text-foreground mt-1">{entry.tacticalInsights.defensiveStrategy || "N/A"}</p>
-                                                        </div>
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Blocking Effectiveness</p>
-                                                            <p className="text-foreground mt-1">{entry.tacticalInsights.blockingEffectiveness || "N/A"}</p>
-                                                        </div>
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Ally Cooperation</p>
-                                                            <p className="text-foreground mt-1">{entry.tacticalInsights.allyCooperation || "N/A"}</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                {/* Section 4: Misc (new subjective prompts) */}
-                                                {entry.misc && (
-                                                    <div className="pt-4 border-t border-border">
-                                                        <h4 className="font-semibold text-sm mb-3 text-primary">Section 4: Misc</h4>
-                                                        <div className="space-y-2 text-sm">
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Defensive Skill</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.defensiveSkill || "N/A"}</p>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Robot Reliability</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.robotReliability || "N/A"}</p>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Robot Penalties</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.robotPenalties || "N/A"}</p>
-                                                            </div>
-                                                            <div className="grid grid-cols-2 gap-2">
-                                                                <div className="p-3 bg-muted rounded border border-border">
-                                                                    <p className="font-semibold">Auto Fuel</p>
-                                                                    <p className="text-foreground mt-1">{entry.misc.autoFuel || "N/A"}</p>
-                                                                </div>
-                                                                <div className="p-3 bg-muted rounded border border-border">
-                                                                    <p className="font-semibold">Auto Climb</p>
-                                                                    <p className="text-foreground mt-1">{entry.misc.autoClimb || "N/A"}</p>
-                                                                </div>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Teleop Passing</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.teleopPassing || "N/A"}</p>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Game Sense</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.gameSense || "N/A"}</p>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Strengths</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.strengths || "N/A - none found"}</p>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Weaknesses</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.weaknesses || "N/A - none found"}</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </CardContent>
-                                        </Card>
+                                        <SubjectiveCard key={entry.id} entry={entry} action={subjectiveDelete(entry)}/>
                                     ))}
                                 </div>
                             )}
 
                             <h3 className="font-semibold text-lg mb-3">Pit Scouting Data</h3>
-
                             {loading ? (
                                 <p>Loading pit scouting data...</p>
                             ) : teamNumberInput === "" ? (
-                                <div className="flex items-center justify-center h-64">
-                                    <p className="text-muted-foreground">
-                                        Enter a team number to view team pit data
-                                    </p>
-                                </div>
-                            ) : filteredPitScoutingEntries.length === 0 ? (
-                                <p className="text-muted-foreground">
-                                    No subjective scouting data found
-                                </p>
+                                emptyState("Enter a team number to view team pit data")
+                            ) : teamPitEntries.length === 0 ? (
+                                <p className="text-muted-foreground">No pit scouting data found</p>
                             ) : (
-                                <div className="space-y-4">
-
-
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                        {(teamNumberInput
-                                                ? filteredPitScoutingEntries.filter(e => e.teamNumber === parseInt(teamNumberInput))
-                                                : filteredPitScoutingEntries
-                                        ).map((entry) => {
-                                            console.log(entry); // looks ok?
-                                            const formatKey = (key: string) => {
-                                                return key
-                                                    .replace(/-/g, "_")
-                                                    .split("_")
-                                                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                                                    .join(" ");
-                                            };
-
-                                            const formatValue = (value: unknown): string => {
-                                                if (value === null || value === undefined) return "N/A";
-                                                if (typeof value === "boolean") return value ? "Yes" : "No";
-                                                if (Array.isArray(value)) return value.join(", "); // render arrays nicely
-                                                if (typeof value === "object") return ""; // leave objects for separate rendering
-                                                return String(value).trim();
-                                            };
-
-                                            // Organize responses by category
-                                            const robotFunctions = new Map<string, unknown>();
-                                            const robotCapabilities = new Map<string, unknown>();
-                                            const autos = new Map<string, Record<string, unknown>>(); // notice type change
-                                            const drivebase = new Map<string, unknown>();
-                                            const strategyNotes = new Map<string, unknown>();
-
-                                            Object.entries(entry.responses).forEach(([key, value]) => {
-                                                if (value === null || value === undefined || (typeof value === "boolean" && !value)) return;
-
-                                                if (key.toLowerCase().includes("intake") || key.toLowerCase().includes("climb")) {
-                                                    robotFunctions.set(key, value);
-                                                } else if (
-                                                    key.toLowerCase().includes("defense") ||
-                                                    key.toLowerCase().includes("shooter") ||
-                                                    key.toLowerCase().includes("fuel-hopper") ||
-                                                    key.toLowerCase().includes("bps") ||
-                                                    key.toLowerCase().includes("under-trench") ||
-                                                    key.toLowerCase().includes("over-bump") ||
-                                                    key.toLowerCase().includes("shoot-on") ||
-                                                    key.toLowerCase().includes("pass-fuel") ||
-                                                    key.toLowerCase().includes("climb")
-                                                ) {
-                                                    robotCapabilities.set(key, value);
-                                                } else if (key.toLowerCase().startsWith("auto") && typeof value === "object") {
-                                                    autos.set(key, value as Record<string, unknown>); // store nested object
-                                                } else if (key.toLowerCase().includes("dimension") || key.toLowerCase().includes("special-detail")) {
-                                                    drivebase.set(key, value);
-                                                } else if (
-                                                    key.toLowerCase().includes("strength") ||
-                                                    key.toLowerCase().includes("weakness") ||
-                                                    key.toLowerCase().includes("feature") ||
-                                                    key.toLowerCase().includes("note")
-                                                ) {
-                                                    strategyNotes.set(key, value);
-                                                }
-                                            });
-
-                                            const generateTextDump = () => {
-                                                return JSON.stringify(entry, null, 2);
-                                            };
-
-                                            return (
-                                                <Card key={entry.id} className="overflow-hidden">
-                                                    <CardHeader
-                                                        className="bg-gradient-to-r from-primary/10 to-primary/5 pb-3">
-                                                        <CardTitle className="flex justify-between items-start gap-3">
-                                                            <div className="flex flex-col gap-1">
-                                                                <span
-                                                                    className="text-2xl font-bold">Team {entry.teamNumber}</span>
-                                                                <span
-                                                                    className="text-xs text-muted-foreground">Scout: {entry.scoutName}</span>
-                                                            </div>
-                                                            <div className="flex items-start gap-2">
-                                                                <div
-                                                                    className="bg-secondary px-3 py-1 rounded text-xs font-mono">
-                                                                    {new Date(entry.submittedAt).toLocaleDateString([], {timeZone: "America/Los_Angeles"})}
-                                                                </div>
-                                                                {renderDeleteButton({
-                                                                    kind: "pit",
-                                                                    id: entry.id,
-                                                                    path: `pitScouting/${entry.dateStr}/${entry.teamNumber}/${entry.scoutId}`,
-                                                                    label: `Team ${entry.teamNumber} • Pit scouting`,
-                                                                })}
-                                                            </div>
-                                                        </CardTitle>
-                                                    </CardHeader>
-                                                    <CardContent className="pt-4 space-y-4">
-                                                        {robotFunctions.size > 0 && (
-                                                            <div>
-                                                                <h4 className="font-semibold text-sm mb-2 text-primary">Robot
-                                                                    Functions</h4>
-                                                                <div className="space-y-1 text-sm">
-                                                                    {Array.from(robotFunctions.entries()).map(([key, value]) => (
-                                                                        <div key={key}
-                                                                             className="flex justify-between items-center py-1 px-2 bg-secondary/40 rounded">
-                                                                            <span
-                                                                                className="font-medium">{formatKey(key)}</span>
-                                                                            <span
-                                                                                className="font-semibold text-primary">{formatValue(value)}</span>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {robotCapabilities.size > 0 && (
-                                                            <div>
-                                                                <h4 className="font-semibold text-sm mb-2 text-primary">Robot
-                                                                    Capabilities</h4>
-                                                                <div className="space-y-1 text-sm">
-                                                                    {Array.from(robotCapabilities.entries()).map(([key, value]) => (
-                                                                        <div key={key}
-                                                                             className="flex justify-between items-center py-1 px-2 bg-secondary/40 rounded">
-                                                                            <span
-                                                                                className="font-medium">{formatKey(key)}</span>
-                                                                            <span
-                                                                                className="font-semibold text-primary">{formatValue(value)}</span>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {autos.size > 0 && (
-                                                            <div>
-                                                                <h4 className="font-semibold text-sm mb-2 text-primary">Autonomous</h4>
-                                                                <div className="space-y-2 text-sm">
-                                                                    {Array.from(autos.entries()).map(([autoKey, autoObj]) => (
-                                                                        <div
-                                                                            key={autoKey}
-                                                                            className="p-2 bg-secondary/40 rounded space-y-1"
-                                                                        >
-                                                                            <p className="font-semibold text-primary">{formatKey(autoKey)}</p>
-                                                                            {Object.entries(autoObj).map(([subKey, subValue]) => (
-                                                                                <div
-                                                                                    key={subKey}
-                                                                                    className="flex justify-between items-center py-1 px-2 bg-secondary/20 rounded"
-                                                                                >
-                                                                                    <span className="font-medium">{formatKey(subKey)}</span>
-                                                                                    <span className="text-primary font-semibold">
-                                                                                        {Array.isArray(subValue) ? subValue.join(", ") : String(subValue)}
-                                                                                      </span>
-                                                                                </div>
-                                                                            ))}
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {drivebase.size > 0 && (
-                                                            <div>
-                                                                <h4 className="font-semibold text-sm mb-2 text-primary">Drivebase</h4>
-                                                                <div className="space-y-2 text-sm">
-                                                                    {Array.from(drivebase.entries()).map(([key, value]) => (
-                                                                        <div key={key}
-                                                                             className="p-3 bg-muted rounded border border-border">
-                                                                            <p className="font-semibold text-foreground">{formatKey(key)}</p>
-                                                                            <p className="text-foreground mt-2">{formatValue(value)}</p>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {strategyNotes.size > 0 && (
-                                                            <div className="pt-2 border-t border-border">
-                                                                <h4 className="font-semibold text-sm mb-2 text-primary">Strategy
-                                                                    & Notes</h4>
-                                                                <div className="space-y-2 text-sm">
-                                                                    {Array.from(strategyNotes.entries()).map(([key, value]) => (
-                                                                        <div key={key}
-                                                                             className="p-3 bg-muted rounded border border-border">
-                                                                            <p className="font-semibold text-foreground">{formatKey(key)}</p>
-                                                                            <p className="text-foreground mt-2 whitespace-pre-wrap">{formatValue(value)}</p>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                        <div className="pt-4 border-t border-border">
-                                                            <button
-                                                                className="px-2 py-1 text-xs bg-primary text-white rounded hover:bg-primary/80"
-                                                                onClick={() => setShowJson(!showJson)}
-                                                            >
-                                                                {showJson ? "Hide JSON Dump" : "Show JSON Dump"}
-                                                            </button>
-
-                                                            {showJson && (
-                                                                <pre className="mt-2 text-xs bg-black/80 text-foreground p-3 rounded overflow-x-auto whitespace-pre-wrap">
-                                                                  {JSON.stringify(entry, null, 2)}
-                                                                </pre>
-                                                            )}
-                                                        </div>
-                                                    </CardContent>
-                                                </Card>
-                                            );
-                                        })}
-                                    </div>
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    {teamPitEntries.map((entry) => (
+                                        <PitCard key={entry.id} entry={entry} action={pitDelete(entry)}/>
+                                    ))}
                                 </div>
                             )}
-
                         </TabsContent>
 
                         <TabsContent value="scouter" className="space-y-4">
@@ -1496,179 +401,18 @@ const Analytics = () => {
                                         </CardHeader>
                                     </Card>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        <Card>
-                                            <CardHeader className="pb-3">
-                                                <CardTitle className="text-sm">Auto Score</CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="space-y-2">
-                                                <div>
-                                                    <p className="text-xs text-muted-foreground">Average</p>
-                                                    <p className="text-2xl font-bold">{scouterData.stats.autoScore.avg.toFixed(1)}</p>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Max</p>
-                                                        <p className="text-lg font-semibold">{scouterData.stats.autoScore.max}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Min</p>
-                                                        <p className="text-lg font-semibold">{scouterData.stats.autoScore.min}</p>
-                                                    </div>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-
-                                        <Card>
-                                            <CardHeader className="pb-3">
-                                                <CardTitle className="text-sm">Teleop Score</CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="space-y-2">
-                                                <div>
-                                                    <p className="text-xs text-muted-foreground">Average</p>
-                                                    <p className="text-2xl font-bold">{scouterData.stats.teleopScore.avg.toFixed(1)}</p>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Max</p>
-                                                        <p className="text-lg font-semibold">{scouterData.stats.teleopScore.max}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Min</p>
-                                                        <p className="text-lg font-semibold">{scouterData.stats.teleopScore.min}</p>
-                                                    </div>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-
-                                        <Card>
-                                            <CardHeader className="pb-3">
-                                                <CardTitle className="text-sm">Total Score</CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="space-y-2">
-                                                <div>
-                                                    <p className="text-xs text-muted-foreground">Average</p>
-                                                    <p className="text-2xl font-bold">{scouterData.stats.totalScore.avg.toFixed(1)}</p>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Max</p>
-                                                        <p className="text-lg font-semibold">{scouterData.stats.totalScore.max}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Min</p>
-                                                        <p className="text-lg font-semibold">{scouterData.stats.totalScore.min}</p>
-                                                    </div>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-
-                                        <Card>
-                                            <CardHeader className="pb-3">
-                                                <CardTitle className="text-sm">Climb</CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="space-y-2">
-                                                <div>
-                                                    <p className="text-xs text-muted-foreground">Average</p>
-                                                    <p className="text-2xl font-bold">{scouterData.stats.climb.avg.toFixed(1)}</p>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Max</p>
-                                                        <p className="text-lg font-semibold">{scouterData.stats.climb.max}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Min</p>
-                                                        <p className="text-lg font-semibold">{scouterData.stats.climb.min}</p>
-                                                    </div>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-
-                                        <Card>
-                                            <CardHeader className="pb-3">
-                                                <CardTitle className="text-sm">Defense Rating</CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="space-y-2">
-                                                <div>
-                                                    <p className="text-xs text-muted-foreground">Average</p>
-                                                    <p className="text-2xl font-bold">{scouterData.stats.defense.avg.toFixed(1)}</p>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Max</p>
-                                                        <p className="text-lg font-semibold">{scouterData.stats.defense.max}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Min</p>
-                                                        <p className="text-lg font-semibold">{scouterData.stats.defense.min}</p>
-                                                    </div>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    </div>
+                                    <StatGrid stats={scouterData.stats}/>
 
                                     <div>
                                         <h3 className="font-semibold text-lg mb-3">Individual Match Reports</h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             {scouterData.matches.map((entry) => (
-                                                <Card key={entry.id} className="border-l-4 border-l-primary">
-                                                    <CardHeader className="pb-2">
-                                                        <CardTitle className="flex justify-between items-start gap-3">
-                                                            <span className="text-lg">Team {entry.teamNumber}</span>
-                                                            <div className="flex items-start gap-2">
-                                                                <span className="text-xs bg-secondary px-2 py-1 rounded">{entry.station}</span>
-                                                                {renderDeleteButton({
-                                                                    kind: "match",
-                                                                    id: entry.id,
-                                                                    path: `matches/${entry.matchKey}/participants/${entry.userId}`,
-                                                                    label: `Team ${entry.teamNumber} • Match ${entry.matchKey.slice(-6)}`,
-                                                                })}
-                                                            </div>
-                                                        </CardTitle>
-                                                    </CardHeader>
-                                                    <CardContent className="text-sm space-y-2">
-                                                        <div className="flex justify-between border-b border-border/50 pb-1">
-                                                            <span className="text-muted-foreground">Match:</span>
-                                                            <span className="font-medium">{entry.matchKey.slice(-6)}</span>
-                                                        </div>
-                                                        <div className="grid grid-cols-2 gap-2 pt-1">
-                                                            <div>
-                                                                <p className="text-xs text-muted-foreground">Auto</p>
-                                                                <p className="font-semibold">{entry.score_auto}</p>
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-xs text-muted-foreground">Teleop</p>
-                                                                <p className="font-semibold">{entry.score_teleop}</p>
-                                                            </div>
-                                                        </div>
-                                                        <div className="pt-2 border-t space-y-1">
-                                                            <div className="flex justify-between">
-                                                                <span className="text-muted-foreground">Total:</span>
-                                                                <span className="font-bold">{entry.total_score}</span>
-                                                            </div>
-                                                            <div className="flex justify-between">
-                                                                <span className="text-muted-foreground">Climb:</span>
-                                                                <span className="font-semibold">{entry.climb}</span>
-                                                            </div>
-                                                            <div className="flex justify-between">
-                                                                <span className="text-muted-foreground">Defense:</span>
-                                                                <span className="font-semibold">{entry.defense_rating}</span>
-                                                            </div>
-                                                        </div>
-                                                    </CardContent>
-                                                </Card>
+                                                <MatchReportCard key={entry.id} entry={entry} by="scouter" action={matchDelete(entry)}/>
                                             ))}
                                         </div>
                                     </div>
                                 </div>
-                            ) : (
-                                <div className="flex items-center justify-center h-64">
-                                    <p className="text-muted-foreground">
-                                        {scouterSearchInput ? "No data found for this scouter" : "Enter a scouter name to view analytics"}
-                                    </p>
-                                </div>
-                            )}
+                            ) : emptyState(scouterSearchInput ? "No data found for this scouter" : "Enter a scouter name to view analytics")}
                         </TabsContent>
 
                         <TabsContent value="bubble" className="space-y-4">
@@ -1686,7 +430,6 @@ const Analytics = () => {
                                                 <XAxis type="number" dataKey="x" name="Teleop Points" unit=""/>
                                                 <YAxis type="number" dataKey="y" name="Auto Points" unit=""/>
                                                 <ZAxis dataKey="r" range={[50, 400]}/>
-                                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                                                 <ReTooltip
                                                     cursor={{strokeDasharray: '3 3'}}
                                                     content={({payload}) => {
@@ -1709,15 +452,11 @@ const Analytics = () => {
                                                     name="Scouts"
                                                     data={bubbleData}
                                                     fill="#00C853"
-                                                    shape={(props: any) => {
-                                                        const {cx, cy, payload} = props as any;
-                                                        let color = '#2ECC71'; // Green for normal
-                                                        if (payload?.robotDead) {
-                                                            color = '#000000'; // Black for dead robot
-                                                        } else if (payload?.robotTipped) {
-                                                            color = '#FF5252'; // Red for tipped
-                                                        }
-                                                        const radius = (payload?.r as number) || 6;
+                                                    shape={(props: { cx?: number; cy?: number; payload?: (typeof bubbleData)[number] }) => {
+                                                        const {cx, cy, payload} = props;
+                                                        // black = dead robot, red = tipped, green = normal
+                                                        const color = payload?.robotDead ? '#000000' : payload?.robotTipped ? '#FF5252' : '#2ECC71';
+                                                        const radius = payload?.r || 6;
                                                         return (
                                                             <g>
                                                                 <circle cx={cx} cy={cy} r={radius} fill={color}
@@ -1736,251 +475,31 @@ const Analytics = () => {
                                 </CardContent>
                             </Card>
                         </TabsContent>
+
                         <TabsContent value="pit-scouting" className="space-y-4">
                             <div className="flex gap-2">
-                                <Input
-                                    type="text"
-                                    inputMode="numeric"
-                                    pattern="[0-9]*"
-                                    placeholder="Enter team number (optional)"
-                                    value={pitTeamNumberInput}
-                                    onChange={(e) => setPitTeamNumberInput(e.target.value.replace(/\D/g, ""))}
-                                    onKeyDown={(e) => {
-                                        if (e.ctrlKey || e.metaKey || e.altKey) return;
-                                        const allowedKeys = ["Backspace", "Tab", "Enter", "ArrowLeft", "ArrowRight", "Delete"];
-                                        if (allowedKeys.includes(e.key)) return;
-                                        if (!/^[0-9]$/.test(e.key)) e.preventDefault();
-                                    }}
-                                    className="w-49"
-                                    aria-label="Pit scouting team number"
-                                />
+                                <TeamNumberInput value={pitTeamNumberInput} onChange={setPitTeamNumberInput}
+                                                 placeholder="Enter team number (optional)" label="Pit scouting team number"/>
                             </div>
 
-                            {loading ? (
+                            {loading || filteredPitScoutingEntries.length === 0 ? (
                                 <Card>
                                     <CardContent className="py-8">
-                                        <p className="text-center text-muted-foreground">Loading pit scouting
-                                            data...</p>
-                                    </CardContent>
-                                </Card>
-                            ) : filteredPitScoutingEntries.length === 0 ? (
-                                <Card>
-                                    <CardContent className="py-8">
-                                        <p className="text-center text-muted-foreground">No pit scouting data
-                                            available</p>
+                                        <p className="text-center text-muted-foreground">
+                                            {loading ? "Loading pit scouting data..." : "No pit scouting data available"}
+                                        </p>
                                     </CardContent>
                                 </Card>
                             ) : (
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
-                                        <p className="text-muted-foreground">
-                                            Viewing {pitTeamNumberInput
-                                            ? filteredPitScoutingEntries.filter(e => e.teamNumber === parseInt(pitTeamNumberInput)).length
-                                            : filteredPitScoutingEntries.length} pit scouting entries
-                                        </p>
+                                        <p className="text-muted-foreground">Viewing {pitTabEntries.length} pit scouting entries</p>
                                     </div>
 
                                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                        {(pitTeamNumberInput
-                                                ? filteredPitScoutingEntries.filter(e => e.teamNumber === parseInt(pitTeamNumberInput))
-                                                : filteredPitScoutingEntries
-                                        ).map((entry) => {
-                                            console.log(entry); // looks ok?
-                                            const formatKey = (key: string) => {
-                                                return key
-                                                    .replace(/-/g, "_")
-                                                    .split("_")
-                                                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                                                    .join(" ");
-                                            };
-
-                                            const formatValue = (value: unknown): string => {
-                                                if (value === null || value === undefined) return "N/A";
-                                                if (typeof value === "boolean") return value ? "Yes" : "No";
-                                                if (Array.isArray(value)) return value.join(", "); // render arrays nicely
-                                                if (typeof value === "object") return ""; // leave objects for separate rendering
-                                                return String(value).trim();
-                                            };
-
-                                            // Organize responses by category
-                                            const robotFunctions = new Map<string, unknown>();
-                                            const robotCapabilities = new Map<string, unknown>();
-                                            const autos = new Map<string, Record<string, unknown>>(); // notice type change
-                                            const drivebase = new Map<string, unknown>();
-                                            const strategyNotes = new Map<string, unknown>();
-
-                                            Object.entries(entry.responses).forEach(([key, value]) => {
-                                                if (value === null || value === undefined || (typeof value === "boolean" && !value)) return;
-
-                                                if (key.toLowerCase().includes("intake") || key.toLowerCase().includes("climb")) {
-                                                    robotFunctions.set(key, value);
-                                                } else if (
-                                                    key.toLowerCase().includes("defense") ||
-                                                    key.toLowerCase().includes("shooter") ||
-                                                    key.toLowerCase().includes("fuel-hopper") ||
-                                                    key.toLowerCase().includes("bps") ||
-                                                    key.toLowerCase().includes("under-trench") ||
-                                                    key.toLowerCase().includes("over-bump") ||
-                                                    key.toLowerCase().includes("shoot-on") ||
-                                                    key.toLowerCase().includes("pass-fuel") ||
-                                                    key.toLowerCase().includes("climb")
-                                                ) {
-                                                    robotCapabilities.set(key, value);
-                                                } else if (key.toLowerCase().startsWith("auto") && typeof value === "object") {
-                                                    autos.set(key, value as Record<string, unknown>); // store nested object
-                                                } else if (key.toLowerCase().includes("dimension") || key.toLowerCase().includes("special-detail")) {
-                                                    drivebase.set(key, value);
-                                                } else if (
-                                                    key.toLowerCase().includes("strength") ||
-                                                    key.toLowerCase().includes("weakness") ||
-                                                    key.toLowerCase().includes("feature") ||
-                                                    key.toLowerCase().includes("note")
-                                                ) {
-                                                    strategyNotes.set(key, value);
-                                                }
-                                            });
-
-                                            const generateTextDump = () => {
-                                                return JSON.stringify(entry, null, 2);
-                                            };
-
-                                            return (
-                                                <Card key={entry.id} className="overflow-hidden">
-                                                    <CardHeader
-                                                        className="bg-gradient-to-r from-primary/10 to-primary/5 pb-3">
-                                                        <CardTitle className="flex justify-between items-start gap-3">
-                                                            <div className="flex flex-col gap-1">
-                                                                <span
-                                                                    className="text-2xl font-bold">Team {entry.teamNumber}</span>
-                                                                <span
-                                                                    className="text-xs text-muted-foreground">Scout: {entry.scoutName}</span>
-                                                            </div>
-                                                            <div className="flex items-start gap-2">
-                                                                <div
-                                                                    className="bg-secondary px-3 py-1 rounded text-xs font-mono">
-                                                                    {new Date(entry.submittedAt).toLocaleDateString([], {timeZone: "America/Los_Angeles"})}
-                                                                </div>
-                                                                {renderDeleteButton({
-                                                                    kind: "pit",
-                                                                    id: entry.id,
-                                                                    path: `pitScouting/${entry.dateStr}/${entry.teamNumber}/${entry.scoutId}`,
-                                                                    label: `Team ${entry.teamNumber} • Pit scouting`,
-                                                                })}
-                                                            </div>
-                                                        </CardTitle>
-                                                    </CardHeader>
-                                                    <CardContent className="pt-4 space-y-4">
-                                                        {robotFunctions.size > 0 && (
-                                                            <div>
-                                                                <h4 className="font-semibold text-sm mb-2 text-primary">Robot
-                                                                    Functions</h4>
-                                                                <div className="space-y-1 text-sm">
-                                                                    {Array.from(robotFunctions.entries()).map(([key, value]) => (
-                                                                        <div key={key}
-                                                                             className="flex justify-between items-center py-1 px-2 bg-secondary/40 rounded">
-                                                                            <span
-                                                                                className="font-medium">{formatKey(key)}</span>
-                                                                            <span
-                                                                                className="font-semibold text-primary">{formatValue(value)}</span>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {robotCapabilities.size > 0 && (
-                                                            <div>
-                                                                <h4 className="font-semibold text-sm mb-2 text-primary">Robot
-                                                                    Capabilities</h4>
-                                                                <div className="space-y-1 text-sm">
-                                                                    {Array.from(robotCapabilities.entries()).map(([key, value]) => (
-                                                                        <div key={key}
-                                                                             className="flex justify-between items-center py-1 px-2 bg-secondary/40 rounded">
-                                                                            <span
-                                                                                className="font-medium">{formatKey(key)}</span>
-                                                                            <span
-                                                                                className="font-semibold text-primary">{formatValue(value)}</span>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {autos.size > 0 && (
-                                                            <div>
-                                                                <h4 className="font-semibold text-sm mb-2 text-primary">Autonomous</h4>
-                                                                <div className="space-y-2 text-sm">
-                                                                    {Array.from(autos.entries()).map(([autoKey, autoObj]) => (
-                                                                        <div
-                                                                            key={autoKey}
-                                                                            className="p-2 bg-secondary/40 rounded space-y-1"
-                                                                        >
-                                                                            <p className="font-semibold text-primary">{formatKey(autoKey)}</p>
-                                                                            {Object.entries(autoObj).map(([subKey, subValue]) => (
-                                                                                <div
-                                                                                    key={subKey}
-                                                                                    className="flex justify-between items-center py-1 px-2 bg-secondary/20 rounded"
-                                                                                >
-                                                                                    <span className="font-medium">{formatKey(subKey)}</span>
-                                                                                    <span className="text-primary font-semibold">
-                                                                                        {Array.isArray(subValue) ? subValue.join(", ") : String(subValue)}
-                                                                                      </span>
-                                                                                </div>
-                                                                            ))}
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {drivebase.size > 0 && (
-                                                            <div>
-                                                                <h4 className="font-semibold text-sm mb-2 text-primary">Drivebase</h4>
-                                                                <div className="space-y-2 text-sm">
-                                                                    {Array.from(drivebase.entries()).map(([key, value]) => (
-                                                                        <div key={key}
-                                                                             className="p-3 bg-muted rounded border border-border">
-                                                                            <p className="font-semibold text-foreground">{formatKey(key)}</p>
-                                                                            <p className="text-foreground mt-2">{formatValue(value)}</p>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {strategyNotes.size > 0 && (
-                                                            <div className="pt-2 border-t border-border">
-                                                                <h4 className="font-semibold text-sm mb-2 text-primary">Strategy
-                                                                    & Notes</h4>
-                                                                <div className="space-y-2 text-sm">
-                                                                    {Array.from(strategyNotes.entries()).map(([key, value]) => (
-                                                                        <div key={key}
-                                                                             className="p-3 bg-muted rounded border border-border">
-                                                                            <p className="font-semibold text-foreground">{formatKey(key)}</p>
-                                                                            <p className="text-foreground mt-2 whitespace-pre-wrap">{formatValue(value)}</p>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                        <div className="pt-4 border-t border-border">
-                                                            <button
-                                                                className="px-2 py-1 text-xs bg-primary text-white rounded hover:bg-primary/80"
-                                                                onClick={() => setShowJson(!showJson)}
-                                                            >
-                                                                {showJson ? "Hide JSON Dump" : "Show JSON Dump"}
-                                                            </button>
-
-                                                            {showJson && (
-                                                                <pre className="mt-2 text-xs bg-black/80 text-foreground p-3 rounded overflow-x-auto whitespace-pre-wrap">
-                                                                  {JSON.stringify(entry, null, 2)}
-                                                                </pre>
-                                                            )}
-                                                        </div>
-                                                    </CardContent>
-                                                </Card>
-                                            );
-                                        })}
+                                        {pitTabEntries.map((entry) => (
+                                            <PitCard key={entry.id} entry={entry} action={pitDelete(entry)}/>
+                                        ))}
                                     </div>
                                 </div>
                             )}
@@ -1988,18 +507,14 @@ const Analytics = () => {
 
                         <TabsContent value="subjective" className="space-y-4">
                             <div className="flex gap-2 items-center mb-4">
-                                <Input
-                                    placeholder="Enter team number (optional)"
-                                    value={teamNumberInput}
-                                    onChange={(e) => setTeamNumberInput(e.target.value)}
-                                    className="max-w-xs"
-                                />
+                                <TeamNumberInput value={teamNumberInput} onChange={setTeamNumberInput}
+                                                 placeholder="Enter team number (optional)" label="Subjective team number"
+                                                 className="max-w-xs"/>
                             </div>
                             <div>
                                 <p className="text-muted-foreground">Viewing {filteredSubjectiveScoutingEntries.length} subjective
                                     scouting entries</p>
                             </div>
-
 
                             {loading ? (
                                 <p>Loading subjective scouting data...</p>
@@ -2007,142 +522,8 @@ const Analytics = () => {
                                 <p className="text-muted-foreground">No subjective scouting data found</p>
                             ) : (
                                 <div className="grid grid-cols-1 gap-4">
-                                    {sortedEntries.map((entry) =>  (
-                                        <Card key={entry.id} className="overflow-hidden border-l-4 border-l-accent">
-                                            <CardHeader className="bg-gradient-to-r from-accent/10 to-accent/5 pb-3">
-                                                <CardTitle className="flex justify-between items-start gap-3">
-                                                    <div className="flex flex-col gap-1">
-                                                        <span
-                                                            className="text-2xl font-bold">Team {entry.teamNumber}</span>
-                                                        <span
-                                                            className="text-xs text-muted-foreground">Scout: {entry.scoutName}</span>
-                                                    </div>
-                                                    <div className="flex items-start gap-2">
-                                                        <div className="bg-secondary px-3 py-1 rounded text-xs font-mono">
-                                                            {new Date(entry.submittedAt).toLocaleDateString([], {timeZone: "America/Los_Angeles"})}
-                                                        </div>
-                                                        {renderDeleteButton({
-                                                            kind: "subjective",
-                                                            id: entry.id,
-                                                            path: `subjectiveMatches/${entry.matchId}/participants/${entry.userId}`,
-                                                            label: `Team ${entry.teamNumber} • Subjective scouting`,
-                                                        })}
-                                                    </div>
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="pt-4 space-y-4">
-                                                {/* Section 1: Robot Performance and Strategy */}
-                                                <div className="border-b pb-4">
-                                                    <h4 className="font-semibold text-sm mb-3 text-primary">Section 1:
-                                                        Robot Performance and Strategy</h4>
-                                                    <div className="space-y-2 text-sm">
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Autonomous Effectiveness</p>
-                                                            <p className="text-foreground mt-1">{entry.robotPerformance.autonomousEffectiveness || "N/A"}</p>
-                                                        </div>
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Can Quickly Score Fuels</p>
-                                                            <p className="text-foreground mt-1">{entry.robotPerformance.canQuicklyScore || "N/A"}</p>
-                                                        </div>
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Can Climb</p>
-                                                            <div className="text-foreground mt-1">
-                                                                <p>{entry.robotPerformance.canClimb || "N/A"}</p>
-                                                                {entry.robotPerformance.climbLevel && (
-                                                                    <p className="text-xs text-muted-foreground mt-1">Level: {entry.robotPerformance.climbLevel}</p>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Section 2: Team Dynamics */}
-                                                <div className="border-b pb-4">
-                                                    <h4 className="font-semibold text-sm mb-3 text-primary">Section 2:
-                                                        Team Dynamics</h4>
-                                                    <div className="space-y-2 text-sm">
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Performance Under Pressure</p>
-                                                            <p className="text-foreground mt-1">{entry.teamDynamics.performanceUnderPressure || "N/A"}</p>
-                                                        </div>
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Team Focus</p>
-                                                            <p className="text-foreground mt-1">{entry.teamDynamics.teamFocus || "N/A"}</p>
-                                                        </div>
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Driver Synchronization</p>
-                                                            <p className="text-foreground mt-1">{entry.teamDynamics.driverSynchronization || "N/A"}</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Section 3: Tactical Insights */}
-                                                <div>
-                                                    <h4 className="font-semibold text-sm mb-3 text-primary">Section 3:
-                                                        Tactical Insights</h4>
-                                                    <div className="space-y-2 text-sm">
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Defensive Strategy</p>
-                                                            <p className="text-foreground mt-1">{entry.tacticalInsights.defensiveStrategy || "N/A"}</p>
-                                                        </div>
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Blocking Effectiveness</p>
-                                                            <p className="text-foreground mt-1">{entry.tacticalInsights.blockingEffectiveness || "N/A"}</p>
-                                                        </div>
-                                                        <div className="p-3 bg-muted rounded border border-border">
-                                                            <p className="font-semibold">Ally Cooperation</p>
-                                                            <p className="text-foreground mt-1">{entry.tacticalInsights.allyCooperation || "N/A"}</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                {/* Section 4: Misc (new subjective prompts) */}
-                                                {entry.misc && (
-                                                    <div className="pt-4 border-t border-border">
-                                                        <h4 className="font-semibold text-sm mb-3 text-primary">Section 4: Misc</h4>
-                                                        <div className="space-y-2 text-sm">
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Defensive Skill</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.defensiveSkill || "N/A"}</p>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Robot Reliability</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.robotReliability || "N/A"}</p>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Robot Penalties</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.robotPenalties || "N/A"}</p>
-                                                            </div>
-                                                            <div className="grid grid-cols-2 gap-2">
-                                                                <div className="p-3 bg-muted rounded border border-border">
-                                                                    <p className="font-semibold">Auto Fuel</p>
-                                                                    <p className="text-foreground mt-1">{entry.misc.autoFuel || "N/A"}</p>
-                                                                </div>
-                                                                <div className="p-3 bg-muted rounded border border-border">
-                                                                    <p className="font-semibold">Auto Climb</p>
-                                                                    <p className="text-foreground mt-1">{entry.misc.autoClimb || "N/A"}</p>
-                                                                </div>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Teleop Passing</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.teleopPassing || "N/A"}</p>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Game Sense</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.gameSense || "N/A"}</p>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Strengths</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.strengths || "N/A - not found"}</p>
-                                                            </div>
-                                                            <div className="p-3 bg-muted rounded border border-border">
-                                                                <p className="font-semibold">Weaknesses</p>
-                                                                <p className="text-foreground mt-1">{entry.misc.weaknesses || "N/A - not found"}</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </CardContent>
-                                        </Card>
+                                    {filteredSubjectiveScoutingEntries.map((entry) => (
+                                        <SubjectiveCard key={entry.id} entry={entry} action={subjectiveDelete(entry)}/>
                                     ))}
                                 </div>
                             )}
@@ -2176,4 +557,3 @@ const Analytics = () => {
 };
 
 export default Analytics;
-

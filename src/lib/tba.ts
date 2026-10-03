@@ -1,168 +1,67 @@
 const TBA_BASE = "https://www.thebluealliance.com/api/v3";
+const TBA_AUTH_KEY = atob("MlhFTW10MWpDeTVpUFZFS2k5RXZCVDFYMmlKeEZGUUFZWVlsZ0I1N05hbGJQa0FCMTVsYmZiOVBUTjdvd3NaYQ==");
 
-export const TBA_EVENT_KEY = "2026joh";
+// When switching events, also update NEXUS_EVENT_KEY in nexus.ts.
+export const TBA_EVENT_KEY = "2026orgg";
 
-export const getEventMatches = async (eventKey: string) => {
-    const res = await fetch(`${TBA_BASE}/event/${eventKey}/matches`, {
-        headers: {
-            "X-TBA-Auth-Key":
-                atob(
-                    "MlhFTW10MWpDeTVpUFZFS2k5RXZCVDFYMmlKeEZGUUFZWVlsZ0I1N05hbGJQa0FCMTVsYmZiOVBUTjdvd3NaYQ==",
-                ),
-        },
-    });
+export type TbaMatch = {
+    key: string;
+    match_number: number;
+    comp_level: "qm" | "qf" | "sf" | "f";
+    alliances: {
+        red: { team_keys: string[]; score: number };
+        blue: { team_keys: string[]; score: number };
+    };
+    actual_time?: number | null;
+    predicted_time?: number | null;
+    time?: number;
+};
 
-    if (!res.ok) {
-        throw new Error(`TBA error ${res.status}`);
-    }
+export type Webcast = { type: string; channel: string; file?: string };
 
-    return res.json();
-}
-
-export const getEventTeams = async (eventKey: string) => {
-    const res = await fetch(`${TBA_BASE}/event/${eventKey}/teams/keys`, {
-        headers: {
-            "X-TBA-Auth-Key":
-                atob(
-                    "MlhFTW10MWpDeTVpUFZFS2k5RXZCVDFYMmlKeEZGUUFZWVlsZ0I1N05hbGJQa0FCMTVsYmZiOVBUTjdvd3NaYQ==",
-                ),
-        },
-    });
-
-    if (!res.ok) {
-        throw new Error(`TBA error ${res.status}`);
-    }
-
-    return res.json();
-}
-
-export const getNextUnplayedMatch = async (eventKey: string) => {
-    const res = await fetch(`${TBA_BASE}/event/${eventKey}/matches`, {
-        headers: {
-            "X-TBA-Auth-Key":
-                atob(
-                    "MlhFTW10MWpDeTVpUFZFS2k5RXZCVDFYMmlKeEZGUUFZWVlsZ0I1N05hbGJQa0FCMTVsYmZiOVBUTjdvd3NaYQ==",
-                ),
-        },
-    });
-
-    if (!res.ok) {
-        throw new Error(`TBA error ${res.status}`);
-    }
-
-    const matches = await res.json();
-    // Find first match with null actual_time (not yet played)
-    const nextMatch = matches.find((m: any) => m.actual_time === null);
-    return nextMatch || null;
-}
-
-export const checkTBAHealth = async () => {
-    const res = await fetch("https://www.thebluealliance.com/api/v3/status", {
-        headers: {
-            "X-TBA-Auth-Key":
-                atob(
-                    "MlhFTW10MWpDeTVpUFZFS2k5RXZCVDFYMmlKeEZGUUFZWVlsZ0I1N05hbGJQa0FCMTVsYmZiOVBUTjdvd3NaYQ==",
-                ),
-        },
-    });
-    if (!res.ok) throw new Error("TBA down");
+const tbaFetch = async (path: string) => {
+    const res = await fetch(`${TBA_BASE}${path}`, {headers: {"X-TBA-Auth-Key": TBA_AUTH_KEY}});
+    if (!res.ok) throw new Error(`TBA error ${res.status}`);
     return res.json();
 };
 
-export const getEventStatus = async (eventKey: string) => {
-    const res = await fetch(`${TBA_BASE}/event/${eventKey}`, {
-        headers: {
-            "X-TBA-Auth-Key":
-                atob(
-                    "MlhFTW10MWpDeTVpUFZFS2k5RXZCVDFYMmlKeEZGUUFZWVlsZ0I1N05hbGJQa0FCMTVsYmZiOVBUTjdvd3NaYQ==",
-                ),
-        },
-    });
+export const getEventMatches = (eventKey: string) => tbaFetch(`/event/${eventKey}/matches`);
+export const getEventTeams = (eventKey: string) => tbaFetch(`/event/${eventKey}/teams/keys`);
+export const getEventStatus = (eventKey: string) => tbaFetch(`/event/${eventKey}`);
+export const checkTBAHealth = () => tbaFetch("/status");
 
-    if (!res.ok) {
-        throw new Error(`TBA error ${res.status}`);
-    }
+export const levelLabel = (lvl: string) =>
+    ({qm: "Qual", qf: "Quarterfinal", sf: "Semifinal", f: "Final"})[lvl] ?? lvl;
 
-    return res.json();
-};
-
-export const getEventMedia = async (eventKey: string) => {
-    const res = await fetch(`${TBA_BASE}/event/${eventKey}/media`, {
-        headers: {
-            "X-TBA-Auth-Key":
-                atob(
-                    "MlhFTW10MWpDeTVpUFZFS2k5RXZCVDFYMmlKeEZGUUFZWVlsZ0I1N05hbGJQa0FCMTVsYmZiOVBUTjdvd3NaYQ==",
-                ),
-        },
-    });
-
-    if (!res.ok) {
-        throw new Error(`TBA error ${res.status}`);
-    }
-
-    return res.json();
-};
-
-export const getEventWebcasts = async (eventKey: string) => {
-    const res = await fetch(`${TBA_BASE}/event/${eventKey}`, {
-        headers: {
-            "X-TBA-Auth-Key":
-                atob(
-                    "MlhFTW10MWpDeTVpUFZFS2k5RXZCVDFYMmlKeEZGUUFZWVlsZ0I1N05hbGJQa0FCMTVsYmZiOVBUTjdvd3NaYQ==",
-                ),
-        },
-    });
-
-    if (!res.ok) {
-        throw new Error(`TBA error ${res.status}`);
-    }
-
-    const event = await res.json();
-    return event.webcasts ?? [];
-};
-
-export const buildStreamUrl = (webcast?: { type: string; channel: string; file?: string } | null): string | null => {
-    if (!webcast) return null;
-
-    switch (webcast.type) {
+export const buildStreamUrl = (webcast?: Webcast | null): string | null => {
+    switch (webcast?.type) {
         case "twitch":
             return `https://player.twitch.tv/?channel=${webcast.channel}&parent=${window.location.hostname}`;
         case "youtube":
-            return `https://www.youtube.com/embed/${webcast.channel}`;
+            return `https://www.youtube.com/embed/${webcast.channel}?autoplay=1&playsinline=1&mute=0&rel=0&modestbranding=1`;
         case "livestream":
-            return `https://livestream.com/events/${webcast.file}`;
+            return `https://livestream.com/accounts/${webcast.channel}/events/${webcast.file}`;
         default:
             return null;
     }
 };
 
+export const isEmbeddable = (webcast?: Webcast | null) => webcast?.type === "youtube" || webcast?.type === "twitch";
+
+// Prefer YouTube, then Twitch, then anything else we can link to.
+export const pickWebcast = (webcasts: Webcast[] = []): Webcast | null =>
+    webcasts.find((w) => w.type === "youtube") ??
+    webcasts.find((w) => w.type === "twitch") ??
+    webcasts.find((w) => buildStreamUrl(w)) ??
+    null;
+
 export const getPlayoffMatchLabel = (matchKey: string, compLevel: string): string => {
-    // Match key format: eventkey_sf1m1 (semifinal round 1, match 1)
-    const parts = matchKey.split("_");
-    if (parts.length < 2) return compLevel;
-
-    const levelPart = parts[1];
-
-    if (compLevel === "sf") {
-        // sf1m1 -> SF Round 1
-        const sfMatch = levelPart.match(/sf(\d+)m(\d+)/);
-        if (sfMatch) {
-            return `SF Round ${sfMatch[1]}`;
-        }
-    } else if (compLevel === "f") {
-        // fm1 -> Match 1
-        const fMatch = levelPart.match(/fm(\d+)/);
-        if (fMatch) {
-            return `Match ${fMatch[1]}`;
-        }
-    } else if (compLevel === "qf") {
-        // qf1m1 -> QF Round 1
-        const qfMatch = levelPart.match(/qf(\d+)m(\d+)/);
-        if (qfMatch) {
-            return `QF Round ${qfMatch[1]}`;
-        }
+    // eventkey_sf1m1 -> "SF Round 1", eventkey_qf2m1 -> "QF Round 2", eventkey_f1m2 -> "Match 2"
+    const levelPart = matchKey.split("_")[1] ?? "";
+    if (compLevel === "f") {
+        const m = levelPart.match(/^f\d*m(\d+)$/);
+        return m ? `Match ${m[1]}` : compLevel;
     }
-
-    return compLevel;
+    const m = levelPart.match(/^(sf|qf)(\d+)m\d+$/);
+    return m && m[1] === compLevel ? `${compLevel.toUpperCase()} Round ${m[2]}` : compLevel;
 };
-

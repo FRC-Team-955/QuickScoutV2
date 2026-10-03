@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useState} from "react";
 import {TrendingUp, Trophy, Users} from "lucide-react";
-import {StatCard, StatCard1} from "../components/StatCard";
+import {StatCard} from "../components/StatCard";
 import TeamCard from "../components/TeamCard";
 import MatchesTable from "../components/MatchesTable";
 import AllianceComparison from "../components/AllianceComparison";
@@ -250,7 +250,7 @@ const Dashboard = () => {
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard1
+                <StatCard
                     title="TO GO TO SCOUTING PAGE"
                     value="CLICK HERE"
                     changeType="positive"

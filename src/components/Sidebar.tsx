@@ -1,147 +1,18 @@
-import {AlertTriangle, BarChart3, Bot, ClipboardList, LayoutDashboard, Settings, Trophy, Zap,} from "lucide-react";
+import {AlertTriangle, Bot, Settings, Zap} from "lucide-react";
 import {cn} from "@/lib/utils";
-import {useEffect, useState} from "react";
-import {get, ref} from "firebase/database";
-import {auth, db} from "@/lib/firebase";
-import {onAuthStateChanged} from "firebase/auth";
-import {checkTBAHealth} from "@/lib/tba";
+import {navItems, overallStatus, useSystemStatus} from "@/components/nav";
 
 interface SidebarProps {
     activeTab: string;
     onTabChange: (tab: string) => void;
 }
 
-const navItems = [
-    {id: "dashboard", label: "Dashboard", icon: LayoutDashboard},
-    {id: "matches", label: "Match Schedule", icon: Trophy},
-    {id: "scouting", label: "Scouting", icon: ClipboardList},
-    {id: "pit-scouting", label: "Pit Scouting", icon: Bot},
-    {id: "analytics", label: "Analytics", icon: BarChart3},
-    {id: "opr", label: "OPR", icon: Zap},
-    {id: "leaderboard", label: "Leaderboard", icon: Trophy},
-];
-
-type SystemStatus = "ok" | "degraded" | "down";
+const statusColor = {ok: "bg-success", degraded: "bg-yellow-500", down: "bg-destructive"};
+const statusText = {ok: "All systems operational", degraded: "Partial system outage", down: "Systems offline"};
 
 const Sidebar = ({activeTab, onTabChange}: SidebarProps) => {
-    const [firebaseStatus, setFirebaseStatus] = useState<SystemStatus>("down");
-    const [tbaStatus, setTbaStatus] = useState<SystemStatus>("down");
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        let mounted = true;
-
-        const runChecks = async () => {
-            if (!mounted) return;
-            setLoading(true);
-
-            // If the client is not authenticated, assume the DB is locked by rules and mark as degraded
-            const currentUser = auth?.currentUser;
-            if (!currentUser) {
-                setFirebaseStatus("degraded");
-            } else {
-                // ---- Firebase check ----
-                try {
-                    await get(ref(db, "__healthcheck"));
-                    setFirebaseStatus("ok");
-                } catch (err: unknown) {
-                    // attempt an authenticated fallback/read to users/{uid} to confirm DB access
-                    try {
-                        await get(ref(db, `users/${currentUser.uid}`));
-                        setFirebaseStatus("ok");
-                    } catch (fallbackErr: unknown) {
-                        const errObj = fallbackErr as { code?: string; message?: string };
-                        const codeStr = String(errObj.code || "").toLowerCase();
-                        const msg = String(errObj.message || "");
-                        if (
-                            codeStr.includes("permission") ||
-                            /permission denied/i.test(msg) ||
-                            /permission-denied/i.test(codeStr)
-                        ) {
-                            setFirebaseStatus("degraded");
-                        } else {
-                            console.debug("__healthcheck read failed and fallback failed:", errObj);
-                            setFirebaseStatus("down");
-                        }
-                    }
-                }
-            }
-
-            // ---- TBA check ----
-            try {
-                await checkTBAHealth();
-                setTbaStatus("ok");
-            } catch {
-                setTbaStatus("down");
-            }
-
-            if (mounted) setLoading(false);
-        };
-
-        // run on mount
-        runChecks();
-
-        // subscribe to auth state changes so we re-run checks after login/logout
-        const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
-            // if user just signed in, immediately try the DB health read (use firebaseUser to avoid race)
-            if (firebaseUser) {
-                get(ref(db, "__healthcheck"))
-                    .then(() => setFirebaseStatus("ok"))
-                    .catch(async (err: unknown) => {
-                        // fallback: try authenticated users/{uid} read
-                        try {
-                            await get(ref(db, `users/${firebaseUser.uid}`));
-                            setFirebaseStatus("ok");
-                        } catch (fallbackErr: unknown) {
-                            const errObj = fallbackErr as { code?: string; message?: string };
-                            const codeStr = String(errObj.code || "").toLowerCase();
-                            const msg = String(errObj.message || "");
-                            if (
-                                codeStr.includes("permission") ||
-                                /permission denied/i.test(msg) ||
-                                /permission-denied/i.test(codeStr)
-                            ) {
-                                setFirebaseStatus("degraded");
-                            } else {
-                                console.debug("__healthcheck read failed after auth change and fallback failed:", errObj);
-                                setFirebaseStatus("down");
-                            }
-                        }
-                    });
-            } else {
-                // logged out
-                setFirebaseStatus("degraded");
-            }
-
-            runChecks().catch((e) => console.debug("runChecks after auth change failed", e));
-        });
-
-        return () => {
-            mounted = false;
-            unsubAuth();
-        };
-    }, []);
-
-    const overallStatus: SystemStatus =
-        firebaseStatus === "ok" && tbaStatus === "ok"
-            ? "ok"
-            : firebaseStatus === "down" && tbaStatus === "down"
-                ? "down"
-                : "degraded";
-
-    const statusColor =
-        overallStatus === "ok"
-            ? "bg-success"
-            : overallStatus === "degraded"
-                ? "bg-yellow-500"
-                : "bg-destructive";
-
-    const statusText =
-        overallStatus === "ok"
-            ? "All systems operational"
-            : overallStatus === "degraded"
-                ? "Partial system outage"
-                : "Systems offline";
+    const {firebase, tba} = useSystemStatus();
+    const overall = overallStatus(firebase, tba);
 
     return (
         <aside
@@ -185,7 +56,7 @@ const Sidebar = ({activeTab, onTabChange}: SidebarProps) => {
             <div className="p-4 border-t border-sidebar-border">
                 <div className="stat-card !p-4">
                     <div className="flex items-center gap-2 mb-2">
-                        {overallStatus === "ok" ? (
+                        {overall === "ok" ? (
                             <Zap className="w-4 h-4 text-primary"/>
                         ) : (
                             <AlertTriangle className="w-4 h-4 text-yellow-500"/>
@@ -195,20 +66,20 @@ const Sidebar = ({activeTab, onTabChange}: SidebarProps) => {
             </span>
                     </div>
 
-                    {loading ? (
+                    {!firebase || !tba ? (
                         <span className="text-xs text-muted-foreground">Checking…</span>
                     ) : (
                         <>
                             <div className="flex items-center gap-2 mb-1">
-                                <div className={`w-2 h-2 rounded-full ${statusColor}`}/>
+                                <div className={`w-2 h-2 rounded-full ${statusColor[overall]}`}/>
                                 <span className="text-xs text-muted-foreground">
-                  {statusText}
+                  {statusText[overall]}
                 </span>
                             </div>
 
                             <div className="text-[11px] text-muted-foreground space-y-0.5">
-                                <div>Firebase: {firebaseStatus}</div>
-                                <div>TBA API: {tbaStatus}</div>
+                                <div>Firebase: {firebase}</div>
+                                <div>TBA API: {tba}</div>
                             </div>
                         </>
                     )}

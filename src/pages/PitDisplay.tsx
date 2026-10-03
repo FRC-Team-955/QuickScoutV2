@@ -8,70 +8,41 @@ import {
     buildStreamUrl,
     getEventMatches,
     getEventStatus,
-    getEventWebcasts,
     getPlayoffMatchLabel,
-    TBA_EVENT_KEY
+    isEmbeddable,
+    levelLabel,
+    pickWebcast,
+    TBA_EVENT_KEY,
+    type TbaMatch,
+    type Webcast,
 } from "@/lib/tba";
-import {getEventLiveStatus, type NexusEventStatusResponse} from "@/lib/nexus";
-import {NEXUS_EVENT_KEY} from "@/lib/nexusConfig";
+import {getEventLiveStatus, NEXUS_EVENT_KEY, type NexusEventStatusResponse} from "@/lib/nexus";
 import {useAuth} from "@/contexts/AuthContext";
-
-type TbaMatch = {
-    key: string;
-    match_number: number;
-    comp_level: "qm" | "qf" | "sf" | "f";
-    alliances: {
-        red: { team_keys: string[]; score: number };
-        blue: { team_keys: string[]; score: number };
-    };
-    actual_time?: number | null;
-    predicted_time?: number | null;
-    time?: number;
-};
 
 const TEAM_NUMBER = "955";
 
-const compLevelOrder: Record<string, number> = {
-    qm: 0,
-    qf: 1,
-    sf: 2,
-    f: 3,
-};
+const compLevelOrder: Record<string, number> = {qm: 0, qf: 1, sf: 2, f: 3};
 
-const levelLabel = (lvl: string) => {
-    if (lvl === "qm") return "Qual";
-    if (lvl === "qf") return "Quarterfinal";
-    if (lvl === "sf") return "Semifinal";
-    if (lvl === "f") return "Final";
-    return lvl;
-};
+// Both alliances must be fully populated with real "frcNNNN" keys; otherwise show TBD.
+const areTeamsPopulated = (match: TbaMatch): boolean =>
+    [match.alliances.red, match.alliances.blue].every(
+        (a) => a.team_keys?.length > 0 && a.team_keys.every((team) => typeof team === "string" && team.startsWith("frc")),
+    );
 
-const areTeamsPopulated = (match: TbaMatch): boolean => {
-    // Check if both red and blue teams have actual team identifiers
-    const redTeams = match.alliances.red.team_keys || [];
-    const blueTeams = match.alliances.blue.team_keys || [];
+const getMatchSortTime = (match: TbaMatch): number =>
+    match.actual_time ?? match.predicted_time ?? match.time ?? Number.MAX_SAFE_INTEGER;
 
-    // Teams should be populated with actual team numbers (e.g., "frc1234")
-    // If either side has no teams or incomplete teams, show TBD
-    const hasValidRedTeams = redTeams.length > 0 && redTeams.every((team) => team && typeof team === "string" && team.startsWith("frc"));
-    const hasValidBlueTeams = blueTeams.length > 0 && blueTeams.every((team) => team && typeof team === "string" && team.startsWith("frc"));
-
-    return hasValidRedTeams && hasValidBlueTeams;
-};
-
-const getMatchSortTime = (match: TbaMatch): number => {
-    return match.actual_time ?? match.predicted_time ?? match.time ?? Number.MAX_SAFE_INTEGER;
-};
+const sortMatches = (matches: TbaMatch[]) =>
+    [...matches].sort((a, b) =>
+        getMatchSortTime(a) - getMatchSortTime(b) ||
+        (compLevelOrder[a.comp_level] ?? 99) - (compLevelOrder[b.comp_level] ?? 99) ||
+        a.match_number - b.match_number ||
+        a.key.localeCompare(b.key),
+    );
 
 const getMatchLabel = (match: TbaMatch) => {
-    if (match.comp_level === "sf" || match.comp_level === "f" || match.comp_level === "qf") {
-        // For unpopulated playoff matches, show TBD
-        if (!areTeamsPopulated(match)) {
-            return "TBD";
-        }
-        return getPlayoffMatchLabel(match.key, match.comp_level);
-    }
-    return `${levelLabel(match.comp_level)} ${match.match_number}`;
+    if (match.comp_level === "qm") return `${levelLabel(match.comp_level)} ${match.match_number}`;
+    return areTeamsPopulated(match) ? getPlayoffMatchLabel(match.key, match.comp_level) : "TBD";
 };
 
 const formatTeams = (keys: string[]) =>
@@ -80,18 +51,12 @@ const formatTeams = (keys: string[]) =>
         .filter(Boolean)
         .join(", ") || "—";
 
-const normalizeTeamNumber = (team: string | number) => String(team).replace(/^frc/i, "");
-
 const isTeamInMatch = (teams: string[] | undefined, teamNumber: string) =>
-    (teams ?? []).some((team) => normalizeTeamNumber(team) === teamNumber);
+    (teams ?? []).some((team) => String(team).replace(/^frc/i, "") === teamNumber);
 
-const normalizeMatchStatus = (status?: string | null) => (status ?? "").trim().toLowerCase();
-
-const getEstimatedQueueTimeMs = (estimatedQueueTime?: number | null): number | null => {
-    if (estimatedQueueTime == null) return null;
-
-    return estimatedQueueTime < 10_000_000_000 ? estimatedQueueTime * 1000 : estimatedQueueTime;
-};
+// Nexus times are epoch ms; tolerate epoch seconds too.
+const getEstimatedQueueTimeMs = (estimatedQueueTime?: number | null): number | null =>
+    estimatedQueueTime == null ? null : estimatedQueueTime < 10_000_000_000 ? estimatedQueueTime * 1000 : estimatedQueueTime;
 
 const formatCountdown = (ms: number | null): string => {
     if (ms == null) return "ETA unavailable";
@@ -103,43 +68,26 @@ const formatCountdown = (ms: number | null): string => {
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
 
-    if (hours > 0) {
-        return `${hours}h ${minutes}m`;
-    }
-
-    if (minutes > 0) {
-        return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
-    }
-
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
     return `${seconds}s`;
 };
 
+// Depth-first search for the first TBA match key (e.g. 2026joh_qm12, 2026joh_sf1m1) anywhere in value.
 const extractMatchKey = (value: unknown): string | null => {
-    if (typeof value === "string" && /_(qm|qf|sf|f)\d+$/i.test(value)) {
-        return value;
-    }
-
+    if (typeof value === "string") return /_(qm|(qf|sf|f)\d+m)\d+$/i.test(value) ? value : null;
     if (!value || typeof value !== "object") return null;
-
-    if (Array.isArray(value)) {
-        for (const item of value) {
-            const nested = extractMatchKey(item);
-            if (nested) return nested;
-        }
-        return null;
+    for (const nested of Object.values(value)) {
+        const found = extractMatchKey(nested);
+        if (found) return found;
     }
-
-    for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
-        if (key === "current_match_key" || key === "next_match_key" || key === "last_match_key") {
-            const nested = extractMatchKey(nestedValue);
-            if (nested) return nested;
-        }
-
-        const nested = extractMatchKey(nestedValue);
-        if (nested) return nested;
-    }
-
     return null;
+};
+
+// Apply each settled result independently so one failing endpoint keeps the last good data for the others.
+const applySettled = <T,>(result: PromiseSettledResult<T>, apply: (value: T) => void, what: string) => {
+    if (result.status === "fulfilled") apply(result.value);
+    else console.warn(`Failed to load ${what}`, result.reason);
 };
 
 const PitDisplay = () => {
@@ -147,7 +95,7 @@ const PitDisplay = () => {
     const navigate = useNavigate();
     const [matches, setMatches] = useState<TbaMatch[]>([]);
     const [status, setStatus] = useState<Record<string, unknown> | null>(null);
-    const [webcasts, setWebcasts] = useState<{ type: string; channel: string; file?: string }[]>([]);
+    const [webcasts, setWebcasts] = useState<Webcast[]>([]);
     const [nexusStatus, setNexusStatus] = useState<NexusEventStatusResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -165,46 +113,20 @@ const PitDisplay = () => {
         let mounted = true;
 
         const load = async () => {
-            setLoading(true);
-            try {
-                const nexusPromise = getEventLiveStatus(NEXUS_EVENT_KEY).catch((error) => {
-                    console.warn("Failed to load Nexus queue data", error);
-                    return null;
-                });
+            const [matchData, eventData, queueData] = await Promise.allSettled([
+                getEventMatches(TBA_EVENT_KEY),
+                getEventStatus(TBA_EVENT_KEY),
+                getEventLiveStatus(NEXUS_EVENT_KEY),
+            ]);
+            if (!mounted) return;
 
-                const [matchData, statusData, webcastData, queueData] = await Promise.all([
-                    getEventMatches(TBA_EVENT_KEY),
-                    getEventStatus(TBA_EVENT_KEY),
-                    getEventWebcasts(TBA_EVENT_KEY),
-                    nexusPromise,
-                ]);
-
-                if (!mounted) return;
-
-                const sortedMatches = [...(matchData || [])].sort((a: TbaMatch, b: TbaMatch) => {
-                    const timeDiff = getMatchSortTime(a) - getMatchSortTime(b);
-                    if (timeDiff) return timeDiff;
-
-                    const levelDiff =
-                        (compLevelOrder[a.comp_level] ?? 99) - (compLevelOrder[b.comp_level] ?? 99);
-                    return levelDiff || a.match_number - b.match_number || a.key.localeCompare(b.key);
-                });
-
-                setMatches(sortedMatches);
-                setStatus(statusData || null);
-                setWebcasts(webcastData || []);
-                setNexusStatus(queueData || null);
-            } catch (err) {
-                console.error("Failed to load pit display data", err);
-                if (mounted) {
-                    setMatches([]);
-                    setStatus(null);
-                    setWebcasts([]);
-                    setNexusStatus(null);
-                }
-            } finally {
-                if (mounted) setLoading(false);
-            }
+            applySettled(matchData, (data) => setMatches(sortMatches(data ?? [])), "TBA matches");
+            applySettled(eventData, (data) => {
+                setStatus(data ?? null);
+                setWebcasts(data?.webcasts ?? []);
+            }, "TBA event");
+            applySettled(queueData, (data) => setNexusStatus(data ?? null), "Nexus queue data");
+            setLoading(false);
         };
 
         load();
@@ -247,23 +169,8 @@ const PitDisplay = () => {
         }));
     }, [currentIndex, matches]);
 
-    const streamUrl = useMemo(() => {
-        if (!webcasts.length) return null;
-        const webcast = webcasts[1];
-        const url = buildStreamUrl(webcast);
-        if (!url) return null;
-
-        // Add YouTube embed parameters if it's a YouTube URL
-        if (webcast.type === "youtube") {
-            return `${url}?autoplay=1&playsinline=1&mute=0&rel=0&modestbranding=1`;
-        }
-
-        return url;
-    }, [webcasts]);
-
-    const isEmbeddable = useMemo(() => {
-        return webcasts.length > 0 && (webcasts[0].type === "youtube" || webcasts[0].type === "twitch");
-    }, [webcasts]);
+    const webcast = useMemo(() => pickWebcast(webcasts), [webcasts]);
+    const streamUrl = buildStreamUrl(webcast);
 
     const queueEntry = useMemo(() => {
         if (!nexusStatus?.matches?.length) return null;
@@ -277,10 +184,10 @@ const PitDisplay = () => {
         if (!teamMatches.length) return null;
 
         const nextMatch =
-            teamMatches.find((match) => normalizeMatchStatus(match.status) !== "on field") ?? teamMatches[0];
+            teamMatches.find((match) => (match.status ?? "").trim().toLowerCase() !== "on field") ?? teamMatches[0];
 
         const etaMs = getEstimatedQueueTimeMs(nextMatch.times?.estimatedQueueTime);
-        const allianceColor = isTeamInMatch(nextMatch.redTeams, TEAM_NUMBER) ? "red" : "blue";
+        const allianceColor = isTeamInMatch(nextMatch.redTeams, TEAM_NUMBER) ? "Red" : "Blue";
 
         return {match: nextMatch, etaMs, allianceColor};
     }, [nexusStatus]);
@@ -301,7 +208,6 @@ const PitDisplay = () => {
                                     hour: "2-digit",
                                     minute: "2-digit",
                                     second: "2-digit",
-                                    timeZone: "America/Los_Angeles",
                                 })}
                             </p>
                         </div>
@@ -383,7 +289,7 @@ const PitDisplay = () => {
 
                     {/* Right: Livestream */}
                     <section className="flex-1 flex flex-col overflow-hidden border border-border rounded-lg bg-black">
-                        {isEmbeddable && streamUrl ? (
+                        {isEmbeddable(webcast) && streamUrl ? (
                             <iframe
                                 className="w-full h-full"
                                 src={streamUrl}
@@ -399,7 +305,7 @@ const PitDisplay = () => {
                                     rel="noopener noreferrer"
                                     className="text-blue-400 hover:text-blue-300 underline"
                                 >
-                                    Open Stream: {webcasts[0]?.type.toUpperCase()}
+                                    Open Stream: {webcast.type.toUpperCase()}
                                 </a>
                             </div>
                         ) : (
@@ -417,7 +323,7 @@ const PitDisplay = () => {
                 <div className="px-4">
                     <p className="text-3xl font-bold font-mono text-center">
                         {queueEntry ? (
-                            `Team 955's next match is ${queueEntry.match.label}${queueEntry.match.status ? ` - ${queueEntry.match.status}` : ""} - ${queueEntry.allianceColor.charAt(0).toUpperCase() + queueEntry.allianceColor.slice(1)} Bumpers - Queued in ${formatCountdown(queueCountdownMs)}`
+                            `Team 955's next match is ${queueEntry.match.label}${queueEntry.match.status ? ` - ${queueEntry.match.status}` : ""} - ${queueEntry.allianceColor} Bumpers - Queued in ${formatCountdown(queueCountdownMs)}`
                         ) : loading ? (
                             "Loading queue…"
                         ) : (
