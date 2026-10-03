@@ -8,19 +8,20 @@ import {useAuth} from "@/contexts/AuthContext";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@/components/ui/table";
 import {get, ref} from "firebase/database";
 import {db} from "@/lib/firebase";
-import {CLACK_DATE_RANGE, DCMP_DATE_RANGE, OSF_DATE_RANGE} from "@/lib/dateUtils";
+import {CLACK_DATE_RANGE, DCMP_DATE_RANGE, GIRLS_GEN_DATE_RANGE, OSF_DATE_RANGE} from "@/lib/dateUtils";
 import {Boards, buildBoards, collectSubmissions, LeaderboardRow} from "@/lib/leaderboard";
 
-type EventType = "all" | "osf" | "clack" | "dcmp" | "current";
+type EventType = "all" | keyof Boards;
 
 const BOARDS: { event: keyof Boards; title: string; empty: string }[] = [
     {event: "osf", title: `OSF Scout Activity (${OSF_DATE_RANGE})`, empty: "No OSF scouting data found."},
     {event: "clack", title: `Clack Scout Activity (${CLACK_DATE_RANGE})`, empty: "No Clack scouting data found."},
     {event: "dcmp", title: `DCMP Scout Activity (${DCMP_DATE_RANGE})`, empty: "No DCMP scouting data found."},
+    {event: "girlsgen", title: `Girls' Gen Scout Activity (${GIRLS_GEN_DATE_RANGE})`, empty: "No Girls' Gen scouting data found."},
     {event: "current", title: "Current Event Scout Activity", empty: "No current event scouting data found."},
 ];
 
-const EMPTY_BOARDS: Boards = {osf: [], clack: [], dcmp: [], current: []};
+const EMPTY_BOARDS: Boards = {osf: [], clack: [], dcmp: [], girlsgen: [], current: []};
 const TABS = new Set(["dashboard", "scouting", "pit-scouting", "analytics", "matches", "opr", "leaderboard"]);
 
 const Leaderboard = () => {
@@ -133,6 +134,7 @@ const Leaderboard = () => {
                                 <SelectItem value="osf">OSF ({OSF_DATE_RANGE})</SelectItem>
                                 <SelectItem value="clack">Clack ({CLACK_DATE_RANGE})</SelectItem>
                                 <SelectItem value="dcmp">DCMP ({DCMP_DATE_RANGE})</SelectItem>
+                                <SelectItem value="girlsgen">Girls' Gen ({GIRLS_GEN_DATE_RANGE})</SelectItem>
                                 <SelectItem value="current">Current Event</SelectItem>
                             </SelectContent>
                         </Select>

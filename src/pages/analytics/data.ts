@@ -1,6 +1,6 @@
-import {getDataLabel} from "@/lib/dateUtils";
+import {getEventKey} from "@/lib/dateUtils";
 
-export type EventType = "all" | "osf" | "clack" | "dcmp" | "current";
+export type EventType = "all" | "osf" | "clack" | "dcmp" | "girlsgen" | "current";
 
 export type SortBy =
     | "newest"
@@ -91,7 +91,7 @@ export const dbPath = (...segments: unknown[]): string | null =>
         : null;
 
 export const matchesSelectedEvent = (timestamp: number, eventType: EventType): boolean =>
-    eventType === "all" || getDataLabel(timestamp).toLowerCase() === eventType;
+    eventType === "all" || getEventKey(timestamp) === eventType;
 
 export const parseClimbValue = (val: unknown): { climbValue: number; climbDisplay: string } => {
     const n = typeof val === "number" ? (val > 0 ? val : 0) : Number(str(val).match(/[1-3]/)?.[0] ?? 0);

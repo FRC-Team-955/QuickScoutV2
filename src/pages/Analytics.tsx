@@ -11,7 +11,7 @@ import {AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, A
 import {useAuth} from "@/contexts/AuthContext";
 import {get, ref, remove} from "firebase/database";
 import {db} from "@/lib/firebase";
-import {CLACK_DATE_RANGE, DCMP_DATE_RANGE, OSF_DATE_RANGE} from "@/lib/dateUtils";
+import {CLACK_DATE_RANGE, DCMP_DATE_RANGE, GIRLS_GEN_DATE_RANGE, OSF_DATE_RANGE} from "@/lib/dateUtils";
 import {
     CartesianGrid,
     Legend,
@@ -246,6 +246,7 @@ const Analytics = () => {
                                     <SelectItem value="osf">OSF ({OSF_DATE_RANGE})</SelectItem>
                                     <SelectItem value="clack">Clack ({CLACK_DATE_RANGE})</SelectItem>
                                     <SelectItem value="dcmp">DCMP ({DCMP_DATE_RANGE})</SelectItem>
+                                    <SelectItem value="girlsgen">Girls' Gen ({GIRLS_GEN_DATE_RANGE})</SelectItem>
                                     <SelectItem value="current">Current Event</SelectItem>
                                 </SelectContent>
                             </Select>

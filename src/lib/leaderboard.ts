@@ -1,4 +1,4 @@
-import {filterByEventType} from "@/lib/dateUtils";
+import {type EventKey, filterByEventType} from "@/lib/dateUtils";
 
 export type LeaderboardRow = {
     key: string;
@@ -8,7 +8,7 @@ export type LeaderboardRow = {
     submittedAt: number;
 };
 
-export type Boards = { osf: LeaderboardRow[]; clack: LeaderboardRow[]; dcmp: LeaderboardRow[]; current: LeaderboardRow[] };
+export type Boards = Record<EventKey, LeaderboardRow[]>;
 
 type Submission = { scoutName: string; submittedAt: number };
 
@@ -41,7 +41,7 @@ export const collectSubmissions = (matchesData: any, subjectiveData: any): Map<s
 
 /** Per-event boards, ranked by matches desc then most recent submission */
 export const buildBoards = (submissions: Map<string, Submission[]>): Boards => {
-    const boards: Boards = {osf: [], clack: [], dcmp: [], current: []};
+    const boards: Boards = {osf: [], clack: [], dcmp: [], girlsgen: [], current: []};
     submissions.forEach((subList, key) => {
         const scoutName = subList[0]?.scoutName || "";
         Object.entries(filterByEventType(subList)).forEach(([event, subs]) => {
